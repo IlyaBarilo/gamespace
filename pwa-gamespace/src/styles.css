@@ -1054,6 +1054,39 @@ a:focus-visible {
   min-width: 128px;
 }
 
+.release-description-panel {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border-top: 1px solid rgba(104, 171, 226, 0.18);
+  padding-top: 9px;
+}
+
+.release-description-panel summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--blue-bright);
+  font-size: 0.78rem;
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.release-description {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  color: #d8eafa;
+  background: rgba(1, 15, 33, 0.58);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.release-more-button {
+  justify-self: center;
+  min-width: min(260px, 100%);
+}
+
 .action-button {
   display: grid;
   grid-template-columns: 37px 1fr;
