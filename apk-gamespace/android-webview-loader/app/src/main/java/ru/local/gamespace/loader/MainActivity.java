@@ -48,6 +48,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.channels.FileChannel;
 import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -76,6 +77,8 @@ public class MainActivity extends Activity {
     private static final String PREF_LAST_UPDATE_DURATION_MS = "last_update_duration_ms";
     private static final String PREF_LAST_DELETE_DURATION_MS = "last_delete_duration_ms";
     private static final String PREF_LAST_EXTRACT_DURATION_MS = "last_extract_duration_ms";
+    private static final String PREF_LAST_OPERATION_WRITTEN_BYTES = "last_operation_written_bytes";
+    private static final String PREF_LAST_OPERATION_WRITTEN_FILES = "last_operation_written_files";
     private static final String STORAGE_DIR_NAME = "gamespace-loader";
     private static final String EXTRACT_DIR_NAME = "site-files";
     private static final int BUFFER_SIZE = 1024 * 256;
@@ -812,7 +815,12 @@ public class MainActivity extends Activity {
             File index = findIndexInExtractedContent(extractRoot);
             if (index != null) {
                 currentContentRoot = index.getParentFile();
-                saveInstalledSite(base, index, "", 0L, 0L, 0);
+                try {
+                    SiteStats installedStats = summarizeInstalledSite(extractRoot);
+                    saveInstalledSite(base, index, "", 0L, installedStats.bytes, installedStats.files);
+                } catch (IOException ignored) {
+                    saveInstalledSite(base, index, "", 0L, 0L, 0);
+                }
                 return index;
             }
         }
@@ -1179,23 +1187,27 @@ public class MainActivity extends Activity {
                         throw new IOException("В архиве не найден index.html. Поддерживается index.html в корне, site/index.html или один верхний каталог с index.html.");
                     }
 
+                    SiteStats installedStats = summarizeInstalledSite(extractRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
                     saveInstalledSite(
                         base,
                         index,
                         archiveName,
                         System.currentTimeMillis(),
-                        extractedBytes,
-                        extractedFiles,
+                        installedStats.bytes,
+                        installedStats.files,
                         skippedFiles,
                         fastUpdate ? "fast" : "full",
                         totalDurationMs,
                         deleteDurationMs,
-                        extractDurationMs
+                        extractDurationMs,
+                        extractedBytes,
+                        extractedFiles
                     );
                     final File finalIndex = index;
-                    final long finalBytes = extractedBytes;
-                    final int finalFiles = extractedFiles;
+                    final long finalBytes = installedStats.bytes;
+                    final int finalFiles = installedStats.files;
+                    final int finalOperationFiles = extractedFiles;
                     final int finalSkippedFiles = skippedFiles;
                     final boolean finalFastUpdate = fastUpdate;
 
@@ -1203,7 +1215,7 @@ public class MainActivity extends Activity {
                         @Override
                         public void run() {
                             String message = finalFastUpdate
-                                ? "Быстрое обновление: загружено " + finalFiles + ", пропущено " + finalSkippedFiles
+                                ? "Быстрое обновление: загружено " + finalOperationFiles + ", пропущено " + finalSkippedFiles
                                 : "Сайт установлен: " + formatBytes(finalBytes) + ", файлов: " + finalFiles;
                             Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
                             resetIndexStateSession();
@@ -1296,23 +1308,26 @@ public class MainActivity extends Activity {
                         throw new IOException("Во встроенном демо-сайте не найден index.html.");
                     }
 
+                    SiteStats installedStats = summarizeInstalledSite(extractRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
                     saveInstalledSite(
                         base,
                         index,
                         BUILTIN_DEMO_ARCHIVE_NAME,
                         System.currentTimeMillis(),
-                        stats.bytes,
-                        stats.files,
+                        installedStats.bytes,
+                        installedStats.files,
                         stats.skippedFiles,
                         "demo",
                         totalDurationMs,
                         deleteDurationMs,
-                        extractDurationMs
+                        extractDurationMs,
+                        stats.bytes,
+                        stats.files
                     );
 
                     final File finalIndex = index;
-                    final int finalFiles = stats.files;
+                    final int finalFiles = installedStats.files;
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -2327,6 +2342,43 @@ public class MainActivity extends Activity {
             + "\nСейчас: " + path);
     }
 
+    private SiteStats summarizeInstalledSite(File root) throws IOException {
+        if (root == null || !root.isDirectory()) {
+            throw new IOException("Не найден каталог установленного сайта.");
+        }
+
+        SiteStats stats = new SiteStats();
+        summarizeInstalledPath(root, stats);
+        return stats;
+    }
+
+    private void summarizeInstalledPath(File file, SiteStats stats) throws IOException {
+        if (file.isFile()) {
+            long size = file.length();
+            if (Long.MAX_VALUE - stats.bytes < size) {
+                throw new IOException("Размер установленного сайта превышает допустимый предел.");
+            }
+            if (stats.files == Integer.MAX_VALUE) {
+                throw new IOException("Количество файлов установленного сайта превышает допустимый предел.");
+            }
+            stats.bytes += size;
+            stats.files += 1;
+            return;
+        }
+
+        if (!file.isDirectory()) {
+            return;
+        }
+
+        File[] children = file.listFiles();
+        if (children == null) {
+            throw new IOException("Не удалось прочитать каталог: " + file.getAbsolutePath());
+        }
+        for (File child : children) {
+            summarizeInstalledPath(child, stats);
+        }
+    }
+
     private void reloadSite() {
         File index = findInstalledIndex();
         if (index != null) {
@@ -2400,10 +2452,10 @@ public class MainActivity extends Activity {
     }
 
     private void saveInstalledSite(File base, File index, String archiveName, long installedAt, long extractedBytes, int extractedFiles) {
-        saveInstalledSite(base, index, archiveName, installedAt, extractedBytes, extractedFiles, 0, "", 0L, 0L, 0L);
+        saveInstalledSite(base, index, archiveName, installedAt, extractedBytes, extractedFiles, 0, "", 0L, 0L, 0L, 0L, 0);
     }
 
-    private void saveInstalledSite(File base, File index, String archiveName, long installedAt, long extractedBytes, int extractedFiles, int skippedFiles, String updateMode, long updateDurationMs, long deleteDurationMs, long extractDurationMs) {
+    private void saveInstalledSite(File base, File index, String archiveName, long installedAt, long extractedBytes, int extractedFiles, int skippedFiles, String updateMode, long updateDurationMs, long deleteDurationMs, long extractDurationMs, long operationWrittenBytes, int operationWrittenFiles) {
         File contentRoot = index.getParentFile();
         SharedPreferences.Editor editor = getPrefs().edit()
             .putString(PREF_BASE_PATH, base.getAbsolutePath())
@@ -2413,7 +2465,9 @@ public class MainActivity extends Activity {
             .putLong(PREF_INSTALLED_AT, installedAt)
             .putLong(PREF_EXTRACTED_BYTES, extractedBytes)
             .putInt(PREF_EXTRACTED_FILES, extractedFiles)
-            .putInt(PREF_SKIPPED_FILES, skippedFiles);
+            .putInt(PREF_SKIPPED_FILES, skippedFiles)
+            .putLong(PREF_LAST_OPERATION_WRITTEN_BYTES, operationWrittenBytes)
+            .putInt(PREF_LAST_OPERATION_WRITTEN_FILES, operationWrittenFiles);
 
         if (updateMode != null && updateMode.length() > 0) {
             editor
@@ -2448,11 +2502,15 @@ public class MainActivity extends Activity {
             long bytes = prefs.getLong(PREF_EXTRACTED_BYTES, 0L);
             int files = prefs.getInt(PREF_EXTRACTED_FILES, 0);
             int skippedFiles = prefs.getInt(PREF_SKIPPED_FILES, 0);
+            long operationWrittenBytes = prefs.getLong(PREF_LAST_OPERATION_WRITTEN_BYTES, 0L);
+            int operationWrittenFiles = prefs.getInt(PREF_LAST_OPERATION_WRITTEN_FILES, 0);
             String updateMode = prefs.getString(PREF_LAST_UPDATE_MODE, "");
             long totalDuration = prefs.getLong(PREF_LAST_UPDATE_DURATION_MS, -1L);
             long deleteDuration = prefs.getLong(PREF_LAST_DELETE_DURATION_MS, -1L);
             long extractDuration = prefs.getLong(PREF_LAST_EXTRACT_DURATION_MS, -1L);
             long installedAt = prefs.getLong(PREF_INSTALLED_AT, 0L);
+            info.append("Размер установленного сайта: ").append(formatBytes(bytes)).append('\n');
+            info.append("Файлов установлено: ").append(files).append('\n');
             if (updateMode != null && updateMode.length() > 0) {
                 info.append("\nПоследнее обновление:\n");
                 if (installedAt > 0L) {
@@ -2462,22 +2520,15 @@ public class MainActivity extends Activity {
                 info.append("Всего: ").append(formatDuration(totalDuration)).append('\n');
                 info.append("Удаление: ").append(formatDuration(deleteDuration)).append('\n');
                 info.append("Распаковка: ").append(formatDuration(extractDuration)).append('\n');
-                info.append("Записано данных: ").append(formatBytes(bytes)).append('\n');
                 if ("fast".equals(updateMode)) {
-                    info.append("Новых/обновленных загружено: ").append(files).append('\n');
+                    info.append("Записано в операции: ").append(formatBytes(operationWrittenBytes)).append('\n');
+                    info.append("Новых/обновленных загружено: ").append(operationWrittenFiles).append('\n');
                     info.append("Пропущено файлов: ").append(skippedFiles).append('\n');
-                } else {
-                    info.append("Загружено файлов: ").append(files).append('\n');
-                    if (skippedFiles > 0) {
-                        info.append("Пропущено файлов: ").append(skippedFiles).append('\n');
-                    }
-                }
-            } else if (bytes > 0L || files > 0 || skippedFiles > 0) {
-                info.append("Записано данных: ").append(formatBytes(bytes)).append('\n');
-                info.append("Загружено файлов: ").append(files).append('\n');
-                if (skippedFiles > 0) {
+                } else if (skippedFiles > 0) {
                     info.append("Пропущено файлов: ").append(skippedFiles).append('\n');
                 }
+            } else if (skippedFiles > 0) {
+                info.append("Пропущено файлов: ").append(skippedFiles).append('\n');
             }
         } else {
             info.append("Сайт пока не установлен.\n");
@@ -2572,7 +2623,11 @@ public class MainActivity extends Activity {
             unit += 1;
         }
 
-        DecimalFormat format = new DecimalFormat(value >= 100.0 || unit == 0 ? "0" : "0.0");
+        int digits = unit == 0 || value >= 100.0 ? 0 : value >= 10.0 ? 1 : 2;
+        String pattern = digits == 0 ? "0" : digits == 1 ? "0.0" : "0.00";
+        DecimalFormatSymbols symbols = DecimalFormatSymbols.getInstance(new Locale("ru", "RU"));
+        DecimalFormat format = new DecimalFormat(pattern, symbols);
+        format.setGroupingUsed(false);
         return format.format(value) + " " + units[unit];
     }
 
@@ -2874,6 +2929,11 @@ public class MainActivity extends Activity {
         long directories;
         long bytes;
         long lastUiUpdateMillis;
+    }
+
+    private static class SiteStats {
+        long bytes;
+        int files;
     }
 
     private static class CountingInputStream extends FilterInputStream {

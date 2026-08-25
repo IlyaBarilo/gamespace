@@ -9,7 +9,12 @@ export function formatBytes(value) {
     unit += 1;
   } while (amount >= 1024 && unit < units.length - 1);
   const digits = amount >= 100 ? 0 : amount >= 10 ? 1 : 2;
-  return `${amount.toFixed(digits)} ${units[unit]}`;
+  const formatted = amount.toLocaleString("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    useGrouping: false,
+  });
+  return `${formatted} ${units[unit]}`;
 }
 
 export function formatDuration(milliseconds) {
