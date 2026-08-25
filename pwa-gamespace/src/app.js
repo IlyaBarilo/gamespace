@@ -10,6 +10,7 @@ import {
 } from "./import-manager.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
+import { ProgressEstimator } from "./progress-estimator.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -23,10 +24,15 @@ let toolbarTimer = null;
 let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
+const progressEstimator = new ProgressEstimator();
+let progressUnit = null;
 
 const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
 const DEMO_REVISION = "apk-demo-v1";
+
+elements.appHeaderVersion.textContent = APP_VERSION;
+elements.viewerToolbarTitle.textContent = `GameSpace PWA ${APP_VERSION}`;
 
 const displayOverride = import.meta.env.DEV
   ? new URLSearchParams(location.search).get("gamespaceMode")
@@ -91,10 +97,18 @@ function renderState() {
   elements.fastUpdateButton.disabled = !installed || busy;
   elements.fullUpdateButton.disabled = busy;
   elements.removeSiteButton.disabled = !installed || busy;
+  elements.removeSiteButton.hidden = !installed;
   elements.storageVerifyButton.disabled = !installed || busy;
 
   if (!installed) {
     elements.siteSummary.textContent = "Основной сайт ещё не установлен";
+    elements.infoArchive.textContent = "—";
+    elements.infoFormat.textContent = "—";
+    elements.infoFiles.textContent = "—";
+    elements.infoWritten.textContent = "—";
+    elements.infoInstalled.textContent = "—";
+    elements.infoDuration.textContent = "—";
+    elements.infoMode.textContent = "—";
     return;
   }
   elements.siteSummary.textContent = `${state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
@@ -114,7 +128,10 @@ function showProgress(title) {
   elements.progressFile.textContent = "";
   elements.progressBar.removeAttribute("value");
   elements.progressNumbers.textContent = "";
+  elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
   elements.errorPanel.hidden = true;
+  progressEstimator.reset();
+  progressUnit = null;
 }
 
 function hideProgress() {
@@ -126,10 +143,29 @@ function showError(error) {
   elements.errorPanel.hidden = false;
 }
 
+function showRateEstimate(estimate, unit) {
+  if (!estimate.speedPerSecond) {
+    elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
+    return;
+  }
+  const speed = unit === "bytes"
+    ? `${formatBytes(estimate.speedPerSecond)}/с`
+    : `${estimate.speedPerSecond.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} файл/с`;
+  const remaining = estimate.remainingMs === null
+    ? "вычисляется"
+    : formatDuration(Math.ceil(estimate.remainingMs));
+  elements.progressRate.textContent = `Скорость: ${speed} · Осталось примерно: ${remaining}`;
+}
+
 function handleImportEvent(event) {
   if (!event) return;
   if (event.type === "phase") {
     elements.progressPhase.textContent = event.label;
+    if (event.phase === "extract" || event.phase === "apply") {
+      progressEstimator.reset();
+      progressUnit = event.phase === "extract" ? "bytes" : "files";
+      elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
+    }
   } else if (event.type === "archive-info") {
     elements.progressNumbers.textContent = `После распаковки: ${formatBytes(event.uncompressedBytes)} · нужно с резервом: ${formatBytes(event.requiredBytes)} · доступно: ${formatBytes(event.availableBytes)} · файлов: ${Number(event.files).toLocaleString("ru-RU")}`;
   } else if (event.type === "progress") {
@@ -141,9 +177,19 @@ function handleImportEvent(event) {
     }
     elements.progressNumbers.textContent = `${formatBytes(processed)} / ${formatBytes(total)}`;
     elements.progressFile.textContent = event.currentFile || "";
+    if (progressUnit !== "bytes") {
+      progressEstimator.reset();
+      progressUnit = "bytes";
+    }
+    showRateEstimate(progressEstimator.update(processed, total), "bytes");
   } else if (event.type === "apply-progress") {
     elements.progressNumbers.textContent = `${event.current.toLocaleString("ru-RU")} / ${event.total.toLocaleString("ru-RU")} файлов`;
     elements.progressFile.textContent = event.path || "";
+    if (progressUnit !== "files") {
+      progressEstimator.reset();
+      progressUnit = "files";
+    }
+    showRateEstimate(progressEstimator.update(event.current, event.total), "files");
   }
 }
 
@@ -171,6 +217,7 @@ async function importSelectedFile(file) {
       ? await applyUpdateArchive(file, handleImportEvent)
       : await installFullArchive(file, handleImportEvent);
     renderState();
+    await refreshStorage();
     elements.progressPhase.textContent = "Готово";
     elements.progressFile.textContent = "Сайт проверен и доступен без сети.";
     setStatus("Сайт готов к автономной работе", "good");

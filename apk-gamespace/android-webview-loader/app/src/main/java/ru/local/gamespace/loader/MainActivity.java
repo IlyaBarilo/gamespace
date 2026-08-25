@@ -242,7 +242,7 @@ public class MainActivity extends Activity {
         toolbar.setBackgroundColor(Color.TRANSPARENT);
 
         TextView title = new TextView(this);
-        title.setText("GameSpace");
+        title.setText("GameSpace APK " + getAppVersionName());
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
@@ -1019,7 +1019,7 @@ public class MainActivity extends Activity {
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("GameSpace")
+            .setTitle("GameSpace APK " + getAppVersionName())
             .setItems(items, new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
@@ -1479,6 +1479,7 @@ public class MainActivity extends Activity {
         int skippedFiles = 0;
         int entries = 0;
         long lastUiUpdate = 0L;
+        long progressStartedAt = System.currentTimeMillis();
         byte[] buffer = new byte[BUFFER_SIZE];
 
         updateProgress((fastUpdate ? "Режим: быстрое обновление\n" : "Режим: обычное обновление\n")
@@ -1548,7 +1549,7 @@ public class MainActivity extends Activity {
                             lastUiUpdate = now;
                             context.readBytes = countingStream.getBytesRead();
                             context.writtenBytes = extractedBytes;
-                            updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate));
+                            updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                         }
                         continue;
                     }
@@ -1571,7 +1572,7 @@ public class MainActivity extends Activity {
                             long now = System.currentTimeMillis();
                             if (now - lastUiUpdate > 500L) {
                                 lastUiUpdate = now;
-                                updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate));
+                                updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                             }
                         }
                     } finally {
@@ -1670,6 +1671,7 @@ public class MainActivity extends Activity {
         int skippedFiles = 0;
         int entries = 0;
         long lastUiUpdate = 0L;
+        long progressStartedAt = System.currentTimeMillis();
         byte[] buffer = new byte[BUFFER_SIZE];
 
         updateProgress((fastUpdate ? "Режим: быстрое обновление\n" : "Режим: обычное обновление\n")
@@ -1729,9 +1731,9 @@ public class MainActivity extends Activity {
                     long now = System.currentTimeMillis();
                     if (now - lastUiUpdate > 500L) {
                         lastUiUpdate = now;
-                        context.readBytes = safeChannelPosition(channel);
+                        context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
                         context.writtenBytes = extractedBytes;
-                        updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate));
+                        updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                     }
                     continue;
                 }
@@ -1750,12 +1752,12 @@ public class MainActivity extends Activity {
                         while ((read = sevenZ.read(buffer)) != -1) {
                             output.write(buffer, 0, read);
                             extractedBytes += read;
-                            context.readBytes = safeChannelPosition(channel);
+                            context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
                             context.writtenBytes = extractedBytes;
                             long now = System.currentTimeMillis();
                             if (now - lastUiUpdate > 500L) {
                                 lastUiUpdate = now;
-                                updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate));
+                                updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                             }
                         }
                     }
@@ -1996,7 +1998,7 @@ public class MainActivity extends Activity {
         builder.append(label).append(": ").append(value).append('\n');
     }
 
-    private String buildProgressText(String archiveName, long archiveSize, long readBytes, long extractedBytes, int files, int skippedFiles, int entries, File extractRoot, boolean fastUpdate) {
+    private String buildProgressText(String archiveName, long archiveSize, long readBytes, long extractedBytes, int files, int skippedFiles, int entries, File extractRoot, boolean fastUpdate, long progressStartedAt) {
         StringBuilder text = new StringBuilder();
         text.append("Режим: ").append(fastUpdate ? "быстрое обновление" : "обычное обновление").append('\n');
         text.append("Архив: ").append(archiveName).append('\n');
@@ -2006,10 +2008,31 @@ public class MainActivity extends Activity {
             text.append("Прочитано архива: ").append(formatBytes(readBytes)).append('\n');
         }
         text.append("Записано: ").append(formatBytes(extractedBytes)).append('\n');
+        appendProgressEstimate(text, archiveSize, readBytes, extractedBytes, progressStartedAt);
         text.append("Изменено файлов: ").append(files).append(", пропущено: ").append(skippedFiles).append('\n');
         text.append("Записей архива: ").append(entries).append('\n');
         text.append("Свободно: ").append(formatBytes(extractRoot.getUsableSpace()));
         return text.toString();
+    }
+
+    private void appendProgressEstimate(StringBuilder text, long archiveSize, long readBytes, long extractedBytes, long progressStartedAt) {
+        long elapsedMs = Math.max(0L, System.currentTimeMillis() - progressStartedAt);
+        if (elapsedMs < 500L || extractedBytes <= 0L) {
+            text.append("Скорость: вычисляется\n");
+        } else {
+            long bytesPerSecond = Math.max(1L, (long) (extractedBytes * 1000.0 / elapsedMs));
+            text.append("Скорость: ").append(formatBytes(bytesPerSecond)).append("/с\n");
+        }
+
+        if (archiveSize <= 0L || readBytes <= 0L || elapsedMs < 500L) {
+            text.append("Осталось примерно: вычисляется\n");
+            return;
+        }
+
+        long boundedRead = Math.min(archiveSize, readBytes);
+        double remainingMs = elapsedMs * (archiveSize - boundedRead) / (double) boundedRead;
+        long safeRemainingMs = remainingMs >= Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0L, (long) Math.ceil(remainingMs));
+        text.append("Осталось примерно: ").append(formatDuration(safeRemainingMs)).append('\n');
     }
 
     private String normalizeZipEntryName(String name) throws IOException {

@@ -171,7 +171,10 @@
         <img class="app-brand-icon" src="./icons/gamespace-safe-192.png" alt="Значок GameSpace">
         <div class="hero-copy">
           <p class="eyebrow">НАСТРОЙКИ · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ</p>
-          <h1>GameSpace</h1>
+          <div class="app-title-line">
+            <h1>GameSpace</h1>
+            <span id="appHeaderVersion" class="app-header-version"></span>
+          </div>
           <p id="siteSummary" class="hero-summary">Основной сайт ещё не установлен</p>
         </div>
       </header>
@@ -239,6 +242,7 @@
         </div>
         <p id="progressPhase">Подготовка…</p>
         <progress id="progressBar" max="1" value="0"></progress>
+        <p id="progressRate" class="progress-rate">Скорость: вычисляется · Осталось: вычисляется</p>
         <div class="progress-meta">
           <span id="progressNumbers">0 файлов</span>
           <span id="progressFile">—</span>
@@ -346,7 +350,7 @@
 
     <section id="viewer" class="viewer" hidden>
       <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">
-        <strong class="viewer-toolbar-title">GameSpace</strong>
+        <strong id="viewerToolbarTitle" class="viewer-toolbar-title">GameSpace PWA</strong>
         <button id="viewerBack" type="button" aria-label="Назад">←</button>
         <button id="viewerHome" type="button" aria-label="На главную">⌂</button>
         <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>

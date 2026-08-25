@@ -555,6 +555,12 @@ a:focus-visible {
   box-shadow: 0 14px 36px rgba(0, 85, 181, 0.32);
 }
 
+.app-title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
 .hero-copy h1 {
   margin: 0;
   color: transparent;
@@ -564,6 +570,13 @@ a:focus-visible {
   font-size: clamp(2.1rem, 5vw, 3.35rem);
   letter-spacing: -0.05em;
   line-height: 1;
+}
+
+.app-header-version {
+  color: #86d7ff;
+  font-size: clamp(0.9rem, 2vw, 1.15rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .hero-summary {
@@ -789,6 +802,13 @@ a:focus-visible {
 
 .progress-card > p {
   color: var(--muted);
+}
+
+.progress-card .progress-rate {
+  margin: 10px 0 0;
+  color: #d5efff;
+  font-size: 0.86rem;
+  font-weight: 700;
 }
 
 .progress-card progress {
