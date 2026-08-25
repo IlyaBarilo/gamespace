@@ -181,23 +181,37 @@ jobs:
             -KeyPassword $env:KEY_PASSWORD `
             -RequireExistingKeystore
 
-      - name: Attach immutable APK to the GitHub Release
+      - name: Attach versioned and latest-alias APKs to the GitHub Release
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
         run: |
-          $assetName = "GameSpace-$env:RELEASE_VERSION.apk"
-          $assetPath = Join-Path $env:RUNNER_TEMP $assetName
-          Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination $assetPath
+          $sourceApk = ".\apk-gamespace\release\GameSpace.apk"
+          $assets = @(
+            [pscustomobject]@{
+              Name = "GameSpace-$env:RELEASE_VERSION.apk"
+              Label = "GameSpace APK $env:RELEASE_VERSION"
+            }
+            [pscustomobject]@{
+              Name = "GameSpace-latest.apk"
+              Label = "GameSpace APK $env:RELEASE_VERSION (latest stable)"
+            }
+          )
           $publishedAssets = @(gh release view $env:RELEASE_TAG --json assets --jq ".assets[].name")
-          if ($publishedAssets -contains $assetName) {
-            Write-Host "APK asset $assetName already exists and will not be overwritten."
-            exit 0
+          foreach ($asset in $assets) {
+            if ($publishedAssets -contains $asset.Name) {
+              Write-Host "APK asset $($asset.Name) already exists and will not be overwritten."
+              continue
+            }
+            $assetPath = Join-Path $env:RUNNER_TEMP $asset.Name
+            Copy-Item -LiteralPath $sourceApk -Destination $assetPath
+            gh release upload $env:RELEASE_TAG "$assetPath#$($asset.Label)"
+            if ($LASTEXITCODE -ne 0) {
+              throw "Uploading APK asset $($asset.Name) failed."
+            }
           }
-          gh release upload $env:RELEASE_TAG "$assetPath#GameSpace APK $env:RELEASE_VERSION"
-          if ($LASTEXITCODE -ne 0) { throw "Uploading the APK asset failed." }
 
   deploy:
     name: Deploy published PWA release
