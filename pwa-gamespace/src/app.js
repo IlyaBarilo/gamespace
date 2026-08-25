@@ -3,6 +3,7 @@ import { readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import { cleanupOrphans, installFullArchive, applyUpdateArchive, removeInstalledSite } from "./import-manager.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
+import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -13,6 +14,7 @@ let pendingMode = "full";
 let installPrompt = null;
 let busy = false;
 let toolbarTimer = null;
+let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
 
@@ -46,6 +48,10 @@ function showAppShell() {
 }
 
 function finishBoot() {
+  if (bootWatchdog !== null) {
+    clearTimeout(bootWatchdog);
+    bootWatchdog = null;
+  }
   document.documentElement.classList.remove("gamespace-boot-pending");
 }
 
@@ -53,6 +59,14 @@ function setStatus(text, tone = "neutral") {
   elements.statusText.textContent = text;
   elements.statusDot.dataset.tone = tone;
 }
+
+bootWatchdog = window.setTimeout(() => {
+  if (!document.documentElement.classList.contains("gamespace-boot-pending")) return;
+  showAppShell();
+  finishBoot();
+  setStatus("Запуск приложения не завершён", "bad");
+  showError(new Error("GameSpace не смог завершить запуск. Обновите окно приложения или полностью закройте и снова откройте его."));
+}, 15_000);
 
 function setBusy(value) {
   busy = value;
@@ -183,14 +197,25 @@ function showViewerToolbar() {
   }, 5000);
 }
 
-function openViewer() {
-  if (!state) return;
-  elements.viewer.hidden = false;
-  elements.appShell.setAttribute("aria-hidden", "true");
-  elements.appShell.inert = true;
-  elements.siteFrame.src = contentIndexUrl();
-  elements.viewerLoading.hidden = false;
-  showViewerToolbar();
+async function openViewer() {
+  if (!state) return false;
+  try {
+    await ensureServiceWorker();
+    if (!navigator.serviceWorker.controller) {
+      throw new Error("Локальный сайт нельзя открыть до активации Service Worker.");
+    }
+    elements.viewer.hidden = false;
+    elements.appShell.setAttribute("aria-hidden", "true");
+    elements.appShell.inert = true;
+    elements.siteFrame.src = contentIndexUrl();
+    elements.viewerLoading.hidden = false;
+    showViewerToolbar();
+    return true;
+  } catch (error) {
+    showError(error);
+    setStatus("Локальный сайт пока не открыт", "bad");
+    return false;
+  }
 }
 
 function closeViewer() {
@@ -236,15 +261,18 @@ async function refreshStorage() {
 
 async function ensureServiceWorker() {
   if (!("serviceWorker" in navigator)) throw new Error("Service Worker не поддерживается.");
-  if (serviceWorkerRegistration) return serviceWorkerRegistration;
   const scope = new URL("./", location.href).href;
-  serviceWorkerRegistration = await navigator.serviceWorker.getRegistration(scope);
+  if (!serviceWorkerRegistration) {
+    serviceWorkerRegistration = await navigator.serviceWorker.getRegistration(scope);
+  }
   if (!serviceWorkerRegistration) {
     const workerUrl = new URL(`./${RUNTIME_SCRIPT}`, location.href);
     serviceWorkerRegistration = await navigator.serviceWorker.register(workerUrl, {
       scope: "./",
       updateViaCache: "none",
     });
+  }
+  if (!serviceWorkerRegistration.active) {
     serviceWorkerRegistration = await navigator.serviceWorker.ready;
   }
 
@@ -256,6 +284,14 @@ async function ensureServiceWorker() {
     if (scriptName !== RUNTIME_SCRIPT) {
       throw new Error("Установлена тестовая версия GameSpace со старым Service Worker. Удалите её и установите текущую PWA заново.");
     }
+  }
+  const controlState = await ensureServiceWorkerControlsPage({
+    serviceWorker: navigator.serviceWorker,
+    storage: sessionStorage,
+    reload: () => location.reload(),
+  });
+  if (controlState === "reloading") {
+    await new Promise(() => {});
   }
   return serviceWorkerRegistration;
 }
@@ -537,9 +573,8 @@ async function initialize() {
     renderState();
 
     if (state && navigator.serviceWorker?.controller) {
-      openViewer();
-      initialViewerOpened = true;
-      finishBoot();
+      initialViewerOpened = await openViewer();
+      if (initialViewerOpened) finishBoot();
     } else if (!state) {
       finishBoot();
     }
@@ -547,9 +582,8 @@ async function initialize() {
     await ensureServiceWorker();
     await refreshRuntimeState({ confirmHealth: true });
     if (state && !initialViewerOpened) {
-      openViewer();
-      initialViewerOpened = true;
-      finishBoot();
+      initialViewerOpened = await openViewer();
+      if (initialViewerOpened) finishBoot();
     }
 
     await Promise.all([refreshStorage(), initializeCapabilities()]);
@@ -585,7 +619,7 @@ elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate(
 elements.landingVersionsButton.addEventListener("click", () => checkForPwaUpdate("landing"));
 elements.rollbackPwaButton.addEventListener("click", rollbackPwaRelease);
 elements.archiveInput.addEventListener("change", () => importSelectedFile(elements.archiveInput.files?.[0]));
-elements.openSiteButton.addEventListener("click", openViewer);
+elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.viewerClose.addEventListener("click", closeViewer);
 elements.viewerHome.addEventListener("click", () => {
   elements.siteFrame.src = contentIndexUrl();
@@ -622,7 +656,7 @@ elements.installButton.addEventListener("click", async () => {
       elements.installButton.hidden = true;
       elements.installHelp.hidden = true;
       elements.installResult.hidden = false;
-      elements.installResult.textContent = "Установка началась. После завершения откройте GameSpace с нового значка на экране.";
+      elements.installResult.textContent = "Завершите установку в окне браузера. После подтверждения здесь появится инструкция по запуску GameSpace.";
     } else {
       elements.installHelp.hidden = false;
       elements.installAvailability.textContent = "Установка отменена. Можно повторить или добавить приложение через меню браузера.";
@@ -642,8 +676,10 @@ window.addEventListener("beforeinstallprompt", (event) => {
 window.addEventListener("appinstalled", () => {
   elements.installButton.hidden = true;
   elements.installHelp.hidden = true;
+  elements.installAvailability.hidden = true;
+  elements.installResult.classList.add("is-complete");
   elements.installResult.hidden = false;
-  elements.installResult.textContent = "GameSpace установлен. Откройте его с нового значка на главном экране.";
+  elements.installResult.textContent = "Закройте эту вкладку браузера. Затем запустите GameSpace с нового ярлыка на рабочем столе или главном экране — только так откроется режим приложения.";
 });
 window.addEventListener("online", () => {
   if (!runningAsInstalledApp) {
