@@ -805,10 +805,13 @@ a:focus-visible {
 }
 
 .progress-card .progress-rate {
+  display: grid;
+  gap: 4px;
   margin: 10px 0 0;
   color: #d5efff;
   font-size: 0.86rem;
   font-weight: 700;
+  text-align: left;
 }
 
 .progress-card progress {
@@ -821,12 +824,12 @@ a:focus-visible {
 }
 
 .progress-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+  margin-top: 4px;
   color: var(--soft);
   font-size: 0.75rem;
+  text-align: left;
 }
 
 .progress-meta span:last-child {

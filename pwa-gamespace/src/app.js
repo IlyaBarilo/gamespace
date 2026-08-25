@@ -29,6 +29,7 @@ let toolbarTimer = null;
 let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
+let siteInterfaceRefreshTimer = null;
 const progressEstimator = new ProgressEstimator();
 let progressUnit = null;
 
@@ -135,7 +136,8 @@ function showProgress(title) {
   elements.progressFile.textContent = "";
   elements.progressBar.removeAttribute("value");
   elements.progressNumbers.textContent = "";
-  elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
+  elements.progressSpeed.textContent = "Скорость: вычисляется";
+  elements.progressRemaining.textContent = "Осталось примерно: вычисляется";
   elements.errorPanel.hidden = true;
   progressEstimator.reset();
   progressUnit = null;
@@ -152,7 +154,8 @@ function showError(error) {
 
 function showRateEstimate(estimate, unit) {
   if (!estimate.speedPerSecond) {
-    elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
+    elements.progressSpeed.textContent = "Скорость: вычисляется";
+    elements.progressRemaining.textContent = "Осталось примерно: вычисляется";
     return;
   }
   const speed = unit === "bytes"
@@ -161,7 +164,8 @@ function showRateEstimate(estimate, unit) {
   const remaining = estimate.remainingMs === null
     ? "вычисляется"
     : formatDuration(Math.ceil(estimate.remainingMs));
-  elements.progressRate.textContent = `Скорость: ${speed} · Осталось примерно: ${remaining}`;
+  elements.progressSpeed.textContent = `Скорость: ${speed}`;
+  elements.progressRemaining.textContent = `Осталось примерно: ${remaining}`;
 }
 
 function handleImportEvent(event) {
@@ -171,7 +175,8 @@ function handleImportEvent(event) {
     if (event.phase === "extract" || event.phase === "apply") {
       progressEstimator.reset();
       progressUnit = event.phase === "extract" ? "bytes" : "files";
-      elements.progressRate.textContent = "Скорость: вычисляется · Осталось: вычисляется";
+      elements.progressSpeed.textContent = "Скорость: вычисляется";
+      elements.progressRemaining.textContent = "Осталось примерно: вычисляется";
     }
   } else if (event.type === "archive-info") {
     elements.progressNumbers.textContent = `После распаковки: ${formatBytes(event.uncompressedBytes)} · нужно с резервом: ${formatBytes(event.requiredBytes)} · доступно: ${formatBytes(event.availableBytes)} · файлов: ${Number(event.files).toLocaleString("ru-RU")}`;
@@ -217,14 +222,15 @@ async function importSelectedFile(file) {
       : `Установить сайт из архива «${file.name}»? Архив не будет отправлен в сеть.`);
   if (!confirmed) return;
 
+  cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
   try {
     state = isUpdate
       ? await applyUpdateArchive(file, handleImportEvent)
       : await installFullArchive(file, handleImportEvent);
-    renderState();
-    await refreshStorage();
+    await synchronizeSiteInterface({ reloadState: true });
+    scheduleSiteInterfaceRefresh();
     elements.progressPhase.textContent = "Готово";
     elements.progressFile.textContent = "Сайт проверен и доступен без сети.";
     setStatus("Сайт готов к автономной работе", "good");
@@ -331,6 +337,30 @@ async function refreshStorage() {
     : `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
   const persisted = await navigator.storage.persisted?.().catch(() => false);
   elements.storagePersistent.textContent = persisted ? "Постоянное" : "По решению браузера";
+}
+
+async function synchronizeSiteInterface({ reloadState = false } = {}) {
+  if (reloadState) state = await readState();
+  renderState();
+  await refreshStorage();
+}
+
+function scheduleSiteInterfaceRefresh() {
+  cancelScheduledSiteInterfaceRefresh();
+  siteInterfaceRefreshTimer = window.setTimeout(async () => {
+    siteInterfaceRefreshTimer = null;
+    try {
+      await synchronizeSiteInterface({ reloadState: true });
+    } catch (error) {
+      console.warn("Не удалось повторно обновить сведения о хранилище.", error);
+    }
+  }, 750);
+}
+
+function cancelScheduledSiteInterfaceRefresh() {
+  if (siteInterfaceRefreshTimer === null) return;
+  clearTimeout(siteInterfaceRefreshTimer);
+  siteInterfaceRefreshTimer = null;
 }
 
 async function verifyStoredSite() {
@@ -789,14 +819,22 @@ elements.siteFrame.addEventListener("load", attachFrameGuards);
 elements.errorClose.addEventListener("click", () => { elements.errorPanel.hidden = true; });
 elements.removeSiteButton.addEventListener("click", async () => {
   if (!state || !window.confirm("Удалить распакованный сайт и его локальные данные из хранилища PWA?")) return;
+  const previousState = state;
+  cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
+  state = null;
+  renderState();
+  void refreshStorage().catch(() => {});
+  setStatus("Удаляю файлы сайта", "neutral");
   try {
     await removeInstalledSite();
-    state = null;
-    renderState();
-    await refreshStorage();
+    await synchronizeSiteInterface({ reloadState: true });
+    scheduleSiteInterfaceRefresh();
     setStatus("Сайт удалён", "neutral");
   } catch (error) {
+    state = await readState().catch(() => previousState);
+    renderState();
+    await refreshStorage().catch(() => {});
     showError(error);
   } finally {
     setBusy(false);
