@@ -1,0 +1,83 @@
+import { BlobReader, ZipReader } from "@zip.js/zip.js";
+import { dirname, findIndexEntry, summarizeEntries, validateEntries } from "./archive-plan.js";
+import { getFileHandleAt, getOpfsRoot } from "../opfs.js";
+
+const RESERVE_MINIMUM = 512 * 1024 * 1024;
+
+export async function extractZip({ file, destination, requireIndex, onEvent }) {
+  const reader = new ZipReader(new BlobReader(file), { checkAmbiguity: true });
+  try {
+    onEvent?.({ type: "phase", phase: "list", label: "Проверяю структуру ZIP/ZIP64…" });
+    const zipEntries = await reader.getEntries();
+    const entries = validateEntries(zipEntries.map((entry) => ({
+      path: entry.filename,
+      directory: entry.directory,
+      size: Number(entry.uncompressedSize || 0),
+      modified: entry.lastModDate?.toISOString?.() || "",
+      source: entry,
+    })));
+    const summary = summarizeEntries(entries);
+    const indexEntry = findIndexEntry(entries);
+    if (requireIndex && !indexEntry) {
+      throw new Error("В архиве не найден index.html. Поддерживается файл в корне, в site/ или в одном верхнем каталоге.");
+    }
+
+    const storage = await navigator.storage.estimate();
+    const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
+    const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
+    const reserveBytes = Math.max(RESERVE_MINIMUM, Math.ceil(summary.uncompressedBytes * 0.1));
+    const requiredBytes = summary.uncompressedBytes * (requireIndex ? 1 : 2) + reserveBytes;
+    onEvent?.({
+      type: "archive-info",
+      archiveBytes: file.size,
+      availableBytes,
+      reserveBytes,
+      requiredBytes,
+      ...summary,
+      indexPath: indexEntry?.path || null,
+    });
+    if (quotaKnown && requiredBytes > availableBytes) {
+      throw new Error("Недостаточно доступной квоты: размер распакованных данных вместе с резервом превышает свободное место PWA.");
+    }
+
+    onEvent?.({ type: "phase", phase: "extract", label: "Распаковываю ZIP/ZIP64…" });
+    const root = await getOpfsRoot();
+    let completedBytes = 0;
+    let completedFiles = 0;
+    for (const entry of entries) {
+      if (entry.directory) continue;
+      const output = await getFileHandleAt(root, `${destination}/${entry.path}`, true);
+      const writable = await output.createWritable({ keepExistingData: false });
+      let entryProgress = 0;
+      await entry.source.getData(writable, {
+        onprogress(index) {
+          entryProgress = index;
+          onEvent?.({
+            type: "progress",
+            processedBytes: completedBytes + entryProgress,
+            totalBytes: summary.uncompressedBytes,
+            currentFile: entry.path,
+          });
+        },
+      });
+      completedBytes += entry.size;
+      completedFiles += 1;
+      onEvent?.({
+        type: "progress",
+        processedBytes: completedBytes,
+        totalBytes: summary.uncompressedBytes,
+        currentFile: entry.path,
+      });
+    }
+
+    return {
+      ...summary,
+      files: completedFiles,
+      writtenBytes: completedBytes,
+      indexPath: indexEntry?.path || null,
+      contentRoot: indexEntry ? dirname(indexEntry.path) : null,
+    };
+  } finally {
+    await reader.close().catch(() => {});
+  }
+}

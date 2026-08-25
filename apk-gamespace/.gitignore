@@ -1,0 +1,16 @@
+# Local Android SDK and signing files
+android-webview-loader/local.properties
+android-webview-loader/debug.keystore
+*.keystore
+*.jks
+
+# Generated Android build files and release binaries
+android-webview-loader/.gradle/
+android-webview-loader/build/
+android-webview-loader/app/build/
+android-webview-loader/app/src/main/assets/demo.7z
+release/
+*.apk
+*.aab
+*.idsig
+*.sha256.txt

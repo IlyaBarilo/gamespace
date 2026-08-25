@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title desc">
+  <title id="title">Teacher badge: solid cap</title>
+  <desc id="desc">Semi-transparent round badge with a mortarboard cap and tassel.</desc>
+  <style>
+    .badge { fill: #04162d; fill-opacity: .58; stroke: #bfeeff; stroke-opacity: .42; stroke-width: 2; }
+    .icon { fill: #f4faff; fill-opacity: .9; }
+    .soft { fill: #9ee7ff; fill-opacity: .38; }
+  </style>
+  <circle class="badge" cx="40" cy="40" r="35"/>
+  <path class="soft" d="M18 33 40 22l22 11-22 11-22-11Z"/>
+  <path class="icon" d="M14 31.5 40 19l26 12.5L40 44 14 31.5Z"/>
+  <path class="icon" d="M26 39.2c4.4 2.8 9.2 4.2 14 4.2s9.6-1.4 14-4.2v9.3c-3.8 3.4-8.5 5.1-14 5.1s-10.2-1.7-14-5.1v-9.3Z"/>
+  <path class="icon" d="M59 33.2c1.1 0 2 .9 2 2v11.2l3.2 5.6a2.8 2.8 0 0 1-2.4 4.2h-5.6a2.8 2.8 0 0 1-2.4-4.2l3.2-5.6V35.2c0-1.1.9-2 2-2Z"/>
+</svg>

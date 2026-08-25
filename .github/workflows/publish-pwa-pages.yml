@@ -1,0 +1,216 @@
+name: Publish GameSpace release
+
+on:
+  release:
+    types: [published]
+
+concurrency:
+  group: gamespace-pwa-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Verify release and assemble Pages
+    if: ${{ !github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v') }}
+    runs-on: ubuntu-latest
+    env:
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.release_version.outputs.version }}
+    defaults:
+      run:
+        working-directory: pwa-gamespace
+    steps:
+      - name: Check out the published release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: pwa-gamespace/package-lock.json
+
+      - name: Read GameSpace version from release tag
+        id: release_version
+        run: node scripts/read-release-version.mjs "${{ github.event.release.tag_name }}" --github-output
+
+      - name: Apply version from the release tag
+        shell: bash
+        run: |
+          published_at='${{ github.event.release.published_at }}'
+          release_date="${published_at%%T*}"
+          npm run version:apply -- "${{ steps.release_version.outputs.version }}" "$release_date"
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build current source
+        run: npm run build
+
+      - name: Verify immutable runtime
+        run: npm run verify:runtime
+
+      - name: Restore or prepare immutable PWA releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CURRENT_TAG: ${{ github.event.release.tag_name }}
+          CURRENT_VERSION: ${{ steps.release_version.outputs.version }}
+          GAMESPACE_RELEASE_DESCRIPTION: ${{ github.event.release.body }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-packages
+          current_asset="gamespace-pwa-${CURRENT_VERSION}.tar.gz"
+          current_asset_exists=false
+
+          while IFS= read -r tag; do
+            [[ "$tag" == v* ]] || continue
+            if ! version="$(node scripts/read-release-version.mjs "$tag" 2>/dev/null)"; then
+              continue
+            fi
+            asset="gamespace-pwa-${version}.tar.gz"
+            if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+              download_dir="${RUNNER_TEMP}/gamespace-${version}"
+              mkdir -p "$download_dir" "release-packages/${version}"
+              gh release download "$tag" --pattern "$asset" --dir "$download_dir"
+              tar -xzf "${download_dir}/${asset}" -C "release-packages/${version}"
+              if [[ "$tag" == "$CURRENT_TAG" ]]; then
+                current_asset_exists=true
+              fi
+            elif [[ "$tag" != "$CURRENT_TAG" ]]; then
+              echo "Published PWA release $tag has no immutable asset $asset." >&2
+              exit 1
+            fi
+          done < <(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')
+
+          if [[ ! -f "release-packages/${CURRENT_VERSION}/release.json" ]]; then
+            node scripts/prepare-release.mjs "$CURRENT_VERSION"
+          fi
+
+          node scripts/verify-runtime.mjs
+          node scripts/verify-releases.mjs
+          node scripts/verify-release-source.mjs "$CURRENT_VERSION"
+
+          if [[ "$current_asset_exists" != true ]]; then
+            asset_path="${RUNNER_TEMP}/${current_asset}"
+            tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+              -czf "$asset_path" -C "release-packages/${CURRENT_VERSION}" .
+            gh release upload "$CURRENT_TAG" "$asset_path#GameSpace PWA ${CURRENT_VERSION} immutable release"
+          fi
+
+      - name: Assemble release-only Pages artifact
+        run: npm run pages:assemble -- "${{ steps.release_version.outputs.version }}"
+
+      - name: Upload GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: pwa-gamespace/pages-output/${{ steps.release_version.outputs.version }}
+
+  apk:
+    name: Build and attach signed APK
+    needs: build
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the published release
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Ensure required Android SDK packages
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
+          if (-not $sdkRoot) { throw "ANDROID_SDK_ROOT is not configured on the runner." }
+          $platform = Join-Path $sdkRoot "platforms\android-36\android.jar"
+          $buildTools = Join-Path $sdkRoot "build-tools\36.0.0\aapt2.exe"
+          if (-not (Test-Path -LiteralPath $platform) -or -not (Test-Path -LiteralPath $buildTools)) {
+            $sdkManager = Get-ChildItem -LiteralPath (Join-Path $sdkRoot "cmdline-tools") -Recurse -Filter "sdkmanager.bat" |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if (-not $sdkManager) { throw "sdkmanager.bat was not found." }
+            & $sdkManager.FullName "--sdk_root=$sdkRoot" "platforms;android-36" "build-tools;36.0.0"
+            if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed." }
+          }
+
+      - name: Restore the existing APK signing key
+        shell: pwsh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.GAMESPACE_APK_KEYSTORE_BASE64 }}
+          KEYSTORE_ALIAS: ${{ secrets.GAMESPACE_APK_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.GAMESPACE_APK_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.GAMESPACE_APK_KEY_PASSWORD }}
+        run: |
+          foreach ($name in @("KEYSTORE_BASE64", "KEYSTORE_ALIAS", "KEYSTORE_PASSWORD", "KEY_PASSWORD")) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required GitHub Actions secret is missing: $name"
+            }
+          }
+          $keystorePath = Join-Path $env:RUNNER_TEMP "gamespace-release.keystore"
+          [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
+          "GAMESPACE_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build signed APK with the release version
+        shell: pwsh
+        env:
+          KEYSTORE_ALIAS: ${{ secrets.GAMESPACE_APK_KEY_ALIAS }}
+          KEYSTORE_PASSWORD: ${{ secrets.GAMESPACE_APK_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.GAMESPACE_APK_KEY_PASSWORD }}
+        run: |
+          & .\apk-gamespace\build-apk.ps1 `
+            -VersionName "${{ needs.build.outputs.version }}" `
+            -KeystorePath $env:GAMESPACE_KEYSTORE_PATH `
+            -KeystorePassword $env:KEYSTORE_PASSWORD `
+            -KeyAlias $env:KEYSTORE_ALIAS `
+            -KeyPassword $env:KEY_PASSWORD `
+            -RequireExistingKeystore
+
+      - name: Attach immutable APK to the GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          $assetName = "GameSpace-$env:RELEASE_VERSION.apk"
+          $assetPath = Join-Path $env:RUNNER_TEMP $assetName
+          Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination $assetPath
+          $publishedAssets = @(gh release view $env:RELEASE_TAG --json assets --jq ".assets[].name")
+          if ($publishedAssets -contains $assetName) {
+            Write-Host "APK asset $assetName already exists and will not be overwritten."
+            exit 0
+          }
+          gh release upload $env:RELEASE_TAG "$assetPath#GameSpace APK $env:RELEASE_VERSION"
+          if ($LASTEXITCODE -ne 0) { throw "Uploading the APK asset failed." }
+
+  deploy:
+    name: Deploy published PWA release
+    needs: [build, apk]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title desc">
+  <title id="title">Students badge: outline duo</title>
+  <desc id="desc">Semi-transparent round badge with outlined student heads and shoulders.</desc>
+  <style>
+    .badge { fill: #061934; fill-opacity: .5; stroke: #bfeeff; stroke-opacity: .38; stroke-width: 2; }
+    .line { fill: none; stroke: #f4faff; stroke-opacity: .9; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .hint { fill: #9ee7ff; fill-opacity: .22; }
+  </style>
+  <circle class="badge" cx="40" cy="40" r="35"/>
+  <circle class="hint" cx="51" cy="31" r="10"/>
+  <path class="hint" d="M36 61c1.1-10.2 7.1-16.2 15-16.2S64.9 50.8 66 61H36Z"/>
+  <circle class="line" cx="31" cy="32" r="11"/>
+  <path class="line" d="M14 61c1.8-11.2 8.4-18 17-18s15.2 6.8 17 18"/>
+  <circle class="line" cx="51" cy="31" r="9"/>
+  <path class="line" d="M40 47c2.7-2.5 6.4-4 11-4 8 0 13.5 6.6 15 18"/>
+</svg>

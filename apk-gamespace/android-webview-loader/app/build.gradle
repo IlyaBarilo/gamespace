@@ -1,0 +1,20 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "ru.local.gamespace.loader"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "ru.local.gamespace.loader"
+        minSdk 23
+        targetSdk 36
+        versionCode 300
+        versionName "0.3.0"
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: "libs", include: ["*.jar"])
+}

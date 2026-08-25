@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="ru" class="gamespace-boot-pending">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#071a36">
+    <meta name="color-scheme" content="dark">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="GameSpace">
+    <meta name="description" content="Автономный запуск локальных сайтов из больших архивов">
+    <style>
+      html.gamespace-boot-pending,
+      html.gamespace-boot-pending body {
+        background: #071a36;
+      }
+
+      html.gamespace-boot-pending body > * {
+        visibility: hidden !important;
+      }
+    </style>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" href="./icons/gamespace-safe-192.png">
+    <link rel="icon" href="./icons/gamespace-safe-192.png">
+    <title>GameSpace</title>
+  </head>
+  <body>
+    <main id="landingPage" class="landing-page" hidden>
+      <nav class="landing-nav" aria-label="GameSpace">
+        <a class="landing-brand" href="./" aria-label="GameSpace — главная">
+          <img src="./icons/gamespace-safe-192.png" alt="">
+          <span>GameSpace</span>
+        </a>
+        <span class="web-app-pill">WEB APP</span>
+      </nav>
+
+      <section class="landing-hero">
+        <div class="landing-copy">
+          <p class="eyebrow">ЛОКАЛЬНЫЕ САЙТЫ · БЕЗ СЕТИ</p>
+          <h1>Игры и материалы<br><span>всегда под рукой</span></h1>
+          <p class="landing-lead">
+            Установите GameSpace на телефон или планшет и открывайте локальный сайт без интернета. Архив остаётся только на вашем устройстве.
+          </p>
+          <div class="landing-cta">
+            <button id="installButton" class="install-primary" type="button">
+              <span>Установить GameSpace</span>
+              <small>Без магазина приложений</small>
+            </button>
+            <p id="installAvailability" class="install-availability">Проверяем возможность установки…</p>
+          </div>
+          <div id="installHelp" class="install-help" hidden>
+            <strong>Установка вручную</strong>
+            <span class="install-help-ios">На iPhone: откройте «Поделиться» в Safari и выберите «На экран Домой».</span>
+            <span class="install-help-android">На Android: откройте меню браузера и выберите «Установить приложение» или «Добавить на главный экран».</span>
+          </div>
+          <p id="installResult" class="install-result" role="status" hidden></p>
+        </div>
+
+        <aside class="landing-demo-card" aria-label="Встроенный демо-сайт">
+          <div class="demo-glow" aria-hidden="true"></div>
+          <div class="demo-card-head">
+            <img src="./icons/gamespace-safe-192.png" alt="">
+            <div>
+              <span class="demo-badge">ДЕМО-САЙТ ВНУТРИ</span>
+              <h2>Можно начать без своего архива</h2>
+            </div>
+          </div>
+          <p>После установки приложения откройте настройки и нажмите «Установить демо-сайт». Встроенный каталог игр сразу будет доступен без сети.</p>
+          <p><strong>Демо можно оставить в приложении:</strong> для своей работы загрузите собственный архив. Переносить игры и материалы из демо в него нельзя.</p>
+          <ul class="demo-points">
+            <li><span>✓</span> Уже входит в приложение</li>
+            <li><span>✓</span> Устанавливается одним нажатием</li>
+            <li><span>✓</span> Показывает возможности GameSpace</li>
+          </ul>
+          <div class="demo-next-step">Установите приложение — затем выберите демо</div>
+        </aside>
+      </section>
+
+      <section class="benefit-grid" aria-label="Возможности">
+        <article class="benefit-card">
+          <span class="benefit-icon">⌁</span>
+          <h2>Полностью без сети</h2>
+          <p>После импорта сайт работает автономно — интернет и локальная сеть не требуются.</p>
+        </article>
+        <article class="benefit-card">
+          <span class="benefit-icon">7z</span>
+          <h2>Архив прямо с устройства</h2>
+          <p>Выберите 7z или ZIP из памяти, с SD-карты либо подключённого накопителя.</p>
+        </article>
+        <article class="benefit-card">
+          <span class="benefit-icon">↻</span>
+          <h2>Локальные обновления</h2>
+          <p>Обновляйте установленный сайт новым полным архивом или компактным update-архивом.</p>
+        </article>
+      </section>
+
+      <section class="landing-steps">
+        <div>
+          <p class="section-kicker">КАК НАЧАТЬ</p>
+          <h2>Три простых шага</h2>
+        </div>
+        <ol>
+          <li><span>1</span><div><strong>Установите приложение</strong><small>Добавьте GameSpace на экран телефона или планшета.</small></div></li>
+          <li><span>2</span><div><strong>Попробуйте демо или выберите архив</strong><small>Демо уже встроено, а ваш файл никуда не загружается.</small></div></li>
+          <li><span>3</span><div><strong>Открывайте сайт без интернета</strong><small>Все файлы сохраняются локально на устройстве.</small></div></li>
+        </ol>
+      </section>
+
+      <section class="landing-versions" aria-labelledby="landingVersionsTitle">
+        <div>
+          <p class="section-kicker">ВЕРСИИ ПРИЛОЖЕНИЯ</p>
+          <h2 id="landingVersionsTitle">Нужна предыдущая версия?</h2>
+          <p>GameSpace по умолчанию устанавливает последний выпуск. Прошлую версию можно выбрать вручную; проверка выполняется только по кнопке.</p>
+        </div>
+        <button id="landingVersionsButton" class="version-secondary-button" type="button">Показать доступные версии</button>
+        <div id="landingVersionsList" class="release-list" hidden></div>
+      </section>
+
+      <footer class="landing-footer">
+        <span>GameSpace PWA · версия 0.3.0</span>
+        <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
+        <span>Архивы обрабатываются только на устройстве</span>
+      </footer>
+    </main>
+
+    <main id="appShell" class="app-shell" hidden>
+      <header class="hero">
+        <img class="app-brand-icon" src="./icons/gamespace-safe-192.png" alt="Значок GameSpace">
+        <div class="hero-copy">
+          <p class="eyebrow">НАСТРОЙКИ · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ</p>
+          <h1>GameSpace</h1>
+          <p id="siteSummary" class="hero-summary">Основной сайт ещё не установлен</p>
+        </div>
+      </header>
+
+      <div class="status-line" role="status">
+        <span id="statusDot" class="status-dot" data-tone="neutral"></span>
+        <span id="statusText">Запуск приложения…</span>
+      </div>
+
+      <section id="emptyState" class="setup-section">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">ПЕРВЫЙ ЗАПУСК</p>
+            <h2>Выберите, с чего начать</h2>
+          </div>
+          <p>Можно сразу установить встроенный демо-сайт или выбрать свой архив.</p>
+        </div>
+
+        <div class="setup-grid">
+          <article class="setup-card demo-setup-card">
+            <div class="setup-card-top">
+              <img src="./icons/gamespace-safe-192.png" alt="">
+              <span class="recommended-pill">РЕКОМЕНДУЕМ ДЛЯ ПРОВЕРКИ</span>
+            </div>
+            <h3>Встроенный демо-сайт</h3>
+            <p>Полный демонстрационный каталог уже находится внутри приложения. Его можно оставить для знакомства с GameSpace, а для своей работы загрузить собственный архив. Переносить материалы из демо в свой архив нельзя.</p>
+            <button id="demoButton" class="primary-button demo-install-button" type="button">
+              <span>Установить демо-сайт</span>
+              <small>Быстрый способ проверить GameSpace</small>
+            </button>
+          </article>
+
+          <article class="setup-card archive-setup-card">
+            <div class="setup-card-top">
+              <span class="archive-file-icon" aria-hidden="true">7z</span>
+              <span class="local-pill">ВАШ АРХИВ</span>
+            </div>
+            <h3>Сайт с устройства</h3>
+            <p>Выберите архив в памяти, на флешке или SD-карте. Файл никуда не отправляется.</p>
+            <button id="chooseArchiveButton" class="secondary-button" type="button">
+              <span>Выбрать основной архив</span>
+              <small>site.7z или site.zip</small>
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section id="installedState" class="primary-card installed-card" hidden>
+        <div class="launch-orbit" aria-hidden="true"><span>▶</span></div>
+        <div>
+          <p class="section-kicker">САЙТ УСТАНОВЛЕН</p>
+          <h2>Готов к запуску</h2>
+          <p>Все файлы находятся только на этом устройстве. Интернет и локальная сеть не нужны.</p>
+        </div>
+        <button id="openSiteButton" class="primary-button launch-button" type="button">Открыть GameSpace</button>
+      </section>
+
+      <section id="progressPanel" class="progress-card" aria-live="polite" hidden>
+        <div class="progress-heading">
+          <div class="pulse" aria-hidden="true"></div>
+          <div>
+            <p class="section-kicker">ЛОКАЛЬНАЯ ОПЕРАЦИЯ</p>
+            <h2 id="progressTitle">Установка сайта</h2>
+          </div>
+        </div>
+        <p id="progressPhase">Подготовка…</p>
+        <progress id="progressBar" max="1" value="0"></progress>
+        <div class="progress-meta">
+          <span id="progressNumbers">0 файлов</span>
+          <span id="progressFile">—</span>
+        </div>
+      </section>
+
+      <section id="errorPanel" class="error-card" role="alert" hidden>
+        <div>
+          <strong>Операция не выполнена</strong>
+          <p id="errorText"></p>
+        </div>
+        <button id="errorClose" type="button" aria-label="Закрыть сообщение">×</button>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel storage-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">ХРАНИЛИЩЕ</p>
+              <h2>Память приложения</h2>
+            </div>
+            <span id="storagePersistent" class="storage-badge">Проверка…</span>
+          </div>
+          <div class="storage-visual">
+            <div class="storage-ring" id="storageRing">
+              <span id="storageBarText">0%</span>
+            </div>
+            <div class="storage-copy">
+              <strong id="storageUsage">— занято</strong>
+              <span id="storageQuota">— доступная квота</span>
+              <div class="bar-track"><span id="storageBar"></span></div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel actions-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">ОБНОВЛЕНИЯ</p>
+              <h2>Локальные архивы</h2>
+            </div>
+          </div>
+          <div class="action-stack">
+            <button id="fastUpdateButton" class="action-button" type="button">
+              <span class="action-symbol">↯</span>
+              <span><strong>Быстро обновить</strong><small>Заменить только файлы из update-архива</small></span>
+            </button>
+            <button id="fullUpdateButton" class="action-button" type="button">
+              <span class="action-symbol">↻</span>
+              <span><strong>Полная установка</strong><small>Проверить и заменить весь локальный сайт</small></span>
+            </button>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel pwa-update-panel">
+        <div class="pwa-update-copy">
+          <p class="section-kicker">ОБОЛОЧКА PWA</p>
+          <h2>Версия приложения</h2>
+          <p id="pwaCurrentVersion">Установлена версия 0.3.0.</p>
+          <p id="pwaUpdateStatus">При запуске используется локальная версия. Подключение к серверу выполняется только по этой кнопке.</p>
+        </div>
+        <div class="pwa-version-actions">
+          <button id="checkPwaUpdateButton" class="action-button pwa-update-button" type="button">
+            <span class="action-symbol">↓</span>
+            <span><strong>Проверить версии PWA</strong><small>Требуется подключение к интернету</small></span>
+          </button>
+          <button id="rollbackPwaButton" class="version-secondary-button" type="button" disabled>Вернуться к предыдущей версии</button>
+          <a class="recovery-link" href="./__gamespace_recovery__/">Открыть страницу восстановления</a>
+        </div>
+        <div id="pwaVersionsList" class="release-list" hidden></div>
+      </section>
+
+      <section class="panel details-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-kicker">СОСТОЯНИЕ</p>
+            <h2>Информация</h2>
+          </div>
+          <span id="capabilityLabel" class="capability-badge">Проверяю браузер…</span>
+        </div>
+        <dl class="details-list">
+          <div><dt>Архив</dt><dd id="infoArchive">—</dd></div>
+          <div><dt>Формат</dt><dd id="infoFormat">—</dd></div>
+          <div><dt>Файлов обработано</dt><dd id="infoFiles">—</dd></div>
+          <div><dt>Записано</dt><dd id="infoWritten">—</dd></div>
+          <div><dt>Дата операции</dt><dd id="infoInstalled">—</dd></div>
+          <div><dt>Время</dt><dd id="infoDuration">—</dd></div>
+          <div><dt>Последний режим</dt><dd id="infoMode">—</dd></div>
+        </dl>
+        <button id="removeSiteButton" class="danger-button" type="button">Удалить распакованный сайт</button>
+      </section>
+
+      <footer class="app-footer">
+        <span>GameSpace PWA · версия 0.3.0</span>
+        <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
+        <span>Архивы обрабатываются только на устройстве</span>
+      </footer>
+
+      <input id="archiveInput" type="file" accept=".7z,.zip,application/x-7z-compressed,application/zip" hidden>
+    </main>
+
+    <section id="viewer" class="viewer" hidden>
+      <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">
+        <strong class="viewer-toolbar-title">GameSpace</strong>
+        <button id="viewerBack" type="button" aria-label="Назад">←</button>
+        <button id="viewerHome" type="button" aria-label="На главную">⌂</button>
+        <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>
+      </div>
+      <div id="viewerLoading" class="viewer-loading">
+        <div class="loader-orbit" aria-hidden="true"><span></span></div>
+        <strong>Открываю локальный сайт…</strong>
+      </div>
+      <iframe id="siteFrame" title="Локальный сайт GameSpace"></iframe>
+    </section>
+
+    <script type="module" src="/src/app.js"></script>
+  </body>
+</html>

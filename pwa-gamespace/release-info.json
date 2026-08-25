@@ -1,0 +1,6 @@
+{
+  "version": "0.3.0",
+  "date": "2026-08-25",
+  "runtime": "sw-runtime-v1.js",
+  "description": "Неизменяемый Service Worker, ручной выбор версий и локальный откат."
+}

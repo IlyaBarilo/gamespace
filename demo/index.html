@@ -1,0 +1,1277 @@
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GameSpace</title>
+
+    <link rel="icon" type="image/png" href="favicon.png">
+
+    <!-- ========== НАСТРОЙКИ ОФОРМЛЕНИЯ СТРАНИЦЫ ========== -->
+    <style>
+        /* ------------------------------------------------------------------
+         * ГЛОБАЛЬНЫЕ НАСТРОЙКИ СТИЛЕЙ (цвета, шрифты, эффекты)
+         * Изменяйте параметры ниже для кастомизации внешнего вида
+         * ------------------------------------------------------------------ */
+        :root {
+            /* 🎨 Цветовая схема */
+            --bg-gradient-start: #020814;      /* фон страницы (верх) */
+            --bg-gradient-mid: #071a36;
+            --bg-gradient-end: #0b2d58;         /* фон страницы (низ) */
+            --card-bg: #09213f;                /* фон карточки (если подложка) */
+            --card-border: rgba(104, 190, 255, 0.22);
+            --card-border-hover: rgba(151, 221, 255, 0.58);
+            --text-primary: #f4faff;
+            --text-secondary: #b9d8f4;
+            --genre-bg: rgba(0, 116, 184, 0.46);
+            --genre-text: #d8f5ff;
+            --overlay-gradient: linear-gradient(to top,
+                rgba(1, 8, 22, 0.96) 0%,
+                rgba(3, 18, 42, 0.72) 55%,
+                transparent 100%);
+            --placeholder-bg: #10365d;          /* серый фон вместо картинки */
+
+            /* 🔤 Шрифты */
+            --font-main: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --font-size-title: 5.57cqw;
+            --font-size-genre: 3.25cqw;
+            --font-size-desc: 3.7cqw;
+
+            /* 📐 ШИРИНА И ВЫСОТА КАРТОЧКИ (настройки размеров) */
+            --content-width: 100%;
+            --page-padding-y: 3.82vw;
+            --columns: 3;
+            --grid-gap: 1.96vw;
+            --page-padding-x: var(--grid-gap);
+            --header-title-size: 4.58vw;
+            --header-margin-bottom: 3.49vw;
+            --section-gap: 3.13cqw;
+            --section-title-size: 3.15cqw;
+            --section-description-size: 1.48cqw;
+            --section-description-margin-top: 0.65cqw;
+            --section-header-margin-bottom: 1.53cqw;
+            /* Show-more badge settings */
+            --show-more-right: 0;
+            --show-more-bottom: -7cqw;
+            --show-more-min-width: 17cqw;
+            --show-more-height: 13cqw;
+            --show-more-padding-x: 4cqw;
+            --show-more-font-size: 7cqw;
+            --section-more-margin-top: 0.42cqw;
+            --section-more-line-width: 0.11cqw;
+            --section-more-line-color: rgba(151, 221, 255, 0.42);
+            --section-more-button-size: 2.4cqw;
+            --section-more-button-border-width: 0.11cqw;
+            --section-more-button-border-color: rgba(196, 240, 255, 0.72);
+            --section-more-button-border-color-hover: rgba(218, 247, 255, 0.88);
+            --section-more-button-plus-length: 1.15cqw;
+            --section-more-button-plus-thickness: 0.24cqw;
+            --section-more-button-bg: rgba(5, 40, 78, 0.94);
+            --section-more-button-bg-hover:  rgba(151, 221, 255, 0.42);
+            --section-more-button-text-color: var(--text-primary);
+            --role-badge-size: 13.5cqw;
+            --role-badge-offset: 3.2cqw;
+            --role-badge-opacity: 0.78;
+            --role-badge-shadow: 0 0.7cqw 2.4cqw rgba(0, 8, 28, 0.48);
+            --image-ratio: 78%; /* 66.66%; */ /* 3:2 — пропорция области картинки (можно 75% для 4:3) */
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-drag: none;
+            user-drag: none;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overscroll-behavior: none;
+            touch-action: pan-y;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html {
+            overflow: hidden;
+        }
+
+        body {
+            overflow-x: hidden;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            background: linear-gradient(150deg, var(--bg-gradient-start) 0%, var(--bg-gradient-mid) 52%, var(--bg-gradient-end) 100%);
+            font-family: var(--font-main);
+            color: var(--text-primary);
+            padding: var(--page-padding-y) var(--page-padding-x);
+        }
+
+        /* Шапка */
+        .store-header {
+            width: var(--content-width);
+            margin: 0 0 var(--header-margin-bottom) 0;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 1.74vw 2.62vw;
+        }
+
+        .store-header h1 {
+            flex: 1 1 0;
+            min-width: 0;
+            font-size: var(--header-title-size);
+            font-weight: 600;
+            letter-spacing: 0;
+            background: linear-gradient(135deg, #ffffff, #98dcff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.12;
+            max-width: none;
+        }
+
+        .game-count {
+            flex: 0 0 auto;
+            background: rgba(13, 75, 132, 0.62);
+            padding: 1.31vw 2.73vw;
+            border-radius: 4.36vw;
+            font-size: 1.85vw;
+            border: 0.11vw solid rgba(135, 207, 255, 0.24);
+            backdrop-filter: blur(0.44vw);
+            color: var(--text-secondary);
+        }
+
+        /* 📦 СЕТКА: количество колонок задается переменной --columns */
+        .games-grid {
+            display: flex;
+            flex-direction: column;
+            width: var(--content-width);
+            margin: 0;
+            gap: var(--section-gap);
+        }
+
+        .game-section {
+            width: 100%;
+            container-type: inline-size;
+        }
+
+        .section-header {
+            margin-bottom: var(--section-header-margin-bottom);
+        }
+
+        .section-heading {
+            min-width: 0;
+            width: 100%;
+        }
+
+        .section-title {
+            color: var(--text-primary);
+            font-size: var(--section-title-size);
+            font-weight: 700;
+            line-height: 1.12;
+        }
+
+        .section-description {
+            width: 100%;
+            max-width: none;
+            margin-top: var(--section-description-margin-top);
+            color: var(--text-secondary);
+            font-size: var(--section-description-size);
+            line-height: 1.45;
+        }
+
+        .section-games-grid {
+            display: grid;
+            width: 100%;
+            grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+            gap: var(--grid-gap);
+        }
+
+        .show-more-btn {
+            display: none;
+            position: absolute;
+            right: var(--show-more-right);
+            bottom: var(--show-more-bottom);
+            z-index: 5;
+            align-items: center;
+            justify-content: center;
+            min-width: var(--show-more-min-width);
+            height: var(--show-more-height);
+            padding: 0 var(--show-more-padding-x);
+            border: 1px solid rgba(196, 240, 255, 0.58);
+            border-radius: 999px;
+            background: rgba(5, 40, 78, 0.84);
+            backdrop-filter: blur(10px);
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            font-size: var(--show-more-font-size);
+            font-weight: 800;
+            line-height: 1;
+            letter-spacing: 0;
+            box-shadow: 0 0.7cqw 2.4cqw rgba(0, 8, 28, 0.45);
+            cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .show-more-btn:hover {
+            background: rgba(28, 125, 198, 0.9);
+            border-color: rgba(196, 240, 255, 0.68);
+            transform: translateY(-1px) scale(1.04);
+            box-shadow: 0 0.95cqw 3cqw rgba(0, 8, 28, 0.56);
+        }
+
+        .show-more-btn:focus-visible {
+            outline: 3px solid rgba(196, 240, 255, 0.72);
+            outline-offset: 3px;
+        }
+
+        /* Карточка-ссылка */
+        .section-more-divider {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            margin-top: var(--section-more-margin-top);
+            min-height: var(--section-more-button-size);
+        }
+
+        .section-more-divider::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: 50%;
+            border-top: var(--section-more-line-width) dashed var(--section-more-line-color);
+            transform: translateY(-50%);
+        }
+
+        .section-more-btn {
+            position: relative;
+            z-index: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: var(--section-more-button-size);
+            height: var(--section-more-button-size);
+            border: var(--section-more-button-border-width) solid var(--section-more-button-border-color);
+            border-radius: 50%;
+            background: var(--section-more-button-bg);
+            color: var(--section-more-button-text-color);
+            font-family: var(--font-main);
+            cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 0.85cqw 2.6cqw rgba(0, 8, 28, 0.48);
+            transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+        }
+
+        .section-more-btn:hover {
+            background: var(--section-more-button-bg-hover);
+            border-color: var(--section-more-button-border-color-hover);
+            transform: scale(1.06);
+        }
+
+        .section-more-btn::before,
+        .section-more-btn::after {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: var(--section-more-button-plus-length);
+            height: var(--section-more-button-plus-thickness);
+            border-radius: 999px;
+            background: currentColor;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .section-more-btn::after {
+            transform: translate(-50%, -50%) rotate(90deg);
+        }
+
+        .section-more-btn-label {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+            white-space: nowrap;
+        }
+
+        .section-more-btn:focus-visible {
+            outline: 3px solid rgba(196, 240, 255, 0.72);
+            outline-offset: 3px;
+        }
+
+        .game-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+            container-type: inline-size;
+            border-radius: 1.85%;
+            background-color: var(--card-bg);
+            box-shadow: 0 2.4vw 4.14vw -1.96vw rgba(0, 6, 18, 0.82);
+            transition: transform 0.25s ease, box-shadow 0.35s, border-color 0.2s;
+            overflow: visible;
+            border: 0.11vw solid var(--card-border);
+            height: 100%;
+            will-change: transform;
+            min-width: 0;
+        }
+
+        .game-card:hover {
+            transform: translateY(-0.87vw) scale(1.02);
+            box-shadow: 0 3.27vw 5.23vw -1.74vw rgba(0, 14, 42, 0.9);
+            border-color: var(--card-border-hover);
+        }
+
+        .game-card:focus-visible {
+            outline: 0.35cqw solid rgba(196, 240, 255, 0.75);
+            outline-offset: 0.35cqw;
+        }
+
+        /* Контейнер изображения — ширина 100%, высота регулируется padding-bottom */
+        .card-image {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: inherit;
+            padding-bottom: var(--image-ratio);    /* высота карточки зависит от пропорции */
+            background-color: var(--placeholder-bg);
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
+
+        /* Оверлей с текстом — полупрозрачная подложка */
+        .role-badge {
+            position: absolute;
+            top: var(--role-badge-offset);
+            right: var(--role-badge-offset);
+            z-index: 4;
+            width: var(--role-badge-size);
+            height: var(--role-badge-size);
+            opacity: var(--role-badge-opacity);
+            filter: drop-shadow(var(--role-badge-shadow));
+            pointer-events: none;
+        }
+
+        .image-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 3.7cqw 3.48cqw 3.93cqw;
+            background: var(--overlay-gradient);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            min-height: 45%;
+        }
+
+        /* Название игры */
+        .game-title {
+            font-size: var(--font-size-title);
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 0.57cqw;
+            text-shadow: 0 0.47cqw 1.17cqw rgba(0,0,0,0.6);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Жанр — отображается ТОЛЬКО если не пустой */
+        .game-genre {
+            display: inline-block;
+            font-size: var(--font-size-genre);
+            text-transform: uppercase;
+            letter-spacing: 0;
+            font-weight: 600;
+            color: var(--genre-text);
+            background: var(--genre-bg);
+            backdrop-filter: blur(0.94cqw);
+            padding: 0.94cqw 3.48cqw;
+            border-radius: 6.95cqw;
+            margin-bottom: 1.17cqw;
+            align-self: flex-start;
+            border: 0.23cqw solid rgba(159, 226, 255, 0.28);
+        }
+
+        /* Скрытый элемент — для пустого жанра */
+        .game-genre.empty-genre {
+            display: none;
+        }
+
+        /* Описание — отображается ТОЛЬКО если не пустое */
+        .game-description {
+            font-size: var(--font-size-desc);
+            line-height: 1.4;
+            opacity: 0.9;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            color: #eef8ff;
+            text-shadow: 0 0.23cqw 0.7cqw black;
+            margin-top: 0.23cqw;
+        }
+
+        /* Если описание пустое — скрываем блок */
+        .game-description.empty-description {
+            display: none;
+        }
+
+        /* Кнопки сложности — белая минималистичная тема */
+        .difficulty-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.85cqw;
+            margin-top: 2.78cqw;
+            justify-content: flex-start;
+        }
+
+        .difficulty-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 9.27cqw;
+            height: 9.27cqw;
+            padding: 0;
+            background: rgba(11, 72, 132, 0.68); /* полупрозрачный белый фон */
+            backdrop-filter: blur(0.94cqw);
+            border: 0.23cqw solid rgba(160, 224, 255, 0.32); /* светлая обводка */
+            border-radius: 50%;
+            color: #ffffff; /* белый текст */
+            font-size: 4.46cqw;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            letter-spacing: 0;
+            box-shadow: 0 0.47cqw 1.85cqw rgba(0, 12, 34, 0.32);
+        }
+
+        .difficulty-btn:hover {
+            background: rgba(28, 125, 198, 0.86); /* ярче при наведении */
+            border-color: rgba(196, 240, 255, 0.74); /* более заметная обводка */
+            transform: scale(1.05);
+            color: #ffffff;
+            box-shadow: 0 0.94cqw 2.78cqw rgba(0, 18, 48, 0.42);
+        }
+
+        /* Заглушка для карточек без картинки */
+        .no-image-bg {
+            background: var(--placeholder-bg);
+            background-image: linear-gradient(135deg, rgba(82, 166, 224, 0.18) 25%, transparent 25%, transparent 50%, rgba(82, 166, 224, 0.18) 50%, rgba(82, 166, 224, 0.18) 75%, transparent 75%);
+            background-size: 4.63cqw 4.63cqw;
+            position: relative;
+        }
+
+        .no-image-bg::before {
+            content: "🎮";
+            font-size: 12.96cqw;
+            opacity: 0.5;
+            color: #cceeff;
+            text-shadow: 0 0.94cqw 2.32cqw rgba(0,0,0,0.5);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 2;
+        }
+
+        footer {
+            width: 100%;
+            margin: 5.23vw 0 0;
+            text-align: center;
+            color: #83a7c9;
+            font-size: 1.4vw;
+            border-top: 0.11vw solid rgba(124, 197, 255, 0.12);
+            padding-top: 2.62vw;
+        }
+
+        footer a {color:#b9d8f4}
+
+        /* Phone portrait: make cards readable in two columns. */
+        @media (max-width: 767px) and (orientation: portrait) {
+            :root {
+                --columns: 2;
+                --grid-gap: 3.2vw;
+                --page-padding-y: 4vw;
+                --header-title-size: clamp(20px, 6vw, 30px);
+                --header-margin-bottom: 4vw;
+                --section-gap: 7.2cqw;
+                --section-title-size: 6cqw;
+                --section-description-size: 3.5cqw;
+                --section-description-margin-top: 1.4cqw;
+                --section-header-margin-bottom: 2.7cqw;
+                --font-size-title: clamp(14px, 7.2cqw, 24px);
+                --font-size-genre: clamp(8px, 3.8cqw, 13px);
+                --font-size-desc: clamp(10px, 4.7cqw, 15px);
+                --section-more-margin-top: 1.1cqw;
+                --section-more-line-width: 0.35cqw;
+                --section-more-button-size: 5.8cqw;
+                --section-more-button-border-width: 0.35cqw;
+                --section-more-button-plus-length: 2.8cqw;
+                --section-more-button-plus-thickness: 0.55cqw;
+                --image-ratio: 92%;
+            }
+
+            .store-header {
+                gap: 2.4vw;
+            }
+
+            .store-header h1 {
+                flex-basis: 100%;
+            }
+
+            .game-count {
+                font-size: clamp(12px, 3.4vw, 16px);
+                padding: 2vw 3.6vw;
+                border-radius: 999px;
+            }
+
+            .image-overlay {
+                padding: 4.8cqw 4.4cqw 5.1cqw;
+                min-height: 52%;
+            }
+
+            .difficulty-buttons {
+                gap: 2.3cqw;
+                margin-top: 3.4cqw;
+            }
+
+            .difficulty-btn {
+                width: clamp(28px, 13cqw, 44px);
+                height: clamp(28px, 13cqw, 44px);
+                font-size: clamp(14px, 6.2cqw, 22px);
+            }
+
+            footer {
+                margin-top: 7vw;
+                font-size: clamp(11px, 3vw, 14px);
+                padding-top: 4vw;
+            }
+
+            .section-header {
+                display: block;
+            }
+
+        }
+
+        /* Phone landscape: keep three columns, with denser spacing. */
+        @media (max-width: 1024px) and (max-height: 520px) and (orientation: landscape) {
+            :root {
+                --columns: 3;
+                --grid-gap: 1.8vw;
+                --page-padding-y: 2vw;
+                --header-title-size: clamp(18px, 3.2vw, 28px);
+                --header-margin-bottom: 2vw;
+                --section-gap: 2.7cqw;
+                --section-title-size: 3.7cqw;
+                --section-description-size: 2cqw;
+                --section-description-margin-top: 0.9cqw;
+                --section-header-margin-bottom: 1.5cqw;
+                --font-size-title: clamp(13px, 5.7cqw, 24px);
+                --font-size-genre: clamp(8px, 3cqw, 13px);
+                --font-size-desc: clamp(9px, 3.5cqw, 14px);
+                --section-more-margin-top: 0.8cqw;
+                --section-more-line-width: 0.22cqw;
+                --section-more-button-size: 4.1cqw;
+                --section-more-button-border-width: 0.22cqw;
+                --section-more-button-plus-length: 2cqw;
+                --section-more-button-plus-thickness: 0.42cqw;
+                --image-ratio: 78%;
+            }
+
+            .store-header {
+                gap: 1.2vw 2vw;
+            }
+
+            .game-count {
+                font-size: clamp(11px, 1.8vw, 16px);
+                padding: 0.9vw 2vw;
+                border-radius: 999px;
+            }
+
+            .difficulty-btn {
+                width: clamp(26px, 9.8cqw, 42px);
+                height: clamp(26px, 9.8cqw, 42px);
+                font-size: clamp(13px, 4.8cqw, 21px);
+            }
+
+        }
+    </style>
+</head>
+<body>
+    <header class="store-header">
+        <h1>🎮 Витрина игр разработанных в нейросетях</h1>
+        <span class="game-count">10 игр в коллекции</span>
+    </header>
+
+    <!-- =====================================================================
+        ДИНАМИЧЕСКАЯ СТРУКТУРА КАРТОЧЕК
+        Все данные хранятся в массиве games. Карточки создаются из JS.
+        Описание, жанр могут отсутствовать — тогда они не отображаются.
+        Если картинка не указана (пустая строка или нет поля) — серый фон.
+        ---------------------------------------------------------------------->
+    <div id="gamesGridContainer" class="games-grid">
+        <!-- Карточки будут вставлены через JavaScript -->
+    </div>
+
+    <footer>
+    </footer>
+
+    <script>
+        (function() {
+            "use strict";
+
+            const preventViewportDrag = (event) => event.preventDefault();
+            document.addEventListener('gesturestart', preventViewportDrag, { passive: false });
+            document.addEventListener('contextmenu', preventViewportDrag);
+            document.addEventListener('dragstart', preventViewportDrag);
+            document.addEventListener('selectstart', preventViewportDrag);
+
+            const phoneImageQuery = window.matchMedia('(max-width: 767px), (max-width: 1024px) and (max-height: 520px) and (orientation: landscape)');
+            const creatorBadges = {
+                teacher: {
+                    icon: 'icons/role/teacher-cap-minimal.svg',
+                    label: '\u0421\u0434\u0435\u043b\u0430\u043d\u043e \u043f\u0440\u0435\u043f\u043e\u0434\u0430\u0432\u0430\u0442\u0435\u043b\u0435\u043c'
+                },
+                students: {
+                    icon: 'icons/role/students-duo-minimal.svg',
+                    label: '\u0421\u0434\u0435\u043b\u0430\u043d\u043e \u0441\u0442\u0443\u0434\u0435\u043d\u0442\u0430\u043c\u0438'
+                }
+            };
+
+            const normalizeCreator = (creator) => (creator || '').trim().toLowerCase();
+
+            const selectImageUrl = (desktopUrl, mobileUrl) => {
+                const desktopImage = (desktopUrl || '').trim();
+                const mobileImage = (mobileUrl || '').trim();
+                return phoneImageQuery.matches && mobileImage ? mobileImage : desktopImage;
+            };
+
+            const setCardImage = (imageDiv, imageUrl) => {
+                if (imageUrl) {
+                    imageDiv.className = 'card-image';
+                    imageDiv.style.backgroundImage = `url('${imageUrl}')`;
+                } else {
+                    imageDiv.className = 'card-image no-image-bg';
+                    imageDiv.style.backgroundImage = '';
+                }
+            };
+
+            const refreshResponsiveImages = () => {
+                document.querySelectorAll('.card-image').forEach((imageDiv) => {
+                    const imageUrl = selectImageUrl(imageDiv.dataset.imageUrl, imageDiv.dataset.imageUrlMobile);
+                    setCardImage(imageDiv, imageUrl);
+                });
+            };
+
+            // ================================================================
+            // БАЗА ДАННЫХ ИГР — СПИСОК ОБЪЕКТОВ
+            // ================================================================
+            const games = [
+                {
+                    header: "Головоломки и игры",
+                    description: "Небольшие игры с уровнями сложности и быстрым запуском.",
+                    creator: "teacher"
+                },
+
+                {
+                    title: "Крестики-нолики с сапером",
+                    genre: "Головоломка",
+                    description: "Ходи осторожно — мины любят неожиданные ходы",
+                    imageUrl: "games/tictac/logo_small-mobile.jpg",
+                    imageUrlMobile: "games/tictac/logo_small-mobile.jpg",
+                    link: "games/tictac/game.html",
+                    difficulties: {
+                        2: { text: "🐣", link: "games/tictac/game.html?diff=simple" },
+                        3: { text: "🙂", link: "games/tictac/game.html?diff=normal" },
+                        4: { text: "🤔", link: "games/tictac/game.html?diff=hard" },
+                        5: { text: "😎", link: "games/tictac/game.html?diff=expert" }
+                    }
+                },
+
+                {
+                    title: "Алгоритмы",
+                    genre: "Найди слова",
+                    description: "",
+                    imageUrl: "games/wordsearch/algo.jpg",
+                    imageUrlMobile: "games/wordsearch/algo-mobile.jpg",
+                    link: "games/wordsearch/game.html?game=algo&diff=3",
+                    difficulties: {
+                        1: { text: "🐣", link: "games/wordsearch/game.html?game=algo&diff=1" },
+                        3: { text: "🙂", link: "games/wordsearch/game.html?game=algo&diff=3" },
+                        4: { text: "🤔", link: "games/wordsearch/game.html?game=algo&diff=4" },
+                        5: { text: "😎", link: "games/wordsearch/game.html?game=algo&diff=5" }
+                    }
+                },
+
+
+                {
+                    title: "Дед Мазай и зайцы",
+                    genre: "Match 3",
+                    description: "Собери одинаковых зайцев — помоги деду Мазаю спасти их от наводнения!",
+                    imageUrl: "games/ded_mazay_i_zayci_3/logo_small.jpg",
+                    link: "games/ded_mazay_i_zayci_3/game.html",
+                    difficulties: {
+                        1: { text: "🐣", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=small&stars=1" },
+                        3: { text: "🙂", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=medium&stars=3" },
+                        5: { text: "🤔", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=big&stars=5" }
+                    }
+                },
+                {
+                    title: "Колобок",
+                    genre: "Match 3",
+                    description: "",
+                    imageUrl: "games/match3/logo_small.jpg",
+                    link: "games/match3/game.html",
+                    difficulties: {
+                        1: { text: "🐣", link: "games/match3/game.html?game=kolobok&size=small&stars=1" },
+                        3: { text: "🙂", link: "games/match3/game.html?game=kolobok&size=medium&stars=3" },
+                        5: { text: "🤔", link: "games/match3/game.html?game=kolobok&size=big&stars=5" }
+                    }
+                },
+
+
+                {
+                    header: "Пазлы",
+                    description: "Собирай изображения на разных уровнях сложности.",
+                    creator: "teacher"
+                },
+
+                {
+                    title: "Пожарная каланча в аквариуме! (9 картинок)",
+                    genre: "Пазл",
+                    description: "Собери пазл и скачай изображение!",
+                    imageUrl: "games/puzzle/images/kalancha/web/logo_kalancha-akvarium.jpg",
+                    imageUrlMobile: "games/puzzle/images/kalancha/web/logo_kalancha-akvarium-mobile.jpg",
+                    link: "games/puzzle/game.html?diff=simple&image=kalancha-akvarium",
+                    // Сложность со ссылками (ключ - уровень сложности, значение - объект с текстом и ссылкой)
+                    difficulties: {
+                        2: { text: "🐣", link: "games/puzzle/game.html?diff=simple&image=kalancha-akvarium" },
+                        3: { text: "🙂", link: "games/puzzle/game.html?diff=normal&image=kalancha-akvarium" },
+                        4: { text: "🤔", link: "games/puzzle/game.html?diff=hard&image=kalancha-akvarium" },
+                        5: { text: "😎", link: "games/puzzle/game.html?diff=very&image=kalancha-akvarium" },
+                    }
+                },
+                /* 👶🧒🧑👨‍🏫👨‍💻*/
+
+
+                {
+                    header: "Праздничные игры",
+                    description: "Игры на темы праздников.",
+                    creator: "teacher"
+                },
+
+                {
+                    title: "8 марта. Роботы",
+                    genre: "Пазл",
+                    description: "Собери пазл и скачай изображение!",
+                    imageUrl: "games/puzzle/images/8march2026/robots/web/logo_009.jpg",
+                    link: "games/puzzle/game.html?diff=simple&image=8march2026-robots",
+                    creator: "teacher",
+                    difficulties: {
+                        2: { text: "🐣", link: "games/puzzle/game.html?diff=simple&image=8march2026-robots" },
+                        3: { text: "🙂", link: "games/puzzle/game.html?diff=normal&image=8march2026-robots" },
+                        4: { text: "🤔", link: "games/puzzle/game.html?diff=hard&image=8march2026-robots" },
+                        5: { text: "😎", link: "games/puzzle/game.html?diff=very&image=8march2026-robots" },
+                    }
+                },
+
+                {
+                    title: "8 марта. Шарики с поздравлениями",
+                    genre: "2D",
+                    description: "Выберите шарик с поздравлением",
+                    imageUrl: "logo/logo_8march-shariki.jpg",
+                    link: "8march/shariki/game.html"
+                },
+
+                {
+                    header: "Тестирование"
+                },
+
+                {
+                    title: "Диагностика интерактивного экрана",
+                    genre: "Тестирование",
+                    description: "",
+                    imageUrl: "games/interactive-screen-benchmark/interactive-screen-benchmark-small.jpg",
+                    link: "games/interactive-screen-benchmark/interactive-screen-benchmark.html",
+                    creator: "teacher"
+                },
+
+
+            ];
+
+            // ================================================================
+            // РЕНДЕРИНГ КАРТОЧЕК
+            // ================================================================
+            const container = document.getElementById('gamesGridContainer');
+            if (!container) return;
+
+            const expandedSections = new Set();
+            const getQueryParts = () => (window.location.search || '').replace(/^\?/, '').split('&');
+            const decodeQueryPart = (value) => decodeURIComponent((value || '').replace(/\+/g, ' '));
+            const hasQueryParam = (name) => {
+                for (const part of getQueryParts()) {
+                    if (!part) continue;
+                    const equalsIndex = part.indexOf('=');
+                    const rawKey = equalsIndex >= 0 ? part.slice(0, equalsIndex) : part;
+                    if (decodeQueryPart(rawKey) === name) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            const getQueryParam = (name) => {
+                for (const part of getQueryParts()) {
+                    if (!part) continue;
+                    const equalsIndex = part.indexOf('=');
+                    const rawKey = equalsIndex >= 0 ? part.slice(0, equalsIndex) : part;
+                    const rawValue = equalsIndex >= 0 ? part.slice(equalsIndex + 1) : '';
+                    if (decodeQueryPart(rawKey) === name) {
+                        return decodeQueryPart(rawValue);
+                    }
+                }
+                return '';
+            };
+            const PRELOAD_IMAGES = hasQueryParam('app') || hasQueryParam('tv');
+            const AUTHOR_MODE = hasQueryParam('author');
+            const INDEX_STATE_SCOPE = getQueryParam('gamespaceIndexSession') || 'default';
+            const INDEX_STATE_KEY = `gamespace:index-state:${window.location.pathname}:${INDEX_STATE_SCOPE}`;
+            const INDEX_STATE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+            const getIndexStateStorage = () => {
+                try {
+                    const probeKey = `${INDEX_STATE_KEY}:probe`;
+                    sessionStorage.setItem(probeKey, '1');
+                    sessionStorage.removeItem(probeKey);
+                    return sessionStorage;
+                } catch (error) {
+                    return null;
+                }
+            };
+
+            const indexStateStorage = getIndexStateStorage();
+
+            const getScrollTop = () => {
+                const scrollEl = document.scrollingElement || document.documentElement || document.body;
+                return scrollEl ? scrollEl.scrollTop : (window.scrollY || 0);
+            };
+
+            const setScrollTop = (value) => {
+                const target = Math.max(0, Number(value) || 0);
+                const scrollEl = document.scrollingElement || document.documentElement || document.body;
+                if (scrollEl) {
+                    scrollEl.scrollTop = target;
+                }
+                window.scrollTo(0, target);
+            };
+
+            const restoreScrollTop = (value) => {
+                const target = Number(value);
+                if (!Number.isFinite(target) || target <= 0) return;
+
+                const restore = () => setScrollTop(target);
+                restore();
+                if (window.requestAnimationFrame) {
+                    window.requestAnimationFrame(() => {
+                        restore();
+                        window.requestAnimationFrame(restore);
+                    });
+                }
+                window.setTimeout(restore, 80);
+                window.setTimeout(restore, 250);
+            };
+
+            const getGameCount = () => sections.reduce((count, section) => count + section.games.length, 0);
+            const imagePreloaders = [];
+
+            const preloadCatalogImages = (catalogSections) => {
+                if (!PRELOAD_IMAGES) return;
+
+                const imageUrls = new Set();
+                catalogSections.forEach((section) => {
+                    section.games.forEach((game) => {
+                        const imageUrl = selectImageUrl(game.imageUrl, game.imageUrlMobile);
+                        if (imageUrl) {
+                            imageUrls.add(imageUrl);
+                        }
+
+                        const badge = creatorBadges[normalizeCreator(game.creator)];
+                        if (badge && badge.icon) {
+                            imageUrls.add(badge.icon);
+                        }
+                    });
+                });
+
+                imageUrls.forEach((imageUrl) => {
+                    const image = new Image();
+                    const releasePreloader = () => {
+                        const index = imagePreloaders.indexOf(image);
+                        if (index >= 0) {
+                            imagePreloaders.splice(index, 1);
+                        }
+                    };
+                    image.onload = releasePreloader;
+                    image.onerror = releasePreloader;
+                    image.decoding = 'async';
+                    image.src = imageUrl;
+                    imagePreloaders.push(image);
+                });
+            };
+
+            const loadIndexState = () => {
+                if (!indexStateStorage) return null;
+                try {
+                    const raw = indexStateStorage.getItem(INDEX_STATE_KEY);
+                    if (!raw) return null;
+                    const state = JSON.parse(raw);
+                    if (!state || state.v !== 1) return null;
+                    if (Date.now() - Number(state.savedAt || 0) > INDEX_STATE_MAX_AGE_MS) {
+                        indexStateStorage.removeItem(INDEX_STATE_KEY);
+                        return null;
+                    }
+                    return state;
+                } catch (error) {
+                    return null;
+                }
+            };
+
+            const saveIndexState = () => {
+                if (!indexStateStorage) return;
+                try {
+                    const state = {
+                        v: 1,
+                        savedAt: Date.now(),
+                        sectionCount: sections.length,
+                        gameCount: getGameCount(),
+                        expandedSections: Array.from(expandedSections),
+                        scrollTop: getScrollTop()
+                    };
+                    indexStateStorage.setItem(INDEX_STATE_KEY, JSON.stringify(state));
+                } catch (error) {
+                    // Ignore storage quota/security errors.
+                }
+            };
+
+            const applyIndexState = (state) => {
+                if (!state || state.sectionCount !== sections.length || state.gameCount !== getGameCount()) return;
+                if (!Array.isArray(state.expandedSections)) return;
+
+                const sectionIds = new Set(sections.map(section => section.id));
+                state.expandedSections.forEach((sectionId) => {
+                    if (sectionIds.has(sectionId)) {
+                        expandedSections.add(sectionId);
+                    }
+                });
+            };
+
+            const getCollapsedLimit = () => {
+                const value = getComputedStyle(document.documentElement).getPropertyValue('--columns').trim();
+                const columns = Number.parseInt(value, 10);
+                return Number.isFinite(columns) && columns > 0 ? columns : 3;
+            };
+
+            const buildSections = (items) => {
+                const sections = [];
+                let currentSection = null;
+
+                items.forEach((item) => {
+                    if (item.header) {
+                        currentSection = {
+                            id: `section-${sections.length}`,
+                            header: item.header,
+                            description: item.description || '',
+                            creator: normalizeCreator(item.creator),
+                            games: []
+                        };
+                        sections.push(currentSection);
+                        return;
+                    }
+
+                    if (!currentSection) {
+                        currentSection = {
+                            id: `section-${sections.length}`,
+                            header: 'Все игры',
+                            description: '',
+                            creator: '',
+                            games: []
+                        };
+                        sections.push(currentSection);
+                    }
+
+                    currentSection.games.push({
+                        ...item,
+                        creator: normalizeCreator(item.creator) || currentSection.creator
+                    });
+                });
+
+                return sections
+                    .map((section) => ({
+                        ...section,
+                        games: AUTHOR_MODE
+                            ? section.games.filter(game => normalizeCreator(game.creator) !== 'students')
+                            : section.games
+                    }))
+                    .filter(section => section.games.length > 0);
+            };
+
+            const createGameCard = (game) => {
+                const cardLink = document.createElement('div');
+                cardLink.className = 'game-card';
+                cardLink.setAttribute('role', 'link');
+                cardLink.setAttribute('aria-label', game.title || 'Открыть игру');
+                cardLink.tabIndex = 0;
+                cardLink.addEventListener('click', (e) => {
+                    if (e.target.closest('a, button')) return;
+                    if (game.link) {
+                        saveIndexState();
+                        window.location.href = game.link;
+                    }
+                });
+                cardLink.addEventListener('keydown', (e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && game.link) {
+                        e.preventDefault();
+                        saveIndexState();
+                        window.location.href = game.link;
+                    }
+                });
+
+                const imageDiv = document.createElement('div');
+                imageDiv.dataset.imageUrl = (game.imageUrl || '').trim();
+                imageDiv.dataset.imageUrlMobile = (game.imageUrlMobile || '').trim();
+                setCardImage(imageDiv, selectImageUrl(game.imageUrl, game.imageUrlMobile));
+
+                const overlay = document.createElement('div');
+                overlay.className = 'image-overlay';
+
+                if (game.genre && game.genre.trim() !== '') {
+                    const genreSpan = document.createElement('span');
+                    genreSpan.className = 'game-genre';
+                    genreSpan.textContent = game.genre.trim();
+                    overlay.appendChild(genreSpan);
+                }
+
+                const titleEl = document.createElement('h2');
+                titleEl.className = 'game-title';
+                titleEl.textContent = game.title || 'Без названия';
+                overlay.appendChild(titleEl);
+
+                if (game.description && game.description.trim() !== '') {
+                    const descEl = document.createElement('p');
+                    descEl.className = 'game-description';
+                    descEl.textContent = game.description.trim();
+                    overlay.appendChild(descEl);
+                }
+
+                if (game.difficulties && Object.keys(game.difficulties).length > 0) {
+                    const difficultyContainer = document.createElement('div');
+                    difficultyContainer.className = 'difficulty-buttons';
+                    const sortedLevels = Object.keys(game.difficulties)
+                        .map(Number)
+                        .sort((a, b) => a - b);
+
+                    sortedLevels.forEach(level => {
+                        const difficulty = game.difficulties[level];
+                        if (difficulty && difficulty.text && difficulty.link) {
+                            const btn = document.createElement('a');
+                            btn.href = difficulty.link;
+                            btn.className = 'difficulty-btn';
+                            btn.textContent = difficulty.text;
+                            btn.target = '_self';
+                            btn.addEventListener('click', (e) => {
+                                saveIndexState();
+                                e.stopPropagation();
+                            });
+                            difficultyContainer.appendChild(btn);
+                        }
+                    });
+
+                    overlay.appendChild(difficultyContainer);
+                }
+
+                imageDiv.appendChild(overlay);
+
+                const creatorBadge = creatorBadges[normalizeCreator(game.creator)];
+                if (creatorBadge) {
+                    const roleBadge = document.createElement('img');
+                    roleBadge.className = 'role-badge';
+                    roleBadge.src = creatorBadge.icon;
+                    roleBadge.alt = creatorBadge.label;
+                    roleBadge.title = creatorBadge.label;
+                    roleBadge.loading = 'lazy';
+                    imageDiv.appendChild(roleBadge);
+                }
+
+                cardLink.appendChild(imageDiv);
+                return cardLink;
+            };
+
+            const createSectionElement = (section) => {
+                const collapsedLimit = getCollapsedLimit();
+                const isExpanded = expandedSections.has(section.id);
+                const visibleGames = isExpanded ? section.games : section.games.slice(0, collapsedLimit);
+                const hiddenCount = Math.max(0, section.games.length - visibleGames.length);
+
+                const sectionEl = document.createElement('section');
+                sectionEl.className = 'game-section';
+
+                const headerEl = document.createElement('div');
+                headerEl.className = 'section-header';
+
+                const headingEl = document.createElement('div');
+                headingEl.className = 'section-heading';
+
+                const titleEl = document.createElement('h2');
+                titleEl.className = 'section-title';
+                titleEl.textContent = section.header;
+                headingEl.appendChild(titleEl);
+
+                if (section.description) {
+                    const descEl = document.createElement('p');
+                    descEl.className = 'section-description';
+                    descEl.textContent = section.description;
+                    headingEl.appendChild(descEl);
+                }
+
+                headerEl.appendChild(headingEl);
+                sectionEl.appendChild(headerEl);
+
+                const sectionGrid = document.createElement('div');
+                sectionGrid.className = 'section-games-grid';
+                visibleGames.forEach((game, index) => {
+                    const card = createGameCard(game);
+                    const isLastVisibleCard = index === visibleGames.length - 1;
+
+                    if (false && !isExpanded && hiddenCount > 0 && isLastVisibleCard) {
+                        card.classList.add('has-show-more');
+                        const showMoreBtn = document.createElement('button');
+                        showMoreBtn.type = 'button';
+                        showMoreBtn.className = 'show-more-btn';
+                        showMoreBtn.textContent = `+${hiddenCount}`;
+                        showMoreBtn.setAttribute('aria-label', `Показать еще ${hiddenCount} игр`);
+                        showMoreBtn.title = `Показать еще ${hiddenCount} игр`;
+                        showMoreBtn.addEventListener('click', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            expandedSections.add(section.id);
+                            renderSections();
+                            saveIndexState();
+                        });
+                        card.appendChild(showMoreBtn);
+                    }
+
+                    sectionGrid.appendChild(card);
+                });
+                sectionEl.appendChild(sectionGrid);
+
+                if (!isExpanded && hiddenCount > 0) {
+                    const moreDivider = document.createElement('div');
+                    moreDivider.className = 'section-more-divider';
+
+                    const moreBtn = document.createElement('button');
+                    moreBtn.type = 'button';
+                    moreBtn.className = 'section-more-btn';
+                    const moreBtnLabel = document.createElement('span');
+                    moreBtnLabel.className = 'section-more-btn-label';
+                    moreBtnLabel.textContent = '+';
+                    moreBtn.appendChild(moreBtnLabel);
+                    moreBtn.setAttribute('aria-label', `Показать еще ${hiddenCount} игр`);
+                    moreBtn.title = `Показать еще ${hiddenCount} игр`;
+                    moreBtn.addEventListener('click', () => {
+                        expandedSections.add(section.id);
+                        renderSections();
+                        saveIndexState();
+                    });
+
+                    moreDivider.appendChild(moreBtn);
+                    sectionEl.appendChild(moreDivider);
+                }
+
+                return sectionEl;
+            };
+
+            const sections = buildSections(games);
+            const savedIndexState = loadIndexState();
+            applyIndexState(savedIndexState);
+            preloadCatalogImages(sections);
+
+            function renderSections() {
+                container.innerHTML = '';
+                sections.forEach((section) => {
+                    container.appendChild(createSectionElement(section));
+                });
+                refreshResponsiveImages();
+            }
+
+            const renderSectionsKeepingScroll = () => {
+                const scrollTop = getScrollTop();
+                renderSections();
+                restoreScrollTop(scrollTop);
+                saveIndexState();
+            };
+
+            renderSections();
+            if (savedIndexState && Number.isFinite(Number(savedIndexState.scrollTop))) {
+                restoreScrollTop(savedIndexState.scrollTop);
+            }
+
+            if (phoneImageQuery.addEventListener) {
+                phoneImageQuery.addEventListener('change', renderSectionsKeepingScroll);
+            } else if (phoneImageQuery.addListener) {
+                phoneImageQuery.addListener(renderSectionsKeepingScroll);
+            }
+
+            let resizeTimer = null;
+            window.addEventListener('resize', () => {
+                const scrollTop = getScrollTop();
+                window.clearTimeout(resizeTimer);
+                resizeTimer = window.setTimeout(() => {
+                    renderSections();
+                    restoreScrollTop(scrollTop);
+                    saveIndexState();
+                }, 120);
+            });
+
+            window.addEventListener('pagehide', saveIndexState);
+            window.addEventListener('beforeunload', saveIndexState);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') {
+                    saveIndexState();
+                }
+            });
+
+            const countSpan = document.querySelector('.game-count');
+            if (countSpan) {
+                const gameCount = getGameCount();
+                countSpan.textContent = `${gameCount} игр в каталоге`;
+            }
+        })();
+    </script>
+
+    <!--
+        КОММЕНТАРИИ:
+        - Количество колонок задается переменной --columns в блоке :root
+        - Боковые поля равны отступу между колонками
+        - Элементы внутри карточки масштабируются от ширины карточки через cqw, чтобы сохранялись одинаковые пропорции при любом числе колонок
+        - Расстояние между карточками управляется --grid-gap
+        - Высота области картинки управляется --image-ratio (пропорция)
+        - Жанр и описание отображаются только если не пустые (проверка в JS)
+        - Все настройки цветов, шрифтов, размеров — в блоке :root (в стилях)
+        - Данные игр — в массиве games, можно добавлять/удалять объекты.
+        - Для карточек без картинки автоматически подставляется серый фон (класс no-image-bg)
+    -->
+</body>
+</html>

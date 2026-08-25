@@ -1,0 +1,2829 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Interactive Screen Benchmark</title>
+<style>
+  :root{
+    --bg0:#07111f; --bg1:#10233f; --bg2:#193860; --panel:rgba(8,18,32,.78); --line:rgba(255,255,255,.12);
+    --text:#eef6ff; --muted:#9fb4cc; --good:#7ff4b5; --warn:#ffd166; --bad:#ff6b7a;
+    --cyan:#66deff; --pink:#ff87dc; --violet:#b58cff; --orange:#ffb86b;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+    html,body{
+    width:100%;
+    height:100%;
+    margin:0;
+    overflow:hidden;
+    background:radial-gradient(circle at 50% 18%, #22497a 0%, var(--bg1) 35%, var(--bg0) 100%);
+    color:var(--text);
+    font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    overscroll-behavior:none;
+  }
+
+  #game{
+    position:relative;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    touch-action:none;
+  }
+
+  canvas{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    display:block;
+    touch-action:none;
+  }
+
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))){
+    .panel{
+      background:rgba(8,18,32,.94);
+    }
+  }
+
+  #ui{
+    position:absolute;
+    inset:0;
+    z-index:100;
+    pointer-events:none;
+  }
+
+  .overlay,
+  .panel,
+  .button,
+  [data-ui="true"]{
+    pointer-events:auto;
+  }
+  .panel{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:24px;backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(0,0,0,.25);pointer-events:auto}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto}
+  .hidden{display:none!important}
+  .button{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,.14);
+    background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.02));
+    color:var(--text);
+    font-weight:800;
+    letter-spacing:.02em;
+    cursor:pointer;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 6px 14px rgba(0,0,0,.16);
+
+    white-space:normal;        /* было по умолчанию в одну строку */
+    text-align:center;
+    line-height:1.15;
+    padding:0 12px;
+  }
+  .button:active{transform:translateY(1px) scale(.99)}
+  .t,.s,.b{position:absolute;white-space:pre-line}
+  .intro-par{
+    margin:0 0 0.72em 0;
+  }
+  .intro-par:last-child{
+    margin-bottom:0;
+  }
+  .b{
+    overflow:hidden;
+    word-break:break-word;
+  }
+  .t{font-weight:900}.s{font-weight:700;color:var(--muted)}.b{line-height:1.35}
+
+
+ *{-webkit-touch-callout:none!important;-webkit-user-select:none!important;user-select:none!important;-webkit-tap-highlight-color:transparent}
+  canvas,img,div,button,span,touch-action:none;user-select:none}
+  body{-webkit-touch-callout:none}
+
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="stars"></canvas>
+  <canvas id="world"></canvas>
+  <canvas id="hud"></canvas>
+  <div id="ui"></div>
+</div>
+<script>
+(() => {
+'use strict';
+
+// ==============================
+// ПАРАМЕТРЫ МАСШТАБИРОВАНИЯ UI
+// ==============================
+const GLOBAL_UI_SCALE = 0.92;
+const TEXT_SCALE = 0.88;
+const HUD_SCALE = 0.90;
+const NARROW_SCREEN_RATIO = 0.64;
+
+const BASE_W = 810, BASE_H = 1440;
+const STAGES = ['latency','tapzones','dualdrag','multitouch','falling','lightscene','tracepath','dualpaths','autodiag'];
+const STAGE_TITLES = {
+  latency:'ЭТАП 1 · ОТКЛИК КАСАНИЯ',
+  tapzones:'ЭТАП 2 · ПОДСЧЁТ НАЖАТИЙ В ДВУХ ЗОНАХ',
+  dualdrag:'ЭТАП 3 · ДВА ОБЪЕКТА ЗА ПАЛЬЦАМИ',
+  multitouch:'ЭТАП 4 · МНОГО ОДНОВРЕМЕННЫХ НАЖАТИЙ',
+  falling:'ЭТАП 5 · ПАДАЮЩИЕ ЦЕЛИ',
+  lightscene:'ЭТАП 6 · БАЗОВЫЙ FPS БЕЗ НАГРУЗКИ',
+  tracepath:'ЭТАП 7 · ВЕДЕНИЕ ПАЛЬЦА ПО ТРАЕКТОРИИ',
+  dualpaths:'ЭТАП 8 · ДВЕ ТРАЕКТОРИИ ДЛЯ ДВУХ ИГРОКОВ',
+  autodiag:'ЭТАП 9 · АВТОДИАГНОСТИКА НАГРУЗКИ'
+};
+const STAGE_HINTS = {
+  latency:'Быстро касайтесь световой цели. Смотрите на задержку, FPS, frame time и точность попаданий.',
+  tapzones:'Два игрока могут нажимать по своей половине экрана. Видно серию, лучший темп и одновременность работы.',
+  dualdrag:'Нажмите прямо на левый и правый круги и тяните их пальцами. Считается качество следования за пальцами.',
+  multitouch:'Поставьте как можно больше пальцев одновременно. Этап показывает текущий, максимальный и устойчивый уровень касаний.',
+  falling:'Касайтесь падающих кругов. Слева медленно, справа — очень быстро. Над кругом показана скорость в %/с — сколько процентов высоты экрана цель проходит за 1 секунду.',
+  lightscene:'Почти пустая сцена. Ничего не делайте и просто смотрите на FPS, frame time и частоту событий движения.',
+  tracepath:'Ведите палец по светящейся траектории. Проверяется плавность движения, отклонение и число разрывов.',
+  dualpaths:'Двое игроков одновременно ведут свои круги по своим дорожкам. Проверяется реальная совместная игра.',
+  autodiag:'Ничего нажимать не нужно. Этап идёт автоматически и сам проверяет blur, HUD, эффекты и снижение разрешения.'
+};
+
+const CFG = {
+  comboResetMs:3000,
+  graphSeconds:12,
+  touchMarkMs:180,
+
+  goodLatency:35,
+  okLatency:60,
+
+  goodFps:55,
+  okFps:40,
+
+  goodLongFrames:8,
+  okLongFrames:24,
+
+  dualNeedRatio:.30,
+  dualNeedSimSec:2.4,
+
+  fallNeedRatio:.35,
+  touchGood:4,
+
+  buttonH:74,
+  cursorR:46,
+  gateR:102,
+
+  fallingMinR:18,
+  fallingMaxR:68,
+  fallingSpawn:0.35, // Частота появления шаров. Чем меньше, тем больше
+  fallingSpeedMinPercent: 2,   // % высоты экрана в секунду (медленно, левая часть)
+  fallingSpeedMaxPercent: 50,   // % высоты экрана в секунду (очень быстро, правая часть)
+
+  starMin:14,
+  starMax:42,
+
+  traceGuideWidth:58,
+  traceHitRadius:34,
+  traceBreakDist:86,
+
+  dualPathRadius:34,
+  dualPathHitWidth:60,
+
+  stableMultiHoldSec:1.0,
+
+  autoDiagIntroSec:3.0,
+  autoDiagCaseSec:4.0
+};
+
+function makeAutoDiagConfig(overrides = {}){
+  return {
+    label:'AUTO',
+    starsEnabled:true,
+    blurEnabled:true,
+    gradientsEnabled:true,
+    textsEnabled:true,
+    pointerMarksEnabled:true,
+    hudEnabled:true,
+    renderScale:1,
+    ...overrides
+  };
+}
+
+const AUTO_DIAG_CASES = [
+  {
+    id:'baseline',
+    title:'FULL',
+    config: makeAutoDiagConfig({})
+  },
+  {
+    id:'no_blur',
+    title:'NO BLUR',
+    config: makeAutoDiagConfig({ blurEnabled:false })
+  },
+  {
+    id:'hud_off',
+    title:'HUD OFF',
+    config: makeAutoDiagConfig({ blurEnabled:false, hudEnabled:false })
+  },
+  {
+    id:'flat',
+    title:'FLAT',
+    config: makeAutoDiagConfig({
+      starsEnabled:false,
+      blurEnabled:false,
+      gradientsEnabled:false,
+      textsEnabled:false,
+      pointerMarksEnabled:false,
+      hudEnabled:false
+    })
+  },
+  {
+    id:'scale_075',
+    title:'SCALE 0.75x',
+    config: makeAutoDiagConfig({
+      blurEnabled:false,
+      pointerMarksEnabled:false,
+      renderScale:0.75
+    })
+  },
+  {
+    id:'scale_050',
+    title:'SCALE 0.50x',
+    config: makeAutoDiagConfig({
+      blurEnabled:false,
+      pointerMarksEnabled:false,
+      renderScale:0.5
+    })
+  }
+];
+
+const state = {
+  initialized:false, started:false, finished:false, finishSent:false,
+  starsEnabled:true,
+  simpleMode:false,
+  gameId:'screenBenchmark', difficulty:3,
+  vw:0,vh:0,cx:0,cy:0,scale:1,textScale:1,hudScale:1,
+  phase:'intro', phaseIndex:0, phaseElapsed:0, totalElapsed:0, lastFrame:0,
+
+  pointers:new Map(),
+  pointerCountNow:0,
+  maxSimultaneousPointers:0,
+  stableMultiTouchMax:0,
+  multiTouchHoldTimer:0,
+  pointerCancelCount:0,
+
+  particles:[],
+  inputMarks:[],
+  totalPresses:0,
+  totalMoves:0,
+  moveBins:Array(CFG.graphSeconds).fill(0),
+  moveCounter:0,
+
+  latencySamples:[],
+  lastInputLatency:0,
+
+  fpsSamples:[],
+  fpsValue:0,
+  fpsDisplay:0,
+  fpsMin:Infinity,
+  fpsMax:0,
+  longFrames:0,
+
+  frameTimeSamples:[],
+  frameTimeBins:Array(CFG.graphSeconds).fill(0),
+  lastFrameTimeMs:0,
+
+  latencyTarget:{x:.5,y:.55,r:.07,hits:0,misses:0},
+
+  tapZones:{
+    left:{total:0, combo:0, best:0, lastTap:0, secBins:Array(CFG.graphSeconds).fill(0), secCounter:0, bestPerSec:0},
+    right:{total:0, combo:0, best:0, lastTap:0, secBins:Array(CFG.graphSeconds).fill(0), secCounter:0, bestPerSec:0}
+  },
+  simultaneousZoneHits:0,
+
+  leftCursor:{x:.28,y:.76,active:null,overGate:false,lastFingerLag:0,maxFingerLag:0,sumFingerLag:0,samples:0,lost:0},
+  rightCursor:{x:.72,y:.76,active:null,overGate:false,lastFingerLag:0,maxFingerLag:0,sumFingerLag:0,samples:0,lost:0},
+  gateLeft:{x:.28,y:.42},
+  gateRight:{x:.72,y:.42},
+  dualHoldTime:0,
+  dualSimTime:0,
+  dualdragElapsed:0,
+
+  multitouchBins:Array(CFG.graphSeconds).fill(0),
+  multitouchPeakThisSecond:0,
+  multitouchPeakOverall:0,
+
+  falling:{
+    circles:[],
+    spawnTimer:0,
+    spawned:0,
+    hits:0,
+    misses:0,
+    slow:{spawned:0,hits:0},
+    medium:{spawned:0,hits:0},
+    fast:{spawned:0,hits:0},
+    small:{spawned:0,hits:0},
+    mediumSize:{spawned:0,hits:0},
+    large:{spawned:0,hits:0}
+  },
+
+  lightscene:{},
+
+  autoDiag:{
+    introElapsed:0,
+    caseIndex:-1,
+    caseElapsed:0,
+    fpsSamples:[],
+    frameSamples:[],
+    results:[],
+    verdict:'',
+    overrideConfig:null
+  },
+
+  trace:{
+    activeId:null,
+    points:[],
+    path:[],
+    progress:0,
+    covered:0,
+    deviationSum:0,
+    deviationMax:0,
+    deviationSamples:0,
+    breaks:0,
+    completed:false
+  },
+
+  dualpaths:{
+    left:{activeId:null,progress:0,covered:0,deviationSum:0,deviationSamples:0,maxDeviation:0,breaks:0},
+    right:{activeId:null,progress:0,covered:0,deviationSum:0,deviationSamples:0,maxDeviation:0,breaks:0},
+    leftPath:[],
+    rightPath:[]
+  },
+
+  summary:null,
+  envSnapshot:null
+};
+
+const $ = id => document.getElementById(id);
+const dom = { game:$('game'), stars:$('stars'), world:$('world'), hud:$('hud'), ui:$('ui') };
+const HAS_POINTER_EVENTS = 'PointerEvent' in window;
+
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('selectstart',e=>e.preventDefault());
+document.addEventListener('dragstart',e=>e.preventDefault());
+document.body.style.userSelect='none';
+document.body.style.webkitUserSelect='none';
+if(/iPhone|iPad|iPod/i.test(navigator.userAgent)) document.body.style.webkitTouchCallout='none';
+
+function isUiTarget(target){
+  return !!(
+    target &&
+    target.closest &&
+    target.closest('.button, .panel, .overlay, .ui-control, [data-ui="true"]')
+  );
+}
+
+const sctx = dom.stars.getContext('2d');
+const wctx = dom.world.getContext('2d');
+const hctx = dom.hud.getContext('2d');
+
+function getWebGLInfo(){
+  try{
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if(!gl) return { vendor:'unavailable', renderer:'unavailable' };
+
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const vendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+    const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+
+    return {
+      vendor: String(vendor || 'unknown'),
+      renderer: String(renderer || 'unknown')
+    };
+  }catch(_){
+    return { vendor:'error', renderer:'error' };
+  }
+}
+
+function estimateRefreshHzFromSamples(){
+  const recent = state.fpsSamples
+    .filter(v => Number.isFinite(v) && v > 0)
+    .slice(-180);
+
+  if(!recent.length) return 0;
+  return Math.round(percentile(recent, 0.90));
+}
+
+function collectEnvironmentSnapshot(){
+  const gl = getWebGLInfo();
+
+  return {
+    userAgent: navigator.userAgent,
+    hardwareConcurrency: navigator.hardwareConcurrency || 0,
+    maxTouchPoints: navigator.maxTouchPoints || 0,
+    devicePixelRatio: Number(window.devicePixelRatio || 1),
+    viewport: `${window.innerWidth}x${window.innerHeight}`,
+    screen: `${window.screen.width}x${window.screen.height}`,
+    colorDepth: window.screen.colorDepth || 0,
+    webglVendor: gl.vendor,
+    webglRenderer: gl.renderer
+  };
+}
+
+
+const overlay = document.createElement('div');
+overlay.className = 'overlay';
+overlay.dataset.ui = 'true';
+
+const introCard = document.createElement('div');
+introCard.className = 'panel';
+introCard.dataset.ui = 'true';
+overlay.appendChild(introCard);
+dom.ui.appendChild(overlay);
+
+const summaryLayer = document.createElement('div');
+summaryLayer.className = 'overlay hidden';
+summaryLayer.dataset.ui = 'true';
+
+const summaryCard = document.createElement('div');
+summaryCard.className = 'panel';
+summaryCard.dataset.ui = 'true';
+summaryLayer.appendChild(summaryCard);
+dom.ui.appendChild(summaryLayer);
+
+const stageControls = document.createElement('div');
+stageControls.className = 'panel hidden';
+stageControls.dataset.ui = 'true';
+stageControls.style.position = 'absolute';
+dom.ui.appendChild(stageControls);
+
+function px(v,k='ui'){ const m=k==='text'?state.textScale:k==='hud'?state.hudScale:state.scale; return `${Math.round(v*m)}px`; }
+function sc(v,k='ui'){ const m=k==='text'?state.textScale:k==='hud'?state.hudScale:state.scale; return v*m; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function hypot2(x,y){ return Math.sqrt(x*x+y*y); }
+function avg(a){ return a.length ? a.reduce((s,v)=>s+v,0)/a.length : 0; }
+function median(a){ if(!a.length) return 0; const s=[...a].sort((x,y)=>x-y), m=Math.floor(s.length/2); return s.length%2 ? s[m] : (s[m-1]+s[m])/2; }
+function percentile(a,p){ if(!a.length) return 0; const s=[...a].sort((x,y)=>x-y); const idx=(s.length-1)*p, lo=Math.floor(idx), hi=Math.ceil(idx); return lo===hi?s[lo]:lerp(s[lo],s[hi],idx-lo); }
+function hexToRgba(hex, alpha){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16); return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${alpha})`; }
+function fmtMs(n){ return `${Math.round(n)} ms`; }
+function fmtFps(n){ return `${Math.round(n||0)}`; }
+function isNarrowScreen(){ return state.vw/state.vh < NARROW_SCREEN_RATIO; }
+
+function mkText(cls,parent){ const e=document.createElement('div'); e.className=cls; parent.appendChild(e); return e; }
+function mkButton(label,parent,fn){
+  const e = document.createElement('button');
+  e.className = 'button';
+  e.dataset.ui = 'true';
+  e.type = 'button';
+  e.textContent = label;
+
+  let activated = false;
+
+  const stop = ev => {
+    if(ev.cancelable) ev.preventDefault();
+    ev.stopPropagation();
+  };
+
+  const run = ev => {
+    stop(ev);
+    if(activated || state.finishSent) return;
+    activated = true;
+    fn();
+    requestAnimationFrame(() => { activated = false; });
+  };
+
+  if(HAS_POINTER_EVENTS){
+    e.addEventListener('pointerdown', stop, { passive:false });
+    e.addEventListener('pointerup', run, { passive:false });
+    e.addEventListener('pointercancel', stop, { passive:false });
+  } else {
+    e.addEventListener('touchstart', stop, { passive:false });
+    e.addEventListener('touchend', run, { passive:false });
+    e.addEventListener('touchcancel', stop, { passive:false });
+    e.addEventListener('click', run, { passive:false });
+  }
+
+  parent.appendChild(e);
+  return e;
+}
+function style(el,obj){ Object.assign(el.style,obj); }
+
+function fitTextBlock(el, opts = {}){
+  const {
+    maxFont = 18,
+    minFont = 11,
+    maxLine = 1.4,
+    minLine = 1.12,
+    step = 0.5
+  } = opts;
+
+  const height = el.clientHeight;
+  if(!height) return true;
+
+  let font = maxFont;
+  let line = maxLine;
+
+  while(font >= minFont){
+    el.style.fontSize = px(font, 'text');
+    el.style.lineHeight = `${(font * line * state.textScale).toFixed(1)}px`;
+
+    if(el.scrollHeight <= height + 1){
+      return true;
+    }
+
+    font -= step;
+
+    if(line > minLine){
+      line = Math.max(minLine, line - 0.04);
+    }
+  }
+
+  el.style.fontSize = px(minFont, 'text');
+  el.style.lineHeight = `${(minFont * minLine * state.textScale).toFixed(1)}px`;
+
+  return el.scrollHeight <= height + 1;
+}
+
+function refreshCardTextLayout(){
+  requestAnimationFrame(() => {
+    fitTextBlock(sum.body, {
+      maxFont:22,
+      minFont:10.5,
+      maxLine:1.34,
+      minLine:1.06,
+      step:0.5
+    });
+  });
+}
+
+function setAdaptiveSummaryText(fullText, shortText){
+  requestAnimationFrame(() => {
+    sum.body.textContent = fullText;
+
+    const fullFits = fitTextBlock(sum.body, {
+      maxFont:22,
+      minFont:10.5,
+      maxLine:1.34,
+      minLine:1.06,
+      step:0.5
+    });
+
+    if(fullFits) return;
+
+    sum.body.textContent = shortText;
+
+    fitTextBlock(sum.body, {
+      maxFont:22,
+      minFont:10.5,
+      maxLine:1.34,
+      minLine:1.06,
+      step:0.5
+    });
+  });
+}
+
+function setAdaptiveIntroText(fullHtml, _shortHtml){
+  intro.body.innerHTML = fullHtml;
+}
+
+const intro = {
+  title:mkText('t',introCard), subtitle:mkText('s',introCard), body:mkText('b',introCard),
+  start:mkButton('НАЧАТЬ ДИАГНОСТИКУ', introCard, startRun),
+  fail:mkButton('ЗАВЕРШИТЬ', introCard, abortEarly)
+};
+const sum = {
+  title:mkText('t',summaryCard), subtitle:mkText('s',summaryCard), body:mkText('b',summaryCard),
+  confirm:mkButton('ПОДТВЕРДИТЬ РЕЗУЛЬТАТ', summaryCard, commitResult),
+  retry:mkButton('ПОВТОРИТЬ ТЕСТ', summaryCard, resetRun)
+};
+const stageBtns = {
+  bg:mkButton('РЕЖИМ: КРАСИВО', stageControls, toggleSimpleMode),
+  resetTrace:mkButton('ОЧИСТИТЬ ТРАЕКТОРИЮ', stageControls, resetTraceStage),
+  resetDualPaths:mkButton('СБРОСИТЬ ЭТАП', stageControls, resetDualPathsStage),
+  next:mkButton('СЛЕДУЮЩИЙ ЭТАП', stageControls, advanceStage),
+  finish:mkButton('ЗАВЕРШИТЬ ТЕСТ', stageControls, finishStages)
+};
+
+function getVisualModeConfig(){
+  if(state.autoDiag && state.autoDiag.overrideConfig){
+    return state.autoDiag.overrideConfig;
+  }
+
+  if(state.simpleMode){
+    return {
+      label:'РЕЖИМ: ПРОСТО',
+      starsEnabled:false,
+      blurEnabled:false,
+      gradientsEnabled:false,
+      textsEnabled:false,
+      pointerMarksEnabled:false,
+      hudEnabled:false,
+      renderScale:0.5
+    };
+  }
+
+  return {
+    label:'РЕЖИМ: КРАСИВО',
+    starsEnabled:true,
+    blurEnabled:true,
+    gradientsEnabled:true,
+    textsEnabled:true,
+    pointerMarksEnabled:true,
+    hudEnabled:true,
+    renderScale:1
+  };
+}
+
+function updateModeButtonLabel(){
+  const cfg = getVisualModeConfig();
+  if(stageBtns && stageBtns.bg) stageBtns.bg.textContent = cfg.label;
+}
+
+function applyBlurSetting(){
+  const cfg = getVisualModeConfig();
+  const value = cfg.blurEnabled ? 'blur(14px)' : 'none';
+
+  [introCard, summaryCard, stageControls].forEach(el => {
+    el.style.backdropFilter = value;
+    el.style.webkitBackdropFilter = value;
+  });
+}
+
+function applyCanvasResolution(){
+  const cfg = getVisualModeConfig();
+  const rs = cfg.renderScale || 1;
+
+  const width = Math.max(1, Math.round(state.vw * rs));
+  const height = Math.max(1, Math.round(state.vh * rs));
+
+  [dom.stars, dom.world, dom.hud].forEach(c => {
+    c.width = width;
+    c.height = height;
+    c.style.width = `${state.vw}px`;
+    c.style.height = `${state.vh}px`;
+  });
+
+  [sctx, wctx, hctx].forEach(ctx => {
+    ctx.setTransform(rs, 0, 0, rs, 0, 0);
+    ctx.imageSmoothingEnabled = rs >= 0.99;
+  });
+}
+
+function applyVisualMode(){
+  applyBlurSetting();
+  applyCanvasResolution();
+  updateModeButtonLabel();
+}
+
+function toggleSimpleMode(){
+  state.simpleMode = !state.simpleMode;
+  applyVisualMode();
+}
+
+
+
+function layoutIntro(){
+  style(introCard,{width:px(690),height:px(920),padding:px(34),position:'relative'});
+  style(intro.title,{left:px(34),top:px(36),width:px(620),fontSize:px(48,'text'),lineHeight:px(56,'text')});
+  style(intro.subtitle,{left:px(34),top:px(138),width:px(620),fontSize:px(24,'text'),lineHeight:px(32,'text')});
+
+  style(intro.body,{
+    left:px(34),
+    top:px(210),
+    width:px(620),
+    height:px(610),
+    fontSize:px(21,'text'),
+    lineHeight:px(29,'text')
+  });
+
+  style(intro.start,{left:px(34),bottom:px(34),width:px(380),height:px(84),fontSize:px(30,'text'),position:'absolute'});
+  style(intro.fail,{right:px(34),bottom:px(34),width:px(220),height:px(84),fontSize:px(24,'text'),position:'absolute'});
+}
+function layoutSummary(){
+  style(summaryCard,{width:px(700),height:px(860),padding:px(34),position:'relative'});
+  style(sum.title,{left:px(34),top:px(34),width:px(630),fontSize:px(48,'text')});
+  style(sum.subtitle,{left:px(34),top:px(110),width:px(630),fontSize:px(22,'text')});
+
+  style(sum.body,{
+    left:px(34),
+    top:px(170),
+    width:px(630),
+    height:px(560),
+    fontSize:px(22,'text'),
+    lineHeight:px(30,'text')
+  });
+
+  style(sum.confirm,{left:px(34),bottom:px(44),width:px(360),height:px(84),fontSize:px(26,'text'),position:'absolute'});
+  style(sum.retry,{right:px(34),bottom:px(44),width:px(240),height:px(84),fontSize:px(24,'text'),position:'absolute'});
+}
+function layoutStageControls(){
+  style(stageControls,{
+    left:px(24),
+    right:px(24),
+    bottom:px(22),
+    height:px(96),
+    padding:px(12),
+    display:'flex',
+    alignItems:'center',
+    justifyContent:'space-between',
+    gap:px(14),
+    borderRadius:px(22),
+    flexWrap:'wrap'
+  });
+
+  style(stageBtns.bg,{
+    display:'inline-flex',
+    flex:'0 1 auto',
+    width:px(132),
+    minWidth:px(118),
+    height:px(CFG.buttonH),
+    fontSize:px(18,'text')
+  });
+
+  style(stageBtns.resetTrace,{
+    display:'none',
+    flex:'0 1 auto',
+    width:px(156),
+    minWidth:px(136),
+    maxWidth:px(156),
+    height:px(CFG.buttonH),
+    fontSize:px(16,'text')
+  });
+
+  style(stageBtns.resetDualPaths,{
+    display:'none',
+    flex:'1 1 auto',
+    width:'auto',
+    minWidth:px(170),
+    maxWidth:px(220),
+    height:px(CFG.buttonH),
+    fontSize:px(18,'text')
+  });
+
+  style(stageBtns.next,{
+    flex:'1 1 auto',
+    width:'auto',
+    minWidth:px(170),
+    height:px(CFG.buttonH),
+    fontSize:px(20,'text')
+  });
+
+  style(stageBtns.finish,{
+    flex:'0 1 auto',
+    width:px(172),
+    minWidth:px(152),
+    height:px(CFG.buttonH),
+    fontSize:px(17,'text')
+  });
+}
+
+function buildStars(){
+  const count = Math.max(26, Math.round((state.vw*state.vh)/30000));
+  state.particles = Array.from({length:count},()=>({x:Math.random()*state.vw,y:Math.random()*state.vh,r:(0.8+Math.random()*2.5)*state.scale,s:(CFG.starMin+Math.random()*(CFG.starMax-CFG.starMin))*state.scale,a:.18+Math.random()*.62}));
+}
+function resize(){
+  state.vw=innerWidth; state.vh=innerHeight; state.cx=state.vw/2; state.cy=state.vh/2;
+  state.scale=Math.min(state.vw/BASE_W,state.vh/BASE_H)*GLOBAL_UI_SCALE;
+  state.textScale=state.scale*TEXT_SCALE; state.hudScale=state.scale*HUD_SCALE;
+  applyCanvasResolution();
+  layoutIntro(); layoutSummary(); layoutStageControls(); buildStars();
+  // Пересчёт скоростей падающих кругов при изменении размера экрана
+  for(const c of state.falling.circles){
+    if(c.percentPerSec !== undefined){
+      c.speed = (c.percentPerSec / 100) * state.vh;
+    }
+  }
+  applyBlurSetting();
+  updateModeButtonLabel();
+  refreshCardTextLayout();
+}
+
+function showIntro(){
+  overlay.classList.remove('hidden'); summaryLayer.classList.add('hidden'); stageControls.classList.add('hidden');
+  intro.title.textContent='ДИАГНОСТИКА ИНТЕРАКТИВНОГО ЭКРАНА';
+  intro.subtitle.textContent='Мини-игра проверяет тач-ввод, FPS, multitouch и пригодность экрана для других игр.';
+  intro.body.innerHTML = [
+    'Этап 1 — быстрые касания по движущейся цели: видно отклик, FPS и регистрацию нажатия.',
+    'Этап 2 — две зоны нажатий: у каждой свой счётчик серии, лучший результат и график нажатий за секунду.',
+    'Этап 3 — два круга нужно нажать и тянуть по экрану. Проверяется реальное одновременное управление двумя объектами.',
+    'Этап 4 — подсчёт количества одновременных касаний. Можно проверить, сколько пальцев поддерживается сразу.',
+    'Этап 5 — падающие круги разных размеров и скоростей: слева медленно, справа очень быстро.',
+    'Этап 6 — почти пустая сцена для проверки базового FPS и частоты событий движения без нагрузки.',
+    'Этап 7 — ведение пальца по траектории: проверяется отклонение от линии, разрывы и прогресс прохождения.',
+    'Этап 8 — две отдельные траектории для двух игроков: можно проверить одновременное совместное ведение.',
+    'Этап 9 — автодиагностика: автоматически проверяется влияние blur, HUD, эффектов и снижения разрешения.'
+  ].map(t => `<div class="intro-par">${t}</div>`).join('');
+
+  setAdaptiveIntroText(fullIntroText, '');
+  refreshCardTextLayout();
+}
+
+function initFromParams(data={}){
+  state.gameId=String(data.gameId||'screenBenchmark');
+  state.difficulty=clamp(Number(data.difficulty??3)||3,1,5);
+  state.initialized=true; state.phase='intro'; showIntro();
+}
+
+function buildSinePath(cx, cy, amp, width, points = 80){
+  const arr = [];
+  for(let i=0;i<points;i++){
+    const t = i / (points - 1);
+    const x = cx - width / 2 + t * width;
+    const y = cy + Math.sin(t * Math.PI * 2.0) * amp * (0.75 + 0.25 * Math.cos(t * Math.PI));
+    arr.push({x, y});
+  }
+  return arr;
+}
+
+function buildDualPath(side){
+  const cyTop = state.vh * 0.30;
+  const cyBottom = state.vh * 0.74;
+  const cx = side === 'left' ? state.vw * 0.30 : state.vw * 0.70;
+  const amp = state.vw * 0.06;
+  const path = [];
+  const points = 72;
+
+  for(let i=0;i<points;i++){
+    const t = i / (points - 1);
+    const y = cyTop + t * (cyBottom - cyTop);
+    const x = cx + Math.sin(t * Math.PI * 2.0 + (side === 'left' ? 0 : 1.1)) * amp;
+    path.push({x, y});
+  }
+  return path;
+}
+
+function resetMetrics(){
+  state.finished=false;
+  state.summary=null;
+  state.envSnapshot = collectEnvironmentSnapshot();
+  state.phaseElapsed=0;
+  state.totalElapsed=0;
+  state.lastFrame=0;
+
+  state.pointers.clear();
+  state.pointerCountNow=0;
+  state.maxSimultaneousPointers=0;
+  state.stableMultiTouchMax=0;
+  state.multiTouchHoldTimer=0;
+  state.pointerCancelCount=0;
+
+  state.inputMarks=[];
+  state.totalPresses=0;
+  state.totalMoves=0;
+  state.moveBins=Array(CFG.graphSeconds).fill(0);
+  state.moveCounter=0;
+
+  state.latencySamples=[];
+  state.lastInputLatency=0;
+
+  state.fpsSamples=[];
+  state.fpsValue=0;
+  state.fpsMin=Infinity;
+  state.fpsMax=0;
+  state.longFrames=0;
+
+  state.frameTimeSamples=[];
+  state.frameTimeBins=Array(CFG.graphSeconds).fill(0);
+  state.lastFrameTimeMs=0;
+
+  state.latencyTarget={x:.5,y:.55,r:.07,hits:0,misses:0};
+
+  state.tapZones.left={total:0,combo:0,best:0,lastTap:0,secBins:Array(CFG.graphSeconds).fill(0),secCounter:0,bestPerSec:0};
+  state.tapZones.right={total:0,combo:0,best:0,lastTap:0,secBins:Array(CFG.graphSeconds).fill(0),secCounter:0,bestPerSec:0};
+  state.simultaneousZoneHits=0;
+
+  state.leftCursor={x:.28,y:.76,active:null,overGate:false,lastFingerLag:0,maxFingerLag:0,sumFingerLag:0,samples:0,lost:0};
+  state.rightCursor={x:.72,y:.76,active:null,overGate:false,lastFingerLag:0,maxFingerLag:0,sumFingerLag:0,samples:0,lost:0};
+
+  state.gateLeft={x:.28,y:.42};
+  state.gateRight={x:.72,y:.42};
+  state.dualHoldTime=0;
+  state.dualSimTime=0;
+  state.dualdragElapsed=0;
+
+  state.multitouchBins=Array(CFG.graphSeconds).fill(0);
+  state.multitouchPeakThisSecond=0;
+  state.multitouchPeakOverall=0;
+
+  state.falling={
+    circles:[],
+    spawnTimer:0,
+    spawned:0,
+    hits:0,
+    misses:0,
+    slow:{spawned:0,hits:0},
+    medium:{spawned:0,hits:0},
+    fast:{spawned:0,hits:0},
+    small:{spawned:0,hits:0},
+    mediumSize:{spawned:0,hits:0},
+    large:{spawned:0,hits:0}
+  };
+
+  state.lightscene={};
+
+  state.trace={
+    activeId:null,
+    points:[],
+    path:buildSinePath(state.cx, state.vh * 0.64, state.vh * 0.08, state.vw * 0.58, 90),
+    progress:0,
+    covered:0,
+    deviationSum:0,
+    deviationMax:0,
+    deviationSamples:0,
+    breaks:0,
+    capturePoints:0,
+    completed:false
+  };
+
+  state.dualpaths={
+    left:{activeId:null,progress:0,covered:0,deviationSum:0,deviationSamples:0,maxDeviation:0,breaks:0},
+    right:{activeId:null,progress:0,covered:0,deviationSum:0,deviationSamples:0,maxDeviation:0,breaks:0},
+    leftPath:buildDualPath('left'),
+    rightPath:buildDualPath('right')
+  };
+
+  state.autoDiag = {
+    introElapsed:0,
+    caseIndex:-1,
+    caseElapsed:0,
+    fpsSamples:[],
+    frameSamples:[],
+    results:[],
+    verdict:'',
+    overrideConfig:null
+  };
+
+}
+
+
+function startRun(){
+  resetMetrics();
+  updateModeButtonLabel();
+  overlay.classList.add('hidden');
+  summaryLayer.classList.add('hidden');
+  stageControls.classList.remove('hidden');
+  state.started=true;
+  state.phaseIndex=0;
+  state.phase=STAGES[0];
+  spawnLatencyTarget(true);
+}
+
+
+function resetRun(){
+  if(state.finishSent) return;
+  updateModeButtonLabel();
+  state.started=false;
+  state.phase='intro';
+  state.summary=null;
+  showIntro();
+}
+
+function abortEarly(){ state.summary=summarize(true); state.phase='summary'; showSummary(); }
+function commitResult(){ if(!state.finishSent) finishGame(state.summary ? state.summary.result : 0); }
+function finishGame(result){
+  if(state.finishSent) return;
+
+  state.finishSent = true;
+  state.finished = true;
+  state.started = false;
+
+  releasePointers();
+
+  dom.game.style.pointerEvents = 'none';
+  dom.ui.style.pointerEvents = 'none';
+  overlay.style.pointerEvents = 'none';
+  summaryLayer.style.pointerEvents = 'none';
+  stageControls.style.pointerEvents = 'none';
+
+  try{
+    parent.postMessage({
+      type:'gameResult',
+      result: Number.isFinite(Number(result)) ? Number(result) : 0
+    }, '*');
+  }catch(_){}
+}
+function advanceStage(){
+  if(!state.started || state.phase==='summary') return;
+  if(state.phaseIndex >= STAGES.length-1){ finishStages(); return; }
+
+  state.phaseIndex += 1;
+  state.phase = STAGES[state.phaseIndex];
+  state.phaseElapsed = 0;
+  releasePointers();
+  if(state.phase === 'autodiag' && state.autoDiag && state.autoDiag.overrideConfig){
+    state.autoDiag.overrideConfig = null;
+    applyVisualMode();
+  }
+
+  if(state.phase === 'tracepath') resetTraceStage();
+  if(state.phase === 'autodiag') resetAutoDiagStage();
+  if(state.phase === 'dualpaths') resetDualPathsStage();
+}
+function finishStages(){ state.summary=summarize(false); state.phase='summary'; showSummary(); }
+function resetTraceStage(){
+  state.trace.activeId = null;
+  state.pointers.clear();
+  state.pointerCountNow = 0;
+  state.trace.points = [];
+  state.trace.progress = 0;
+  state.trace.covered = 0;
+  state.trace.deviationSum = 0;
+  state.trace.deviationMax = 0;
+  state.trace.deviationSamples = 0;
+  state.trace.breaks = 0;
+  state.trace.capturePoints = 0;
+  state.trace.completed = false;
+}
+
+function toggleStarsBackground(){
+  state.starsEnabled = !state.starsEnabled;
+  updateModeButtonLabel();
+}
+
+function resetDualPathsStage(){
+  state.dualpaths.left.activeId = null;
+  state.dualpaths.right.activeId = null;
+  state.pointers.clear();
+  state.pointerCountNow = 0;
+
+  state.dualpaths.left.progress = 0;
+  state.dualpaths.left.covered = 0;
+  state.dualpaths.left.deviationSum = 0;
+  state.dualpaths.left.deviationSamples = 0;
+  state.dualpaths.left.maxDeviation = 0;
+  state.dualpaths.left.breaks = 0;
+
+  state.dualpaths.right.progress = 0;
+  state.dualpaths.right.covered = 0;
+  state.dualpaths.right.deviationSum = 0;
+  state.dualpaths.right.deviationSamples = 0;
+  state.dualpaths.right.maxDeviation = 0;
+  state.dualpaths.right.breaks = 0;
+}
+
+function resetAutoDiagStage(){
+  state.autoDiag = {
+    introElapsed:0,
+    caseIndex:-1,
+    caseElapsed:0,
+    fpsSamples:[],
+    frameSamples:[],
+    results:[],
+    verdict:'',
+    overrideConfig:null
+  };
+  applyVisualMode();
+}
+
+function getAutoDiagCase(){
+  if(state.autoDiag.caseIndex < 0) return null;
+  return AUTO_DIAG_CASES[state.autoDiag.caseIndex] || null;
+}
+
+function applyAutoDiagOverride(config){
+  state.autoDiag.overrideConfig = config ? { ...config } : null;
+  applyVisualMode();
+}
+
+function startAutoDiagCase(){
+  const testCase = getAutoDiagCase();
+  if(!testCase) return;
+
+  state.autoDiag.caseElapsed = 0;
+  state.autoDiag.fpsSamples = [];
+  state.autoDiag.frameSamples = [];
+  applyAutoDiagOverride(testCase.config);
+}
+
+function pctGain(base, value){
+  if(!base || !Number.isFinite(base) || base <= 0) return 0;
+  return ((value - base) / base) * 100;
+}
+
+function analyzeAutoDiagResults(results){
+  if(!results || !results.length) return 'Автодиагностика не собрала данные.';
+
+  const byId = Object.fromEntries(results.map(r => [r.id, r]));
+  const base = byId.baseline?.avgFps || 0;
+
+  if(!base) return 'Не удалось вычислить базовый FPS для автодиагностики.';
+
+  const factors = [
+    {
+      id:'no_blur',
+      label:'blur/compositor',
+      gain:pctGain(base, byId.no_blur?.avgFps || 0)
+    },
+    {
+      id:'hud_off',
+      label:'HUD/оверлей',
+      gain:pctGain(base, byId.hud_off?.avgFps || 0)
+    },
+    {
+      id:'flat',
+      label:'эффекты сцены',
+      gain:pctGain(base, byId.flat?.avgFps || 0)
+    },
+    {
+      id:'scale_075',
+      label:'разрешение 0.75x',
+      gain:pctGain(base, byId.scale_075?.avgFps || 0)
+    },
+    {
+      id:'scale_050',
+      label:'разрешение 0.50x',
+      gain:pctGain(base, byId.scale_050?.avgFps || 0)
+    }
+  ].sort((a,b) => b.gain - a.gain);
+
+  const top = factors[0];
+  const strong = factors.filter(x => x.gain >= 10);
+
+  let main = '';
+  if(top.gain < 8){
+    main = 'Ни один отдельный эффект не дал большого выигрыша: проблема скорее в общей стоимости сцены, браузере или драйвере.';
+  } else if(top.id === 'scale_050' || top.id === 'scale_075'){
+    main = 'Сильнее всего влияет количество пикселей: основная проблема в 4K/fill-rate и стоимости рендера на полном разрешении.';
+  } else if(top.id === 'no_blur'){
+    main = 'Сильнее всего влияет blur/compositor: полупрозрачные DOM-панели с blur заметно нагружают систему.';
+  } else if(top.id === 'hud_off'){
+    main = 'Сильнее всего влияет HUD/оверлей: верхние панели, графики и текстовая отрисовка заметно просаживают FPS.';
+  } else if(top.id === 'flat'){
+    main = 'Сильнее всего влияют декоративные эффекты сцены: градиенты, тексты, метки и дополнительная визуальная нагрузка.';
+  }
+
+  if(!strong.length) return main;
+
+  const tail = strong
+    .map(x => `${x.label} (+${Math.round(x.gain)}%)`)
+    .join(', ');
+
+  return `${main} Сильные факторы: ${tail}.`;
+}
+
+function finishAutoDiagCase(){
+  const testCase = getAutoDiagCase();
+  if(!testCase) return;
+
+  const fpsSamples = state.autoDiag.fpsSamples.filter(v => Number.isFinite(v) && v > 0);
+  const frameSamples = state.autoDiag.frameSamples.filter(v => Number.isFinite(v) && v > 0);
+
+  state.autoDiag.results.push({
+    id:testCase.id,
+    title:testCase.title,
+    avgFps: fpsSamples.length ? avg(fpsSamples) : 0,
+    minFps: fpsSamples.length ? Math.min(...fpsSamples) : 0,
+    p95FrameMs: frameSamples.length ? percentile(frameSamples, 0.95) : 0
+  });
+
+  state.autoDiag.caseIndex += 1;
+
+  if(state.autoDiag.caseIndex >= AUTO_DIAG_CASES.length){
+    state.autoDiag.verdict = analyzeAutoDiagResults(state.autoDiag.results);
+    applyAutoDiagOverride(null);
+    advanceStage();
+    return;
+  }
+
+  startAutoDiagCase();
+}
+
+function updateAutoDiag(dt){
+  if(state.autoDiag.introElapsed < CFG.autoDiagIntroSec){
+    state.autoDiag.introElapsed += dt;
+    return;
+  }
+
+  if(state.autoDiag.caseIndex < 0){
+    state.autoDiag.caseIndex = 0;
+    startAutoDiagCase();
+  }
+
+  const testCase = getAutoDiagCase();
+  if(!testCase) return;
+
+  state.autoDiag.caseElapsed += dt;
+  state.autoDiag.fpsSamples.push(state.fpsValue);
+  state.autoDiag.frameSamples.push(state.lastFrameTimeMs);
+
+  if(state.autoDiag.caseElapsed >= CFG.autoDiagCaseSec){
+    finishAutoDiagCase();
+  }
+}
+
+function getAutoDiagRemainingSec(){
+  const introLeft = Math.max(0, CFG.autoDiagIntroSec - state.autoDiag.introElapsed);
+
+  if(state.autoDiag.caseIndex < 0){
+    return introLeft + AUTO_DIAG_CASES.length * CFG.autoDiagCaseSec;
+  }
+
+  const currentLeft = Math.max(0, CFG.autoDiagCaseSec - state.autoDiag.caseElapsed);
+  const afterCurrent = Math.max(0, AUTO_DIAG_CASES.length - state.autoDiag.caseIndex - 1) * CFG.autoDiagCaseSec;
+
+  return introLeft + currentLeft + afterCurrent;
+}
+
+function drawAutoDiagWorld(){
+  const cfg = getVisualModeConfig();
+  wctx.clearRect(0,0,state.vw,state.vh);
+
+  const s = state.scale;
+  const t = state.totalElapsed;
+
+  // Верхняя зона зарезервирована под заголовок и информационный блок
+  const topSafe = 430 * s;
+  const bottomSafe = 36 * s;
+  const drawTop = topSafe;
+  const drawBottom = state.vh - bottomSafe;
+  const drawHeight = Math.max(80 * s, drawBottom - drawTop);
+
+  // Лёгкий фон только ниже интерфейса
+  wctx.save();
+  wctx.beginPath();
+  wctx.rect(0, drawTop, state.vw, drawHeight);
+  wctx.clip();
+
+  wctx.strokeStyle = 'rgba(255,255,255,.06)';
+  wctx.lineWidth = 1 * s;
+
+  for(let x = 0; x < state.vw; x += 80 * s){
+    wctx.beginPath();
+    wctx.moveTo(x, drawTop);
+    wctx.lineTo(x, drawBottom);
+    wctx.stroke();
+  }
+
+  for(let y = drawTop; y < drawBottom; y += 80 * s){
+    wctx.beginPath();
+    wctx.moveTo(0, y);
+    wctx.lineTo(state.vw, y);
+    wctx.stroke();
+  }
+
+  for(let i=0;i<54;i++){
+    const k = i + 1;
+
+    const x =
+      state.cx +
+      Math.sin(t * (0.45 + i * 0.01) + i * 0.7) * state.vw * 0.34;
+
+    // Центр колебаний только внутри допустимой области
+    const yCenter = drawTop + drawHeight * 0.5;
+    const yAmplitude = drawHeight * 0.28;
+
+    const y =
+      yCenter +
+      Math.cos(t * (0.38 + i * 0.008) + i * 0.5) * yAmplitude;
+
+    const r = (10 + (i % 5) * 6) * s;
+
+    if(cfg.gradientsEnabled){
+      const g = wctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+      g.addColorStop(0, 'rgba(255,255,255,.95)');
+      g.addColorStop(0.35, `rgba(${120 + (i % 80)},${170 + (i % 50)},255,.92)`);
+      g.addColorStop(1, `rgba(${80 + (i % 60)},${110 + (i % 70)},220,.28)`);
+      wctx.fillStyle = g;
+    } else {
+      wctx.fillStyle = `rgba(${120 + (i % 80)},${170 + (i % 50)},255,.72)`;
+    }
+
+    wctx.beginPath();
+    wctx.arc(x, y, r, 0, Math.PI * 2);
+    wctx.fill();
+
+    if(cfg.textsEnabled && i < 12){
+      wctx.fillStyle = 'rgba(255,255,255,.88)';
+      wctx.font = `700 ${Math.round(14*s)}px Inter,system-ui,sans-serif`;
+      wctx.textAlign = 'center';
+      wctx.fillText(`N${k}`, x, y - r - 8*s);
+      wctx.textAlign = 'left';
+    }
+  }
+
+  if(cfg.textsEnabled){
+    for(let i=0;i<6;i++){
+      const x = 40*s + (i % 3) * 250*s;
+      const y = drawTop + 24*s + Math.floor(i / 3) * 110*s;
+
+      roundRect(
+        wctx,
+        x,
+        y,
+        220*s,
+        74*s,
+        18*s,
+        'rgba(7,17,31,.42)',
+        'rgba(255,255,255,.08)'
+      );
+
+      wctx.fillStyle = '#eef6ff';
+      wctx.font = `900 ${Math.round(20*s)}px Inter,system-ui,sans-serif`;
+      wctx.fillText(`SCENE ${i+1}`, x + 14*s, y + 28*s);
+
+      wctx.fillStyle = 'rgba(159,180,204,.96)';
+      wctx.font = `800 ${Math.round(14*s)}px Inter,system-ui,sans-serif`;
+      wctx.fillText(`moving objects / labels / gradients`, x + 14*s, y + 54*s);
+    }
+  }
+
+  wctx.restore();
+}
+
+function drawAutoDiagHud(){
+  const cfg = getVisualModeConfig();
+  hctx.clearRect(0,0,state.vw,state.vh);
+  if(!cfg.hudEnabled) return;
+
+  const s = state.scale;
+  const topY = 20*s;
+
+  for(let i=0;i<6;i++){
+    const x = 18*s + i * 118*s;
+    drawGlass(x, topY, 106*s, 76*s);
+
+    if(cfg.textsEnabled){
+      hctx.fillStyle = 'rgba(159,180,204,.96)';
+      hctx.font = `800 ${Math.round(14*s)}px Inter,system-ui,sans-serif`;
+      hctx.fillText(`P${i+1}`, x + 10*s, topY + 22*s);
+
+      hctx.fillStyle = '#eef6ff';
+      hctx.font = `900 ${Math.round(22*s)}px Inter,system-ui,sans-serif`;
+      hctx.fillText(`${Math.round((state.fpsDisplay || state.fpsValue) + i)}`, x + 10*s, topY + 54*s);
+    }
+  }
+
+  for(let i=0;i<4;i++){
+    const x = 24*s + i * 180*s;
+    const y = state.vh - 170*s;
+
+    drawGlass(x, y, 160*s, 110*s);
+
+    const bars = 14;
+    const barW = 7*s;
+    const gap = 3*s;
+
+    for(let b=0;b<bars;b++){
+      const bh = (20 + ((b * 13 + i * 17 + Math.floor(state.totalElapsed * 30)) % 60)) * s * 0.6;
+      hctx.fillStyle = 'rgba(102,222,255,.72)';
+      hctx.fillRect(x + 12*s + b * (barW + gap), y + 88*s - bh, barW, bh);
+    }
+
+    if(cfg.textsEnabled){
+      hctx.fillStyle = 'rgba(159,180,204,.96)';
+      hctx.font = `800 ${Math.round(14*s)}px Inter,system-ui,sans-serif`;
+      hctx.fillText(`HUD ${i+1}`, x + 12*s, y + 22*s);
+    }
+  }
+}
+
+function drawAutoDiagOverlay(){
+  const s = state.scale;
+  const introLeft = Math.max(0, CFG.autoDiagIntroSec - state.autoDiag.introElapsed);
+  const totalLeft = getAutoDiagRemainingSec();
+
+  const boxW = 560 * s;
+  const boxH = 170 * s;
+  const boxX = state.cx - boxW / 2;
+  const boxY = 245 * s;
+
+  const progress =
+    Math.max(0, state.autoDiag.caseIndex) +
+    Math.min(1, state.autoDiag.caseElapsed / CFG.autoDiagCaseSec);
+
+  const ratio = state.autoDiag.caseIndex < 0
+    ? 0
+    : progress / AUTO_DIAG_CASES.length;
+
+  // Сначала рисуем прогресс, чтобы он оказался ниже интерфейса по слою
+  roundRect(
+    hctx,
+    state.cx - 220*s,
+    boxY + boxH + 18*s,
+    440*s,
+    16*s,
+    999*s,
+    'rgba(255,255,255,.08)',
+    'rgba(255,255,255,.10)'
+  );
+
+  roundRect(
+    hctx,
+    state.cx - 220*s,
+    boxY + boxH + 18*s,
+    440*s * clamp(ratio, 0, 1),
+    16*s,
+    999*s,
+    'rgba(127,244,181,.88)',
+    null
+  );
+
+  // Потом интерфейс поверх
+  roundRect(
+    hctx,
+    boxX,
+    boxY,
+    boxW,
+    boxH,
+    22 * s,
+    'rgba(7,17,31,.62)',
+    'rgba(255,255,255,.10)'
+  );
+
+  hctx.fillStyle = '#eef6ff';
+  hctx.textAlign = 'center';
+  hctx.font = `900 ${Math.round(22*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText('НИЧЕГО НАЖИМАТЬ НЕ НУЖНО', state.cx, boxY + 36*s);
+
+  hctx.fillStyle = 'rgba(159,180,204,.96)';
+  hctx.font = `800 ${Math.round(18*s)}px Inter,system-ui,sans-serif`;
+
+  if(introLeft > 0){
+    hctx.fillText(`Автодиагностика начнётся через ${introLeft.toFixed(1)} с`, state.cx, boxY + 72*s);
+    hctx.fillText(`Ориентировочно осталось ${totalLeft.toFixed(1)} с`, state.cx, boxY + 102*s);
+  } else {
+    const testCase = getAutoDiagCase();
+    const caseLeft = Math.max(0, CFG.autoDiagCaseSec - state.autoDiag.caseElapsed);
+
+    hctx.fillText(`Сейчас идёт проверка: ${testCase ? testCase.title : '-'}`, state.cx, boxY + 72*s);
+    hctx.fillText(`До конца этого под-теста: ${caseLeft.toFixed(1)} с`, state.cx, boxY + 102*s);
+    hctx.fillText(`Ориентировочно осталось всего: ${totalLeft.toFixed(1)} с`, state.cx, boxY + 132*s);
+  }
+
+  if(state.autoDiag.results.length){
+    const resBoxW = 620 * s;
+    const resBoxH = Math.max(84*s, (state.autoDiag.results.length * 22 + 22) * s);
+    const resBoxX = state.cx - resBoxW / 2;
+    const resBoxY = boxY + boxH + 52*s;
+
+    roundRect(
+      hctx,
+      resBoxX,
+      resBoxY,
+      resBoxW,
+      resBoxH,
+      20*s,
+      'rgba(7,17,31,.52)',
+      'rgba(255,255,255,.08)'
+    );
+
+    hctx.fillStyle = '#eef6ff';
+    hctx.textAlign = 'left';
+    hctx.font = `900 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText('УЖЕ ИЗМЕРЕНО:', resBoxX + 18*s, resBoxY + 28*s);
+
+    hctx.fillStyle = 'rgba(159,180,204,.96)';
+    hctx.font = `800 ${Math.round(15*s)}px Inter,system-ui,sans-serif`;
+
+    state.autoDiag.results.forEach((r, i) => {
+      hctx.fillText(
+        `${r.title}: ${Math.round(r.avgFps)} FPS · min ${Math.round(r.minFps)} · p95 ${Math.round(r.p95FrameMs)} ms`,
+        resBoxX + 18*s,
+        resBoxY + (52 + i * 22)*s
+      );
+    });
+  }
+
+  hctx.textAlign = 'left';
+}
+
+function showSummary(){
+  overlay.classList.add('hidden');
+  summaryLayer.classList.remove('hidden');
+  stageControls.classList.add('hidden');
+
+  const s = state.summary, pass = s.result === 1;
+
+  sum.title.textContent = pass ? 'ИСПЫТАНИЕ ПРОЙДЕНО' : 'НУЖНА ПРОВЕРКА ЖЕЛЕЗА';
+  sum.title.style.color = pass ? 'var(--good)' : 'var(--bad)';
+  sum.subtitle.textContent = pass
+    ? 'Экран подходит для активных интерактивных сцен и мини-игр.'
+    : 'Есть ограничения, которые стоит учитывать перед интеграцией игр.';
+
+  sum.body.textContent = [
+    `• Медианная задержка: ${fmtMs(s.medianLatency)} (P95 ${fmtMs(s.p95Latency)})`,
+    `• Средний FPS: ${fmtFps(s.avgFps)} | минимум: ${fmtFps(s.minFps)} | P95 кадра: ${fmtMs(s.p95Frame)}`,
+    s.autoDiagSummary ? `• Автодиагностика: ${s.autoDiagSummary}` : null,
+    s.autoDiagVerdict ? `• Вывод автоэтапа: ${s.autoDiagVerdict}` : null,
+    `• Viewport: ${s.viewport} | screen: ${s.screen} | DPR: ${s.devicePixelRatio}`,
+    `• CPU threads: ${s.hardwareConcurrency} | max touch: ${s.maxTouchPoints} | color depth: ${s.colorDepth}`,
+    `• WebGL renderer: ${s.webglRenderer}`,
+    `• Оценка refresh: ${s.refreshHzEstimate ? s.refreshHzEstimate + ' Hz' : 'n/a'}`,
+    `• Макс. касаний: ${s.maxPointers} | стабильно 1 сек: ${s.stablePointers}`,
+    `• Удержание двух кругов: ${Math.round(s.dualHoldRatio * 100)}% этапа`,
+    `• Lag L/R: ${Math.round(s.leftLagAvg)} px / ${Math.round(s.rightLagAvg)} px`,
+    `• Левая зона: серия ${s.leftBest}, всего ${s.leftTotal}`,
+    `• Правая зона: серия ${s.rightBest}, всего ${s.rightTotal}`,
+    `• Одновременных тапов по двум зонам: ${s.simultaneousZoneHits}`,
+    `• Падающие цели: ${s.fallHits} из ${s.fallSpawned}`,
+    `• Траектория: ${Math.round(s.traceProgress * 100)}% | среднее отклонение ${Math.round(s.traceAvgDeviation)} px | разрывы ${s.traceBreaks} | точки ${s.traceCapturePoints}`,
+    `• Две траектории: ${Math.round(s.dualPathLeftProgress * 100)}% / ${Math.round(s.dualPathRightProgress * 100)}%`,
+    `• Вердикт: ${s.verdict}`,
+    '',
+    'Нажмите «Подтвердить результат», чтобы зафиксировать итог для движка.'
+   ].filter(Boolean).join('\n');
+   refreshCardTextLayout();
+}
+
+
+
+
+
+
+function releasePointers(){
+  state.pointers.clear(); state.pointerCountNow=0; state.leftCursor.active=null; state.rightCursor.active=null;
+}
+function screenToNorm(x,y){ return {x:x/state.vw, y:y/state.vh}; }
+function recordLatency(e){ const now=performance.now(); const raw=typeof e.timeStamp==='number' ? now-e.timeStamp : 0; const lat=clamp(raw,0,250); state.lastInputLatency=lat; state.latencySamples.push(lat); if(state.latencySamples.length>220) state.latencySamples.shift(); }
+function addMark(x,y,type='touch'){ state.inputMarks.push({x,y,type,t:performance.now()}); if(state.inputMarks.length>40) state.inputMarks.shift(); }
+function spawnLatencyTarget(first=false){
+  let nx=.14+Math.random()*.72, ny=.26+Math.random()*.56;
+  if(!first){ let tries=0; while(tries<10 && hypot2(nx-state.latencyTarget.x, ny-state.latencyTarget.y)<.18){ nx=.14+Math.random()*.72; ny=.26+Math.random()*.56; tries++; } }
+  state.latencyTarget.x=nx; state.latencyTarget.y=ny;
+}
+function pointInZone(x,side){ return side==='left' ? x<.5 : x>=.5; }
+function registerZoneTap(side){
+  const z=state.tapZones[side], now=performance.now(); z.total += 1;
+  z.combo = (!z.lastTap || now-z.lastTap>CFG.comboResetMs) ? 1 : z.combo+1;
+  z.lastTap=now; z.best=Math.max(z.best,z.combo); z.secCounter += 1;
+}
+function updateZoneCombos(now){ ['left','right'].forEach(side=>{ const z=state.tapZones[side]; if(z.combo>0 && z.lastTap && now-z.lastTap>CFG.comboResetMs) z.combo=0; }); }
+function rollZoneBins(){ ['left','right'].forEach(side=>{ const z=state.tapZones[side]; z.secBins.push(z.secCounter); while(z.secBins.length>CFG.graphSeconds) z.secBins.shift(); z.secCounter=0; }); }
+function rollMultitouchBin(){ state.multitouchBins.push(state.multitouchPeakThisSecond); while(state.multitouchBins.length>CFG.graphSeconds) state.multitouchBins.shift(); state.multitouchPeakThisSecond=0; }
+function tryHitLatency(x,y){ if(hypot2(x-state.latencyTarget.x,y-state.latencyTarget.y)<=state.latencyTarget.r){ state.latencyTarget.hits+=1; spawnLatencyTarget(); } }
+function tryHitFalling(x,y){
+  const px = x * state.vw, py = y * state.vh;
+  for(let i=state.falling.circles.length-1;i>=0;i--){
+    const c = state.falling.circles[i];
+    if(hypot2(px - c.x, py - c.y) <= c.r){
+      state.falling.hits++;
+      state.falling[c.bandSpeed].hits++;
+      state.falling[c.bandSize].hits++;
+      state.falling.circles.splice(i,1);
+      return true;
+    }
+  }
+  return false;
+}
+
+function distancePointToSegment(px, py, ax, ay, bx, by){
+  const abx = bx - ax, aby = by - ay;
+  const apx = px - ax, apy = py - ay;
+  const ab2 = abx * abx + aby * aby || 1;
+  const t = clamp((apx * abx + apy * aby) / ab2, 0, 1);
+  const x = ax + abx * t, y = ay + aby * t;
+  return hypot2(px - x, py - y);
+}
+
+function distanceToPolyline(px, py, path){
+  let min = Infinity;
+  for(let i=1;i<path.length;i++){
+    const a = path[i-1], b = path[i];
+    min = Math.min(min, distancePointToSegment(px, py, a.x, a.y, b.x, b.y));
+  }
+  return min;
+}
+
+function nearestPathProgress(px, py, path){
+  let bestDist = Infinity;
+  let bestIndex = 0;
+  for(let i=0;i<path.length;i++){
+    const d = hypot2(px - path[i].x, py - path[i].y);
+    if(d < bestDist){
+      bestDist = d;
+      bestIndex = i;
+    }
+  }
+  return {
+    progress: bestIndex / Math.max(1, path.length - 1),
+    dist: bestDist
+  };
+}
+
+function classifyFallCircle(c){
+  const speedBand = c.bandSpeed;
+  const sizeBand = c.bandSize;
+  return {speedBand, sizeBand};
+}
+
+function countStageSimultaneousTap(p){
+  const leftActive = p.x < 0.5;
+  const rightActive = p.x >= 0.5;
+  if(leftActive){
+    for(const other of state.pointers.values()){
+      if(other.id !== undefined && other.id !== null && other.x >= 0.5){
+        state.simultaneousZoneHits += 1;
+        break;
+      }
+    }
+  }
+  if(rightActive){
+    for(const other of state.pointers.values()){
+      if(other.id !== undefined && other.id !== null && other.x < 0.5){
+        state.simultaneousZoneHits += 1;
+        break;
+      }
+    }
+  }
+}
+
+
+function assignDragRole(pointerId,x,y){
+  const hitR = (CFG.cursorR+20)*state.scale;
+  const lx=state.leftCursor.x*state.vw, ly=state.leftCursor.y*state.vh;
+  const rx=state.rightCursor.x*state.vw, ry=state.rightCursor.y*state.vh;
+  const px=x*state.vw, py=y*state.vh;
+  if(state.leftCursor.active===null && hypot2(px-lx,py-ly)<=hitR){ state.leftCursor.active=pointerId; return 'left'; }
+  if(state.rightCursor.active===null && hypot2(px-rx,py-ry)<=hitR){ state.rightCursor.active=pointerId; return 'right'; }
+  return null;
+}
+
+function onPointerDown(e){
+  if(!state.initialized || state.finished || state.finishSent) return;
+  if(isUiTarget(e.target)) return;
+  recordLatency(e);
+
+  const p = screenToNorm(e.clientX, e.clientY);
+  if(e.target && e.target.setPointerCapture){
+    try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+  } else if(dom.game.setPointerCapture){
+    try{ dom.game.setPointerCapture(e.pointerId); }catch(_){}
+  }
+
+  const pointer = {id:e.pointerId, type:e.pointerType || 'mouse', x:p.x, y:p.y, role:null};
+  state.pointers.set(e.pointerId, pointer);
+  state.pointerCountNow = state.pointers.size;
+
+  state.maxSimultaneousPointers = Math.max(state.maxSimultaneousPointers, state.pointerCountNow);
+  state.multitouchPeakThisSecond = Math.max(state.multitouchPeakThisSecond, state.pointerCountNow);
+  state.multitouchPeakOverall = Math.max(state.multitouchPeakOverall, state.pointerCountNow);
+
+  state.totalPresses += 1;
+  addMark(p.x, p.y, pointer.type);
+
+  if(state.phase === 'latency'){
+    if(!tryHitLatency(p.x, p.y)) state.latencyTarget.misses++;
+  }
+  else if(state.phase === 'tapzones'){
+    registerZoneTap(pointInZone(p.x,'left') ? 'left' : 'right');
+    countStageSimultaneousTap(pointer);
+  }
+  else if(state.phase === 'dualdrag'){
+    pointer.role = assignDragRole(e.pointerId, p.x, p.y);
+  }
+  else if(state.phase === 'falling'){
+    tryHitFalling(p.x, p.y);
+  }
+  else if(state.phase === 'tracepath'){
+    state.trace.activeId = e.pointerId;
+    state.trace.points.push({x:e.clientX, y:e.clientY});
+  }
+  else if(state.phase === 'dualpaths'){
+    if(p.x < 0.5 && state.dualpaths.left.activeId === null) state.dualpaths.left.activeId = e.pointerId;
+    else if(p.x >= 0.5 && state.dualpaths.right.activeId === null) state.dualpaths.right.activeId = e.pointerId;
+  }
+
+  e.preventDefault();
+}
+
+function onPointerMove(e){
+  if(!state.initialized || state.finished || state.finishSent) return;
+  if(isUiTarget(e.target)) return;
+  const pointer = state.pointers.get(e.pointerId);
+  if(!pointer) return;
+
+  recordLatency(e);
+  const p = screenToNorm(e.clientX, e.clientY);
+  pointer.x = p.x;
+  pointer.y = p.y;
+
+  state.totalMoves += 1;
+  state.moveCounter += 1;
+
+  if(state.phase === 'dualdrag'){
+    if(pointer.role === 'left' && state.leftCursor.active === e.pointerId){
+      const prevX = state.leftCursor.x * state.vw;
+      const prevY = state.leftCursor.y * state.vh;
+
+      state.leftCursor.x = clamp(p.x,.08,.92);
+      state.leftCursor.y = clamp(p.y,.20,.92);
+
+      const lag = hypot2(e.clientX - prevX, e.clientY - prevY);
+      state.leftCursor.lastFingerLag = lag;
+      state.leftCursor.maxFingerLag = Math.max(state.leftCursor.maxFingerLag, lag);
+      state.leftCursor.sumFingerLag += lag;
+      state.leftCursor.samples += 1;
+    }
+    if(pointer.role === 'right' && state.rightCursor.active === e.pointerId){
+      const prevX = state.rightCursor.x * state.vw;
+      const prevY = state.rightCursor.y * state.vh;
+
+      state.rightCursor.x = clamp(p.x,.08,.92);
+      state.rightCursor.y = clamp(p.y,.20,.92);
+
+      const lag = hypot2(e.clientX - prevX, e.clientY - prevY);
+      state.rightCursor.lastFingerLag = lag;
+      state.rightCursor.maxFingerLag = Math.max(state.rightCursor.maxFingerLag, lag);
+      state.rightCursor.sumFingerLag += lag;
+      state.rightCursor.samples += 1;
+    }
+  }
+  else if(state.phase === 'tracepath' && state.trace.activeId === e.pointerId){
+    const px = e.clientX, py = e.clientY;
+    state.trace.points.push({x:px, y:py});
+    state.trace.capturePoints = state.trace.points.length;
+
+    const dist = distanceToPolyline(px, py, state.trace.path);
+    state.trace.deviationSum += dist;
+    state.trace.deviationMax = Math.max(state.trace.deviationMax, dist);
+    state.trace.deviationSamples += 1;
+    if(dist > CFG.traceBreakDist * state.scale) state.trace.breaks += 1;
+
+    const prog = nearestPathProgress(px, py, state.trace.path);
+    state.trace.progress = Math.max(state.trace.progress, prog.progress);
+    state.trace.covered = state.trace.progress;
+    if(state.trace.progress >= 0.97) state.trace.completed = true;
+  }
+  else if(state.phase === 'dualpaths'){
+    if(state.dualpaths.left.activeId === e.pointerId){
+      const path = state.dualpaths.leftPath;
+      const prog = nearestPathProgress(e.clientX, e.clientY, path);
+      const d = distanceToPolyline(e.clientX, e.clientY, path);
+      state.dualpaths.left.progress = Math.max(state.dualpaths.left.progress, prog.progress);
+      state.dualpaths.left.covered = state.dualpaths.left.progress;
+      state.dualpaths.left.deviationSum += d;
+      state.dualpaths.left.deviationSamples += 1;
+      state.dualpaths.left.maxDeviation = Math.max(state.dualpaths.left.maxDeviation, d);
+      if(d > CFG.traceBreakDist * state.scale) state.dualpaths.left.breaks += 1;
+    }
+    if(state.dualpaths.right.activeId === e.pointerId){
+      const path = state.dualpaths.rightPath;
+      const prog = nearestPathProgress(e.clientX, e.clientY, path);
+      const d = distanceToPolyline(e.clientX, e.clientY, path);
+      state.dualpaths.right.progress = Math.max(state.dualpaths.right.progress, prog.progress);
+      state.dualpaths.right.covered = state.dualpaths.right.progress;
+      state.dualpaths.right.deviationSum += d;
+      state.dualpaths.right.deviationSamples += 1;
+      state.dualpaths.right.maxDeviation = Math.max(state.dualpaths.right.maxDeviation, d);
+      if(d > CFG.traceBreakDist * state.scale) state.dualpaths.right.breaks += 1;
+    }
+  }
+
+  e.preventDefault();
+}
+
+function onPointerUp(e){
+  if(state.finishSent) return;
+  if(isUiTarget(e.target)) return;
+
+  const captureTarget =
+    (e.target && e.target.releasePointerCapture) ? e.target :
+    (dom.game && dom.game.releasePointerCapture ? dom.game : null);
+
+  if(HAS_POINTER_EVENTS && captureTarget){
+    try{
+      if(captureTarget.hasPointerCapture && captureTarget.hasPointerCapture(e.pointerId)){
+        captureTarget.releasePointerCapture(e.pointerId);
+      }
+    }catch(_){}
+  }
+
+  const pointer = state.pointers.get(e.pointerId);
+  if(pointer){
+    if(pointer.role === 'left' && state.leftCursor.active === e.pointerId){
+      state.leftCursor.active = null;
+      state.leftCursor.lost += 1;
+    }
+    if(pointer.role === 'right' && state.rightCursor.active === e.pointerId){
+      state.rightCursor.active = null;
+      state.rightCursor.lost += 1;
+    }
+  }
+
+  if(state.phase === 'tracepath' && state.trace.activeId === e.pointerId){
+    state.trace.activeId = null;
+  }
+  if(state.phase === 'dualpaths'){
+    if(state.dualpaths.left.activeId === e.pointerId) state.dualpaths.left.activeId = null;
+    if(state.dualpaths.right.activeId === e.pointerId) state.dualpaths.right.activeId = null;
+  }
+
+  state.pointers.delete(e.pointerId);
+  state.pointerCountNow = state.pointers.size;
+  e.preventDefault();
+}
+
+function update(dt, rawDt = dt){
+  if(!state.initialized) return;
+
+  state.totalElapsed += dt;
+  if(state.started && state.phase !== 'summary' && state.phase !== 'intro') state.phaseElapsed += dt;
+
+  const fps = rawDt > 0 ? 1 / rawDt : 0;
+  const frameMs = rawDt * 1000;
+
+  state.fpsValue = fps;
+  state.lastFrameTimeMs = frameMs;
+
+  state.fpsSamples.push(fps);
+  if(state.fpsSamples.length > 240) state.fpsSamples.shift();
+
+  const fpsWindow = state.fpsSamples.slice(-12);
+  state.fpsDisplay = fpsWindow.length ? avg(fpsWindow) : fps;
+
+  state.frameTimeSamples.push(frameMs);
+  if(state.frameTimeSamples.length > 240) state.frameTimeSamples.shift();
+
+  state.fpsMin = Math.min(state.fpsMin, fps);
+  state.fpsMax = Math.max(state.fpsMax, fps);
+
+  if(rawDt > .05) state.longFrames++;
+
+  if(state.phase === 'dualdrag'){
+    state.dualdragElapsed += dt;
+    if(state.pointers.size >= 2) state.dualSimTime += dt;
+  }
+
+  if(state.pointerCountNow > 0){
+    state.multiTouchHoldTimer += dt;
+    if(state.multiTouchHoldTimer >= CFG.stableMultiHoldSec){
+      state.stableMultiTouchMax = Math.max(state.stableMultiTouchMax, state.pointerCountNow);
+    }
+  } else {
+    state.multiTouchHoldTimer = 0;
+  }
+
+  for(const p of state.particles){
+    p.y += p.s * dt;
+    if(p.y > state.vh + p.r){
+      p.y = -p.r;
+      p.x = Math.random() * state.vw;
+    }
+  }
+
+  const now = performance.now();
+  updateZoneCombos(now);
+  while(state.inputMarks.length && now - state.inputMarks[0].t > CFG.touchMarkMs) state.inputMarks.shift();
+
+  const prevSec = Math.floor(state.phaseElapsed - dt);
+  const currSec = Math.floor(state.phaseElapsed);
+  if(currSec !== prevSec){
+    rollZoneBins();
+    rollMultitouchBin();
+
+    state.moveBins.push(state.moveCounter);
+    while(state.moveBins.length > CFG.graphSeconds) state.moveBins.shift();
+    state.moveCounter = 0;
+
+    state.frameTimeBins.push(Math.round(avg(state.frameTimeSamples.slice(-60))));
+    while(state.frameTimeBins.length > CFG.graphSeconds) state.frameTimeBins.shift();
+  }
+
+  if(state.phase === 'latency'){
+    state.latencyTarget.x += Math.sin(state.phaseElapsed * 0.28) * 0.0007 * state.difficulty;
+    state.latencyTarget.y += Math.cos(state.phaseElapsed * 0.21) * 0.0005 * state.difficulty;
+    state.latencyTarget.x = clamp(state.latencyTarget.x,.14,.86);
+    state.latencyTarget.y = clamp(state.latencyTarget.y,.24,.84);
+  }
+
+  if(state.phase === 'dualdrag'){
+    const t = state.totalElapsed;
+    state.gateLeft.x = .25 + Math.sin(t * 0.95) * 0.03;
+    state.gateLeft.y = .44 + Math.cos(t * 1.10) * 0.035;
+    state.gateRight.x = .75 + Math.sin(t * 1.02 + 1.2) * 0.03;
+    state.gateRight.y = .44 + Math.cos(t * 1.25 + .6) * 0.035;
+
+    const gateR = .11;
+    const li = hypot2(state.leftCursor.x - state.gateLeft.x, state.leftCursor.y - state.gateLeft.y) <= gateR * .92;
+    const ri = hypot2(state.rightCursor.x - state.gateRight.x, state.rightCursor.y - state.gateRight.y) <= gateR * .92;
+
+    state.leftCursor.overGate = li;
+    state.rightCursor.overGate = ri;
+    if(li && ri) state.dualHoldTime += dt;
+  }
+
+  if(state.phase === 'falling'){
+    state.falling.spawnTimer += dt;
+    const interval = Math.max(.22, CFG.fallingSpawn - state.difficulty * 0.04);
+    while(state.falling.spawnTimer >= interval){
+      state.falling.spawnTimer -= interval;
+      spawnFallingCircle();
+    }
+    for(let i=state.falling.circles.length-1;i>=0;i--){
+      const c = state.falling.circles[i];
+      // speed уже в пикселях в секунду (пересчитан при спавне)
+      c.y += c.speed * dt;
+      if(c.y - c.r > state.vh){
+        state.falling.misses++;
+        state.falling.circles.splice(i,1);
+      }
+    }
+  }
+
+  if(state.phase === 'autodiag'){
+    updateAutoDiag(dt);
+  }
+
+}
+function spawnFallingCircle(){
+  const safeMin = 0.08;
+  const safeMax = 0.92;
+  const safeSpan = safeMax - safeMin;
+
+  // Степень 0.5 смещает распределение вправо и увеличивает число целей в быстрых зонах.
+  const speedBiasExponent = 0.5;
+  const biased = Math.pow(Math.random(), speedBiasExponent);
+  const xSafeNorm = biased;
+  const xNorm = safeMin + xSafeNorm * safeSpan;
+
+  const r = (CFG.fallingMinR + Math.random() * (CFG.fallingMaxR - CFG.fallingMinR)) * state.scale;
+
+  // СКОРОСТЬ В ПРОЦЕНТАХ ВЫСОТЫ ЭКРАНА В СЕКУНДУ
+  const percentPerSec = CFG.fallingSpeedMinPercent + xSafeNorm * (CFG.fallingSpeedMaxPercent - CFG.fallingSpeedMinPercent);
+  // Преобразуем в пиксели в секунду с учётом текущей высоты экрана
+  const speed = (percentPerSec / 100) * state.vh;
+
+  let bandSpeed = 'medium';
+  if(xSafeNorm < 0.33) bandSpeed = 'slow';
+  else if(xSafeNorm > 0.66) bandSpeed = 'fast';
+
+  let bandSize = 'mediumSize';
+  const minR = CFG.fallingMinR * state.scale;
+  const maxR = CFG.fallingMaxR * state.scale;
+  const t = (r - minR) / Math.max(1, maxR - minR);
+  if(t < 0.33) bandSize = 'small';
+  else if(t > 0.66) bandSize = 'large';
+
+  state.falling.circles.push({
+    x: xNorm * state.vw,
+    y: -80 * state.scale,
+    r,
+    speed,
+    percentPerSec,  // сохраняем для отображения
+    bandSpeed,
+    bandSize,
+    xSafeNorm
+  });
+
+  state.falling.spawned++;
+  state.falling[bandSpeed].spawned++;
+  state.falling[bandSize].spawned++;
+}
+
+
+
+function draw(){
+  if(state.phase === 'autodiag'){
+    drawStars();
+    drawAutoDiagWorld();
+
+    const cfg = getVisualModeConfig();
+    if(cfg.hudEnabled){
+      drawAutoDiagHud();
+    } else {
+      hctx.clearRect(0,0,state.vw,state.vh);
+    }
+
+    drawStageHeader();
+    drawAutoDiagOverlay();
+    return;
+  }
+
+  const cfg = getVisualModeConfig();
+
+  drawStars();
+  drawWorld();
+
+  if(cfg.hudEnabled){
+    drawHud();
+  } else {
+    hctx.clearRect(0,0,state.vw,state.vh);
+  }
+}
+
+
+function drawStars(){
+  sctx.clearRect(0,0,state.vw,state.vh);
+
+  const cfg = getVisualModeConfig();
+  if(state.phase === 'lightscene') return;
+  if(!cfg.starsEnabled) return;
+
+  for(const p of state.particles){
+    sctx.globalAlpha = p.a;
+    sctx.fillStyle = '#d9eeff';
+    sctx.beginPath();
+    sctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+    sctx.fill();
+  }
+  sctx.globalAlpha = 1;
+}
+
+
+
+
+function drawWorld(){
+  wctx.clearRect(0,0,state.vw,state.vh);
+  if(state.phase==='latency') drawLatencyWorld();
+  if(state.phase==='tapzones') drawTapZonesWorld();
+  if(state.phase==='dualdrag') drawDualWorld();
+  if(state.phase==='multitouch') drawMultitouchWorld();
+  if(state.phase==='falling') drawFallingWorld();
+  if(state.phase==='lightscene') drawLightSceneWorld();
+  if(state.phase==='tracepath') drawTracePathWorld();
+  if(state.phase==='dualpaths') drawDualPathsWorld();
+}
+
+
+function roundRect(ctx,x,y,w,h,r,fill,stroke){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); if(fill){ctx.fillStyle=fill;ctx.fill();} if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=Math.max(1,state.scale*2);ctx.stroke();} }
+function drawLatencyWorld(){
+  const cfg = getVisualModeConfig();
+
+  const tx = state.latencyTarget.x * state.vw;
+  const ty = state.latencyTarget.y * state.vh;
+  const r = state.latencyTarget.r * Math.min(state.vw, state.vh);
+  const alpha = .22 + .20 * Math.sin(state.phaseElapsed * 5.5);
+
+  wctx.beginPath();
+  wctx.strokeStyle = `rgba(255,209,102,${alpha})`;
+  wctx.lineWidth = 16 * state.scale;
+  wctx.arc(tx, ty, r * 1.35, 0, Math.PI * 2);
+  wctx.stroke();
+
+  if(cfg.gradientsEnabled){
+    const g = wctx.createRadialGradient(tx,ty,r*.1,tx,ty,r*1.05);
+    g.addColorStop(0,'rgba(255,255,255,.98)');
+    g.addColorStop(.3,'rgba(255,230,160,.96)');
+    g.addColorStop(1,'rgba(255,170,50,.12)');
+    wctx.fillStyle = g;
+  } else {
+    wctx.fillStyle = 'rgba(255,210,120,.95)';
+  }
+
+  wctx.beginPath();
+  wctx.arc(tx,ty,r,0,Math.PI*2);
+  wctx.fill();
+
+  wctx.strokeStyle='rgba(255,255,255,.6)';
+  wctx.lineWidth=3*state.scale;
+  wctx.beginPath();
+  wctx.arc(tx,ty,r*.63,0,Math.PI*2);
+  wctx.stroke();
+}
+
+function drawTapZonesWorld(){ const mid=state.vw/2, top=220*state.scale, bottom=state.vh-190*state.scale; roundRect(wctx,20*state.scale,top,mid-24*state.scale,bottom-top,30*state.scale,'rgba(102,222,255,.08)','rgba(102,222,255,.20)'); roundRect(wctx,mid+4*state.scale,top,mid-24*state.scale,bottom-top,30*state.scale,'rgba(255,135,220,.08)','rgba(255,135,220,.20)'); drawZoneCaption(0.25,'ЛЕВАЯ ЗОНА','#66deff'); drawZoneCaption(0.75,'ПРАВАЯ ЗОНА','#ff87dc'); }
+function drawZoneCaption(nx,text,color){
+  const cfg = getVisualModeConfig();
+  if(!cfg.textsEnabled) return;
+
+  wctx.fillStyle=color;
+  wctx.font=`900 ${Math.round(28*state.scale)}px Inter,system-ui,sans-serif`;
+  wctx.textAlign='center';
+  wctx.fillText(text,nx*state.vw,260*state.scale);
+  wctx.textAlign='left';
+}
+
+function drawDualWorld(){ drawGate(state.gateLeft.x*state.vw,state.gateLeft.y*state.vh,CFG.gateR*state.scale,'#66deff',state.leftCursor.overGate); drawGate(state.gateRight.x*state.vw,state.gateRight.y*state.vh,CFG.gateR*state.scale,'#ff87dc',state.rightCursor.overGate); drawCursor(state.leftCursor.x*state.vw,state.leftCursor.y*state.vh,CFG.cursorR*state.scale,'#66deff','L',state.leftCursor.overGate); drawCursor(state.rightCursor.x*state.vw,state.rightCursor.y*state.vh,CFG.cursorR*state.scale,'#ff87dc','R',state.rightCursor.overGate); }
+function drawGate(x,y,r,color,active){ wctx.fillStyle=active?hexToRgba(color,.26):'rgba(255,255,255,.04)'; wctx.beginPath(); wctx.arc(x,y,r,0,Math.PI*2); wctx.fill(); wctx.strokeStyle=active?hexToRgba('#ffffff',.9):'rgba(255,255,255,.22)'; wctx.lineWidth=10*state.scale; wctx.beginPath(); wctx.arc(x,y,r*.88,0,Math.PI*2); wctx.stroke(); wctx.strokeStyle=active?color:'rgba(255,255,255,.12)'; wctx.lineWidth=2.4*state.scale; wctx.beginPath(); wctx.arc(x,y,r*.58,0,Math.PI*2); wctx.stroke(); }
+function drawCursor(x,y,r,color,label,active){ wctx.fillStyle=active?hexToRgba('#ffffff',.85):color; wctx.beginPath(); wctx.arc(x,y,r,0,Math.PI*2); wctx.fill(); wctx.fillStyle=active?hexToRgba(color,.65):'rgba(255,255,255,.22)'; wctx.beginPath(); wctx.arc(x-r*.22,y-r*.22,r*.34,0,Math.PI*2); wctx.fill(); wctx.fillStyle='#09111c'; wctx.font=`900 ${Math.round(28*state.scale)}px Inter,system-ui,sans-serif`; wctx.textAlign='center'; wctx.textBaseline='middle'; wctx.fillText(label,x,y+state.scale); wctx.textAlign='left'; wctx.textBaseline='alphabetic'; }
+function drawMultitouchWorld(){ const cx=state.cx, cy=state.cy+60*state.scale, r=180*state.scale; const glow=Math.min(1,state.pointerCountNow/Math.max(1,state.multitouchPeakOverall||1)); wctx.fillStyle=`rgba(181,140,255,${.10+.18*glow})`; wctx.beginPath(); wctx.arc(cx,cy,r,0,Math.PI*2); wctx.fill(); wctx.strokeStyle='rgba(181,140,255,.45)'; wctx.lineWidth=10*state.scale; wctx.beginPath(); wctx.arc(cx,cy,r*.82,0,Math.PI*2); wctx.stroke(); wctx.fillStyle='#eef6ff'; wctx.font=`900 ${Math.round(34*state.scale)}px Inter,system-ui,sans-serif`; wctx.textAlign='center'; wctx.fillText('Поставьте много пальцев сразу',cx,cy-r-26*state.scale); wctx.font=`900 ${Math.round(92*state.scale)}px Inter,system-ui,sans-serif`; wctx.fillText(String(state.pointerCountNow),cx,cy+16*state.scale); wctx.font=`800 ${Math.round(24*state.scale)}px Inter,system-ui,sans-serif`; wctx.fillText(`максимум: ${state.maxSimultaneousPointers}`,cx,cy+74*state.scale); wctx.textAlign='left'; }
+
+
+function drawFallingWorld(){
+  const cfg = getVisualModeConfig();
+
+  for(const c of state.falling.circles){
+    if(cfg.gradientsEnabled){
+      const g = wctx.createRadialGradient(
+        c.x, c.y, c.r * 0.10,
+        c.x, c.y, c.r * 0.98
+      );
+      g.addColorStop(0, 'rgba(255,255,255,.98)');
+      g.addColorStop(0.32, 'rgba(255,235,175,.97)');
+      g.addColorStop(0.68, 'rgba(255,215,140,.95)');
+      g.addColorStop(1, 'rgba(255,190,95,.90)');
+      wctx.fillStyle = g;
+    } else {
+      wctx.fillStyle = 'rgba(255,210,130,.95)';
+    }
+
+    wctx.beginPath();
+    wctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+    wctx.fill();
+
+    if(cfg.textsEnabled){
+      const speedPercentPerSec = Math.round(c.percentPerSec);
+      wctx.fillStyle = 'rgba(255,255,255,.92)';
+      wctx.font = `900 ${Math.round(16 * state.scale)}px Inter,system-ui,sans-serif`;
+      wctx.textAlign = 'center';
+      wctx.textBaseline = 'bottom';
+      wctx.fillText(`${speedPercentPerSec}%/с`, c.x, c.y - c.r - 8 * state.scale);
+      wctx.textBaseline = 'alphabetic';
+    }
+  }
+
+  if(cfg.textsEnabled){
+    const y = 290 * state.scale;
+    wctx.fillStyle = 'rgba(255,255,255,.55)';
+    wctx.font = `800 ${Math.round(22 * state.scale)}px Inter,system-ui,sans-serif`;
+    wctx.textAlign = 'left';
+    wctx.fillText('МЕДЛЕННО', 24 * state.scale, y);
+    wctx.textAlign = 'center';
+    wctx.fillText('СРЕДНЕ', state.cx, y);
+    wctx.textAlign = 'right';
+    wctx.fillText('ОЧЕНЬ БЫСТРО', state.vw - 24 * state.scale, y);
+    wctx.textAlign = 'left';
+  }
+}
+
+function drawLightSceneWorld(){
+  const cfg = getVisualModeConfig();
+
+  const cx = state.cx;
+  const cy = state.cy + 40 * state.scale;
+
+  wctx.fillStyle='rgba(255,255,255,.06)';
+  wctx.beginPath();
+  wctx.arc(cx, cy, 160 * state.scale, 0, Math.PI * 2);
+  wctx.fill();
+
+  wctx.strokeStyle='rgba(255,255,255,.15)';
+  wctx.lineWidth = 8 * state.scale;
+  wctx.beginPath();
+  wctx.arc(cx, cy, 124 * state.scale, 0, Math.PI * 2);
+  wctx.stroke();
+
+  if(cfg.textsEnabled){
+    wctx.fillStyle='#eef6ff';
+    wctx.font=`900 ${Math.round(34*state.scale)}px Inter,system-ui,sans-serif`;
+    wctx.textAlign='center';
+    wctx.fillText('Пустая сцена', cx, cy - 14 * state.scale);
+    wctx.font=`800 ${Math.round(22*state.scale)}px Inter,system-ui,sans-serif`;
+    wctx.fillText('Для проверки системного потолка FPS', cx, cy + 28 * state.scale);
+    wctx.textAlign='left';
+  }
+}
+
+function drawPathLine(path, color, width, crisp = false){
+  if(!path || path.length < 2) return;
+
+  wctx.strokeStyle = color;
+  wctx.lineWidth = width;
+  wctx.lineCap = crisp ? 'butt' : 'round';
+  wctx.lineJoin = crisp ? 'miter' : 'round';
+  wctx.miterLimit = 2;
+
+  wctx.beginPath();
+  for(let i=0;i<path.length;i++){
+    const p = path[i];
+    if(i === 0) wctx.moveTo(p.x, p.y);
+    else wctx.lineTo(p.x, p.y);
+  }
+  wctx.stroke();
+}
+
+function drawTracePathWorld(){
+  drawPathLine(state.trace.path, 'rgba(102,222,255,.14)', CFG.traceGuideWidth * state.scale);
+  drawPathLine(state.trace.path, 'rgba(255,255,255,.72)', 4 * state.scale);
+
+  if(state.trace.points.length > 1){
+    drawPathLine(state.trace.points, 'rgba(255,184,107,.95)', 4 * state.scale, true);
+
+    for(let i=0;i<state.trace.points.length;i++){
+      const p = state.trace.points[i];
+      wctx.fillStyle='rgba(255,245,220,.95)';
+      wctx.beginPath();
+      wctx.arc(p.x, p.y, 5 * state.scale, 0, Math.PI * 2);
+      wctx.fill();
+    }
+  }
+
+  const start = state.trace.path[0];
+  const end = state.trace.path[state.trace.path.length - 1];
+
+  wctx.fillStyle='rgba(127,244,181,.95)';
+  wctx.beginPath();
+  wctx.arc(start.x, start.y, 18 * state.scale, 0, Math.PI * 2);
+  wctx.fill();
+
+  wctx.fillStyle='rgba(255,107,122,.95)';
+  wctx.beginPath();
+  wctx.arc(end.x, end.y, 18 * state.scale, 0, Math.PI * 2);
+  wctx.fill();
+
+  if(state.trace.points.length){
+    const last = state.trace.points[state.trace.points.length - 1];
+    const d = distanceToPolyline(last.x, last.y, state.trace.path);
+
+    wctx.strokeStyle = d <= CFG.traceGuideWidth * 0.5 * state.scale ? 'rgba(127,244,181,.9)' : 'rgba(255,107,122,.9)';
+    wctx.lineWidth = 3 * state.scale;
+    wctx.beginPath();
+    wctx.arc(last.x, last.y, 22 * state.scale, 0, Math.PI * 2);
+    wctx.stroke();
+  }
+}
+
+function drawDualPathsWorld(){
+  drawPathLine(state.dualpaths.leftPath, 'rgba(102,222,255,.20)', CFG.dualPathHitWidth * state.scale);
+  drawPathLine(state.dualpaths.leftPath, 'rgba(255,255,255,.55)', 4 * state.scale);
+
+  drawPathLine(state.dualpaths.rightPath, 'rgba(255,135,220,.20)', CFG.dualPathHitWidth * state.scale);
+  drawPathLine(state.dualpaths.rightPath, 'rgba(255,255,255,.55)', 4 * state.scale);
+
+  const lp = state.dualpaths.leftPath[Math.floor(state.dualpaths.left.progress * (state.dualpaths.leftPath.length - 1))];
+  const rp = state.dualpaths.rightPath[Math.floor(state.dualpaths.right.progress * (state.dualpaths.rightPath.length - 1))];
+
+  if(lp){
+    wctx.fillStyle='rgba(102,222,255,.95)';
+    wctx.beginPath();
+    wctx.arc(lp.x, lp.y, CFG.dualPathRadius * state.scale, 0, Math.PI * 2);
+    wctx.fill();
+  }
+  if(rp){
+    wctx.fillStyle='rgba(255,135,220,.95)';
+    wctx.beginPath();
+    wctx.arc(rp.x, rp.y, CFG.dualPathRadius * state.scale, 0, Math.PI * 2);
+    wctx.fill();
+  }
+}
+
+
+
+function drawHud(){
+  hctx.clearRect(0,0,state.vw,state.vh);
+  if(state.phase==='intro') return;
+
+  stageBtns.resetTrace.style.display = state.phase === 'tracepath' ? 'inline-flex' : 'none';
+  stageBtns.resetDualPaths.style.display = state.phase === 'dualpaths' ? 'inline-flex' : 'none';
+
+  drawTopHud();
+  drawStageHeader();
+
+  if(state.phase==='tapzones') drawTapZoneCounters();
+  if(state.phase==='dualdrag') drawDualProgress();
+
+  drawCharts();
+  drawPointerMarks();
+
+  if(state.phase==='multitouch'){
+    const s = state.scale;
+    const baseW = 228*s;
+    const h = 130*s;
+    const gap = 14*s;
+    const x = 24*s;
+    const narrow = isNarrowScreen();
+    const w = narrow ? Math.min(baseW,(state.vw-3*gap-2*x)/2) : baseW;
+    const y = state.vh - h - 140*s;
+
+    const boxX = x + (w + gap) * 4;
+    const boxY = y;
+    const fit = fitAuxPanelRect(boxX, boxY, w, h, 1);
+
+    drawGlass(fit.x, fit.y, w, h);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText('СТАБИЛЬНО 1 СЕК', fit.x + 14*s, fit.y + 24*s);
+
+    hctx.fillStyle='#eef6ff';
+    hctx.font=`900 ${Math.round(34*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(String(state.stableMultiTouchMax), fit.x + 14*s, fit.y + 70*s);
+
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(`cancel: ${state.pointerCancelCount}`, fit.x + 14*s, fit.y + 102*s);
+  }
+
+  if(state.phase==='falling'){
+    const s = state.scale;
+
+    let boxX = state.vw - 286*s;
+    let boxY = 330*s;
+    const fit = fitAuxPanelRect(boxX, boxY, 262*s, 146*s, 0);
+    boxX = fit.x;
+    boxY = fit.y;
+
+    drawGlass(boxX, boxY, 262*s, 146*s);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(15*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(`медл.: ${state.falling.slow.hits}/${state.falling.slow.spawned}`, boxX + 16*s, boxY + 24*s);
+    hctx.fillText(`сред.: ${state.falling.medium.hits}/${state.falling.medium.spawned}`, boxX + 16*s, boxY + 50*s);
+    hctx.fillText(`быстр.: ${state.falling.fast.hits}/${state.falling.fast.spawned}`, boxX + 16*s, boxY + 76*s);
+    hctx.fillText(`мал.: ${state.falling.small.hits}/${state.falling.small.spawned}`, boxX + 16*s, boxY + 102*s);
+    hctx.fillText(`крупн.: ${state.falling.large.hits}/${state.falling.large.spawned}`, boxX + 16*s, boxY + 128*s);
+  }
+
+  if(state.phase==='tracepath'){
+    const s = state.scale;
+    const avgDev = state.trace.deviationSamples ? state.trace.deviationSum / state.trace.deviationSamples : 0;
+
+    let boxX = state.vw - 286*s;
+    let boxY = 230*s;
+    let fit = fitAuxPanelRect(boxX, boxY, 262*s, 118*s, 0);
+
+    drawGlass(fit.x, fit.y, 262*s, 118*s);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText('ОТКЛОНЕНИЕ', fit.x + 16*s, fit.y + 24*s);
+    hctx.fillStyle='#eef6ff';
+    hctx.font=`900 ${Math.round(28*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(`${Math.round(avgDev)} px`, fit.x + 16*s, fit.y + 64*s);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(`разрывы: ${state.trace.breaks}`, fit.x + 16*s, fit.y + 96*s);
+
+    boxX = state.vw - 286*s;
+    boxY = 230*s + 134*s;
+    fit = fitAuxPanelRect(boxX, boxY, 262*s, 118*s, 1);
+
+    drawGlass(fit.x, fit.y, 262*s, 118*s);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText('ТОЧКИ ФИКСАЦИИ', fit.x + 16*s, fit.y + 24*s);
+    hctx.fillStyle='#eef6ff';
+    hctx.font=`900 ${Math.round(34*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(String(state.trace.capturePoints), fit.x + 16*s, fit.y + 72*s);
+  }
+
+  if(state.phase==='dualpaths'){
+    const s = state.scale;
+    const lAvg = state.dualpaths.left.deviationSamples ? state.dualpaths.left.deviationSum / state.dualpaths.left.deviationSamples : 0;
+    const rAvg = state.dualpaths.right.deviationSamples ? state.dualpaths.right.deviationSum / state.dualpaths.right.deviationSamples : 0;
+    drawGlass(state.vw - 286*s, 230*s, 262*s, 118*s);
+    hctx.fillStyle='rgba(159,180,204,.96)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(`лев. откл.: ${Math.round(lAvg)} px`, state.vw - 270*s, 258*s);
+    hctx.fillText(`прав. откл.: ${Math.round(rAvg)} px`, state.vw - 270*s, 286*s);
+    hctx.fillText(`лев. разрывы: ${state.dualpaths.left.breaks}`, state.vw - 270*s, 314*s);
+    hctx.fillText(`прав. разрывы: ${state.dualpaths.right.breaks}`, state.vw - 270*s, 342*s);
+  }
+}
+
+
+
+
+function drawGlass(x,y,w,h){ roundRect(hctx,x,y,w,h,20*state.scale,'rgba(7,17,31,.56)','rgba(255,255,255,.10)'); }
+
+
+function drawTopHud(){
+  const s = state.scale, pad = 24*s, y = 24*s, w = 115*s, h = 90*s, gap = 12*s;
+  const items = [
+    ['FPS', fmtFps(state.fpsDisplay || state.fpsValue)],
+    ['КАДР', fmtMs(state.lastFrameTimeMs)],
+    ['ОТКЛИК', fmtMs(state.lastInputLatency)],
+    ['КАСАНИЙ', String(state.pointerCountNow)],
+    ['ДВИЖ/С', String(state.moveBins.at(-1) || state.moveCounter)],
+    ['ВСЕГО', String(state.totalPresses)]
+  ];
+  items.forEach((it,i)=>{
+    const x = pad + i * (w + gap);
+    drawGlass(x,y,w,h);
+    hctx.fillStyle='rgba(159,180,204,.95)';
+    hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(it[0],x+12*s,y+26*s);
+    hctx.fillStyle='#eef6ff';
+    hctx.font=`900 ${Math.round(24*s)}px Inter,system-ui,sans-serif`;
+    hctx.fillText(it[1],x+12*s,y+62*s);
+  });
+}
+
+
+function drawStageHeader(){ const s=state.scale; const narrow=isNarrowScreen(); const titleMaxW=state.vw-(narrow?80*s:120*s); const titleSize=narrow?32*s:38*s; const hintSize=narrow?20*s:22*s; const titleLineH=titleSize*1.12; const hintLineH=hintSize*1.34; hctx.textAlign='center'; hctx.fillStyle='#eef6ff'; hctx.font=`900 ${Math.round(titleSize)}px Inter,system-ui,sans-serif`; const titleY=156*s; const titleLines=wrapCenteredText(hctx,STAGE_TITLES[state.phase]||'',state.cx,titleY,titleMaxW,titleLineH); hctx.fillStyle='rgba(159,180,204,.96)'; hctx.font=`800 ${Math.round(hintSize)}px Inter,system-ui,sans-serif`; const hintY=titleY + titleLines*titleLineH + (narrow?18*s:12*s); wrapCenteredText(hctx,STAGE_HINTS[state.phase]||'',state.cx,hintY,state.vw-(narrow?76*s:70*s),hintLineH); hctx.textAlign='left'; }
+function wrapCenteredText(ctx,text,cx,y,maxW,lineH){ const tokens=text.split(' '); let line='', yy=y, lines=0; for(let i=0;i<tokens.length;i++){ let word=tokens[i]; if(ctx.measureText(word).width>maxW){ let part=''; for(const ch of word){ const test=part+ch; if(part && ctx.measureText(test).width>maxW){ const rendered=line?line+' '+part:part; ctx.fillText(rendered,cx,yy); lines++; yy+=lineH; line=''; part=ch; } else part=test; } word=part; } const test=line?line+' '+word:word; if(ctx.measureText(test).width>maxW && line){ ctx.fillText(line,cx,yy); lines++; yy+=lineH; line=word; } else line=test; } if(line){ ctx.fillText(line,cx,yy); lines++; } return lines; }
+
+
+
+function drawCharts(){
+  const s = state.scale, baseW = 228*s, h = 130*s, gap = 14*s, x = 24*s;
+  const narrow = isNarrowScreen();
+  const w = narrow ? Math.min(baseW,(state.vw-3*gap-2*x)/2) : baseW;
+  const y = state.vh - h - 140*s;
+
+  drawLineChart(x,y,w,h,'FPS',state.fpsSamples,0,Math.max(60,state.fpsMax||60),'#66deff','fps');
+  drawLineChart(x+w+gap,y,w,h,'КАДР, МС',state.frameTimeSamples,0,50,'#ffd166','ms');
+  drawLineChart(x+(w+gap)*2,y,w,h,'ОТКЛИК',state.latencySamples,0,120,'#ff87dc','ms');
+
+  if(state.phase==='tapzones'){
+    if(narrow){
+      drawBarChart(x,y-(h+16*s),w,h,'ЛЕВАЯ ЗОНА',state.tapZones.left.secBins,state.tapZones.left.secCounter,'#66deff');
+      drawBarChart(x+w+gap,y-(h+16*s),w,h,'ПРАВАЯ ЗОНА',state.tapZones.right.secBins,state.tapZones.right.secCounter,'#ff87dc');
+    } else {
+      drawBarChart(x+(w+gap)*3,y,w,h,'ЛЕВАЯ ЗОНА',state.tapZones.left.secBins,state.tapZones.left.secCounter,'#66deff');
+      drawBarChart(x+(w+gap)*4,y,w,h,'ПРАВАЯ ЗОНА',state.tapZones.right.secBins,state.tapZones.right.secCounter,'#ff87dc');
+    }
+  } else if(state.phase==='multitouch'){
+    drawBarChart(x+(w+gap)*3,y,w,h,'ОДНОВР. КАСАНИЯ',state.multitouchBins,state.multitouchPeakThisSecond,'#b58cff',1);
+  } else if(state.phase==='falling'){
+    drawMiniBox(x+(w+gap)*3,y,w,h,'ПОПАДАНИЯ',`${state.falling.hits}/${state.falling.spawned}`,'#ffb86b',1);
+  } else if(state.phase==='dualdrag'){
+    drawMiniBox(x+(w+gap)*3,y,w,h,'УДЕРЖАНИЕ',`${Math.round((state.dualHoldTime/Math.max(.001,state.dualdragElapsed||1))*100)}%`,'#7ff4b5',1);
+  } else if(state.phase==='lightscene'){
+    drawBarChart(x+(w+gap)*3,y,w,h,'ДВИЖЕНИЯ / СЕК',state.moveBins,state.moveCounter,'#b58cff',1);
+  } else if(state.phase==='tracepath'){
+    drawMiniBox(x+(w+gap)*3,y,w,h,'ПРОГРЕСС',`${Math.round(state.trace.progress * 100)}%`,'#ffb86b',1);
+  } else if(state.phase==='dualpaths'){
+    drawMiniBox(x+(w+gap)*3,y,w,h,'ЛЕВ / ПРАВ',`${Math.round(state.dualpaths.left.progress*100)} / ${Math.round(state.dualpaths.right.progress*100)}`,'#7ff4b5',1);
+  }
+}
+
+
+
+
+
+function drawLineChart(x,y,w,h,title,data,min,max,color,unit){ drawGlass(x,y,w,h); const s=state.scale, px=x+14*s, py=y+36*s, pw=w-28*s, ph=h-50*s; hctx.fillStyle='rgba(159,180,204,.95)'; hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`; hctx.fillText(title,x+14*s,y+24*s); hctx.strokeStyle='rgba(255,255,255,.08)'; hctx.lineWidth=Math.max(1,1.4*s); for(let i=0;i<3;i++){ const yy=py + (ph/2)*i; hctx.beginPath(); hctx.moveTo(px,yy); hctx.lineTo(px+pw,yy); hctx.stroke(); } const arr=data.slice(-80); if(arr.length>1){ hctx.beginPath(); arr.forEach((v,i)=>{ const xx=px+(i/Math.max(1,arr.length-1))*pw; const norm=clamp((v-min)/Math.max(1e-6,max-min),0,1); const yy=py+ph-norm*ph; if(i===0) hctx.moveTo(xx,yy); else hctx.lineTo(xx,yy); }); hctx.strokeStyle=color; hctx.lineWidth=Math.max(2,2.8*s); hctx.stroke(); } hctx.fillStyle='#eef6ff'; hctx.font=`900 ${Math.round(22*s)}px Inter,system-ui,sans-serif`; hctx.textAlign='right'; hctx.fillText(`${Math.round(arr.at(-1)||0)} ${unit}`,x+w-12*s,y+24*s); hctx.textAlign='left'; }
+function drawBarChart(x,y,w,h,title,bins,current,color,rowIndex=0){
+  const pos = fitAuxPanelRect(x,y,w,h,rowIndex);
+  x = pos.x; y = pos.y;
+
+  drawGlass(x,y,w,h);
+  const s=state.scale, px=x+14*s, py=y+36*s, pw=w-28*s, ph=h-50*s;
+  hctx.fillStyle='rgba(159,180,204,.95)';
+  hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(title,x+14*s,y+24*s);
+
+  const arr=[...bins.slice(-(CFG.graphSeconds-1)), current];
+  const max=Math.max(3,...arr);
+  const barW=pw/arr.length*.72;
+
+  arr.forEach((v,i)=>{
+    const xx=px+i*(pw/arr.length)+(pw/arr.length-barW)/2;
+    const bh=(v/max)*ph;
+    hctx.fillStyle=hexToRgba(color,.8);
+    hctx.fillRect(xx,py+ph-bh,barW,bh);
+  });
+
+  hctx.fillStyle='#eef6ff';
+  hctx.font=`900 ${Math.round(22*s)}px Inter,system-ui,sans-serif`;
+  hctx.textAlign='right';
+  hctx.fillText(`${current}/сек`,x+w-12*s,y+24*s);
+  hctx.textAlign='left';
+}
+function fitAuxPanelRect(x,y,w,h,rowIndex=0){
+  const s = state.scale;
+  const topLimit = 230 * s;
+  const fallbackY = y - rowIndex * (h + 16 * s);
+  if(x + w > state.vw - 20 * s){
+    return {x:24*s, y:Math.max(topLimit, fallbackY)};
+  }
+  return {x, y};
+}
+
+function drawMiniBox(x,y,w,h,title,value,color,rowIndex=0){
+  const pos = fitAuxPanelRect(x,y,w,h,rowIndex);
+  x = pos.x; y = pos.y;
+  drawGlass(x,y,w,h);
+  const s=state.scale;
+  hctx.fillStyle='rgba(159,180,204,.95)';
+  hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(title,x+14*s,y+24*s);
+  hctx.fillStyle=color;
+  hctx.font=`900 ${Math.round(42*s)}px Inter,system-ui,sans-serif`;
+  hctx.textAlign='center';
+  hctx.fillText(value,x+w/2,y+82*s);
+  hctx.textAlign='left';
+}
+function drawPointerMarks(){
+  const cfg = getVisualModeConfig();
+  if(!cfg.pointerMarksEnabled) return;
+
+  const s=state.scale;
+
+  for(const m of state.inputMarks){
+    drawTouchMarker(m.x*state.vw,m.y*state.vh,'rgba(255,255,255,.95)','rgba(255,255,255,.5)','rgba(255,255,255,.28)');
+  }
+
+  if(state.phase==='multitouch'){
+    for(const p of state.pointers.values()){
+      drawTouchMarker(p.x*state.vw,p.y*state.vh,'rgba(181,140,255,.98)','rgba(181,140,255,.55)','rgba(181,140,255,.32)');
+    }
+  }
+
+  function drawTouchMarker(x,y,c1,c2,c3){
+    hctx.strokeStyle=c1;
+    hctx.lineWidth=3.2*s;
+    hctx.beginPath();
+    hctx.arc(x,y,26*s,0,Math.PI*2);
+    hctx.stroke();
+
+    hctx.strokeStyle=c2;
+    hctx.lineWidth=4.6*s;
+    hctx.beginPath();
+    hctx.arc(x,y,54*s,0,Math.PI*2);
+    hctx.stroke();
+
+    hctx.strokeStyle=c3;
+    hctx.lineWidth=5.2*s;
+    hctx.beginPath();
+    hctx.arc(x,y,94*s,0,Math.PI*2);
+    hctx.stroke();
+  }
+}
+
+
+
+
+function drawDualProgress(){
+  const s=state.scale, w=520*s, h=24*s, x=state.cx-w/2, y=state.vh-134*s;
+  drawGlass(x-8*s,y-8*s,w+16*s,h+16*s);
+  roundRect(hctx,x,y,w,h,999*s,'rgba(255,255,255,.07)','rgba(255,255,255,.1)');
+  const ratio=clamp(state.dualHoldTime/Math.max(.001,state.dualdragElapsed||1),0,1);
+  roundRect(hctx,x,y,w*ratio,h,999*s,'rgba(127,244,181,.88)',null);
+
+  const leftAvg = state.leftCursor.samples ? state.leftCursor.sumFingerLag / state.leftCursor.samples : 0;
+  const rightAvg = state.rightCursor.samples ? state.rightCursor.sumFingerLag / state.rightCursor.samples : 0;
+
+  hctx.fillStyle='#eef6ff';
+  hctx.font=`900 ${Math.round(20*s)}px Inter,system-ui,sans-serif`;
+  hctx.textAlign='center';
+  hctx.fillText(`Совместное удержание: ${Math.round(ratio*100)}%`,state.cx,y-14*s);
+
+  hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(`Lag L: ${Math.round(leftAvg)} px · Lag R: ${Math.round(rightAvg)} px`,state.cx,y+52*s);
+  hctx.textAlign='left';
+}
+
+
+
+
+
+
+
+
+function drawTapZoneCounters(){
+  const s=state.scale, narrow=isNarrowScreen();
+  const x=24*s, y=narrow?230*s:206*s, w=narrow?250*s:220*s, h=118*s, gap=12*s;
+  const left=state.tapZones.left, right=state.tapZones.right;
+  drawZoneCounterBox(x,y,w,h,'ЛЕВАЯ','#66deff',left);
+  drawZoneCounterBox(x,y+h+gap,w,h,'ПРАВАЯ','#ff87dc',right);
+
+  drawGlass(x, y + (h + gap) * 2, w, 94*s);
+  hctx.fillStyle='rgba(159,180,204,.96)';
+  hctx.font=`800 ${Math.round(16*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText('ОДНОВРЕМЕННО', x + 14*s, y + (h + gap) * 2 + 24*s);
+  hctx.fillStyle='#eef6ff';
+  hctx.font=`900 ${Math.round(34*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(String(state.simultaneousZoneHits), x + 14*s, y + (h + gap) * 2 + 66*s);
+}
+
+
+function drawZoneCounterBox(x,y,w,h,label,color,z){
+  drawGlass(x,y,w,h);
+  const s=state.scale;
+  hctx.fillStyle=color;
+  hctx.font=`900 ${Math.round(18*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(label,x+14*s,y+22*s);
+  hctx.fillStyle='#eef6ff';
+  hctx.font=`900 ${Math.round(34*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillText(`${z.combo}`,x+14*s,y+62*s);
+  hctx.font=`800 ${Math.round(15*s)}px Inter,system-ui,sans-serif`;
+  hctx.fillStyle='rgba(159,180,204,.96)';
+  hctx.fillText(`серия`,x+82*s,y+42*s);
+  hctx.fillText(`лучшая ${z.best}`,x+82*s,y+62*s);
+  hctx.fillText(`всего ${z.total}`,x+82*s,y+82*s);
+}
+
+function summarize(forcedFail){
+  const med = median(state.latencySamples);
+  const p95 = percentile(state.latencySamples,.95);
+  const avgF = avg(state.fpsSamples);
+  const minF = state.fpsMin === Infinity ? 0 : state.fpsMin;
+  const p95Frame = percentile(state.frameTimeSamples,.95);
+
+  const dualRatio = state.dualHoldTime / Math.max(1e-6, state.dualdragElapsed || 1);
+  const fallRatio = state.falling.spawned ? state.falling.hits / state.falling.spawned : 0;
+
+  const leftLagAvg = state.leftCursor.samples ? state.leftCursor.sumFingerLag / state.leftCursor.samples : 0;
+  const rightLagAvg = state.rightCursor.samples ? state.rightCursor.sumFingerLag / state.rightCursor.samples : 0;
+
+  const traceAvgDev = state.trace.deviationSamples ? state.trace.deviationSum / state.trace.deviationSamples : 999;
+  const dualLeftAvg = state.dualpaths.left.deviationSamples ? state.dualpaths.left.deviationSum / state.dualpaths.left.deviationSamples : 999;
+  const dualRightAvg = state.dualpaths.right.deviationSamples ? state.dualpaths.right.deviationSum / state.dualpaths.right.deviationSamples : 999;
+
+  const latencyScore = med <= CFG.goodLatency ? 1 : med <= CFG.okLatency ? .5 : 0;
+  const fpsScore = avgF >= CFG.goodFps ? 1 : avgF >= CFG.okFps ? .5 : 0;
+  const jankScore = state.longFrames <= CFG.goodLongFrames ? 1 : state.longFrames <= CFG.okLongFrames ? .5 : 0;
+  const dualScore = (state.maxSimultaneousPointers >= 2 && state.dualSimTime >= CFG.dualNeedSimSec && dualRatio >= CFG.dualNeedRatio) ? 1 : 0;
+  const tapScore = (Math.max(...state.tapZones.left.secBins, state.tapZones.left.secCounter) >= 5 && Math.max(...state.tapZones.right.secBins, state.tapZones.right.secCounter) >= 5) ? 1 : .5;
+  const multiScore = state.stableMultiTouchMax >= CFG.touchGood ? 1 : state.maxSimultaneousPointers >= 2 ? .5 : 0;
+  const fallScore = fallRatio >= CFG.fallNeedRatio ? 1 : fallRatio >= .2 ? .5 : 0;
+  const traceScore = state.trace.completed && traceAvgDev < 80 * state.scale ? 1 : state.trace.progress > .65 ? .5 : 0;
+  const dualPathScore = (state.dualpaths.left.progress > .65 && state.dualpaths.right.progress > .65 && dualLeftAvg < 90 * state.scale && dualRightAvg < 90 * state.scale) ? 1 : .5;
+
+  const env = state.envSnapshot || collectEnvironmentSnapshot();
+  const refreshHzEstimate = estimateRefreshHzFromSamples();
+
+  const final = forcedFail ? 0 :
+    latencyScore * .14 +
+    fpsScore * .12 +
+    jankScore * .10 +
+    tapScore * .12 +
+    dualScore * .14 +
+    multiScore * .10 +
+    fallScore * .10 +
+    traceScore * .09 +
+    dualPathScore * .09;
+
+  const result = (!forcedFail && dualScore === 1 && final >= .66) ? 1 : 0;
+
+  let verdict = 'Недостаточно данных.';
+  if(result === 1) verdict = 'Хороший кандидат для активных мини-игр, drag-механик и одновременной игры нескольких людей.';
+  else if(state.maxSimultaneousPointers < 2) verdict = 'Мало подтверждений multitouch: стоит проверить поддержку одновременных касаний.';
+  else if(med > CFG.okLatency) verdict = 'Задержка ввода заметна: быстрые сцены могут ощущаться вязко.';
+  else if(avgF < CFG.okFps || state.longFrames > CFG.okLongFrames) verdict = 'Есть просадки кадров или длинные кадры: устройству нужен запас производительности.';
+  else if(fallRatio < .2) verdict = 'Быстрые цели справа ловятся с трудом: возможна задержка тача или нехватка точности.';
+  else if(traceAvgDev > 100 * state.scale) verdict = 'Палец ведётся неточно: drag-сцены могут ощущаться рваными.';
+  else verdict = 'Устройство близко к допустимому, но лучше проверить на финальной сцене игры.';
+
+  const autoDiagResults = (state.autoDiag && state.autoDiag.results)
+    ? state.autoDiag.results.map(r => ({ ...r }))
+    : [];
+
+  const autoDiagSummary = autoDiagResults.length
+    ? autoDiagResults.map(r => `${r.title}: ${Math.round(r.avgFps)}`).join(' | ')
+    : '';
+
+  const autoDiagVerdict = state.autoDiag?.verdict
+    ? state.autoDiag.verdict
+    : analyzeAutoDiagResults(autoDiagResults);
+
+  return {
+    result,
+    medianLatency:med,
+    p95Latency:p95,
+    avgFps:avgF,
+    minFps:minF,
+    p95Frame,
+    longFrames:state.longFrames,
+    maxPointers:state.maxSimultaneousPointers,
+    stablePointers:state.stableMultiTouchMax,
+    dualHoldRatio:dualRatio,
+
+    leftBest:state.tapZones.left.best,
+    rightBest:state.tapZones.right.best,
+    leftTotal:state.tapZones.left.total,
+    rightTotal:state.tapZones.right.total,
+    simultaneousZoneHits:state.simultaneousZoneHits,
+
+    fallHits:state.falling.hits,
+    fallSpawned:state.falling.spawned,
+
+    leftLagAvg,
+    rightLagAvg,
+
+    traceProgress:state.trace.progress,
+    traceAvgDeviation:traceAvgDev,
+    traceBreaks:state.trace.breaks,
+    traceCapturePoints:state.trace.capturePoints,
+
+    dualPathLeftProgress:state.dualpaths.left.progress,
+    dualPathRightProgress:state.dualpaths.right.progress,
+    dualPathLeftDeviation:dualLeftAvg,
+    dualPathRightDeviation:dualRightAvg,
+
+    verdict,
+
+    viewport: env.viewport,
+    screen: env.screen,
+    devicePixelRatio: env.devicePixelRatio,
+    hardwareConcurrency: env.hardwareConcurrency,
+    maxTouchPoints: env.maxTouchPoints,
+    colorDepth: env.colorDepth,
+    webglVendor: env.webglVendor,
+    webglRenderer: env.webglRenderer,
+    refreshHzEstimate,
+    userAgent: env.userAgent,
+
+    autoDiagResults,
+    autoDiagSummary,
+    autoDiagVerdict
+  };
+}
+
+function loop(ts){
+  if(!state.lastFrame) state.lastFrame = ts;
+
+  const rawDt = Math.max(0.001, (ts - state.lastFrame) / 1000);
+  state.lastFrame = ts;
+
+  const simDt = clamp(rawDt, .001, .05);
+
+  update(simDt, rawDt);
+  draw();
+  requestAnimationFrame(loop);
+}
+window.addEventListener('resize', resize);
+window.addEventListener('resize', resize);
+
+function makeTouchPointerEvent(nativeEvent, touch){
+  return {
+    target: document.elementFromPoint(touch.clientX, touch.clientY) || dom.game,
+    clientX: touch.clientX,
+    clientY: touch.clientY,
+    pointerId: `touch-${touch.identifier}`,
+    pointerType: 'touch',
+    timeStamp: typeof nativeEvent.timeStamp === 'number' ? nativeEvent.timeStamp : performance.now(),
+    cancelable: !!nativeEvent.cancelable,
+    preventDefault(){},
+    stopPropagation(){}
+  };
+}
+
+function makeMousePointerEvent(nativeEvent){
+  return {
+    target: nativeEvent.target || dom.game,
+    clientX: nativeEvent.clientX,
+    clientY: nativeEvent.clientY,
+    pointerId: 'mouse',
+    pointerType: 'mouse',
+    timeStamp: typeof nativeEvent.timeStamp === 'number' ? nativeEvent.timeStamp : performance.now(),
+    cancelable: !!nativeEvent.cancelable,
+    preventDefault(){},
+    stopPropagation(){}
+  };
+}
+
+if(HAS_POINTER_EVENTS){
+  dom.game.addEventListener('pointerdown', onPointerDown, { passive:false });
+  dom.game.addEventListener('pointermove', onPointerMove, { passive:false });
+  dom.game.addEventListener('pointerup', onPointerUp, { passive:false });
+  dom.game.addEventListener('pointercancel', e => {
+    state.pointerCancelCount += 1;
+    onPointerUp(e);
+  }, { passive:false });
+} else {
+  dom.game.addEventListener('touchstart', e => {
+    if(isUiTarget(e.target)){
+      if(e.cancelable) e.preventDefault();
+      return;
+    }
+    if(e.cancelable) e.preventDefault();
+    for(const touch of e.changedTouches){
+      onPointerDown(makeTouchPointerEvent(e, touch));
+    }
+  }, { passive:false });
+
+  dom.game.addEventListener('touchmove', e => {
+    if(isUiTarget(e.target)){
+      if(e.cancelable) e.preventDefault();
+      return;
+    }
+    if(e.cancelable) e.preventDefault();
+    for(const touch of e.changedTouches){
+      onPointerMove(makeTouchPointerEvent(e, touch));
+    }
+  }, { passive:false });
+
+  dom.game.addEventListener('touchend', e => {
+    if(e.cancelable) e.preventDefault();
+    for(const touch of e.changedTouches){
+      onPointerUp(makeTouchPointerEvent(e, touch));
+    }
+  }, { passive:false });
+
+  dom.game.addEventListener('touchcancel', e => {
+    if(e.cancelable) e.preventDefault();
+    state.pointerCancelCount += e.changedTouches.length || 1;
+    for(const touch of e.changedTouches){
+      onPointerUp(makeTouchPointerEvent(e, touch));
+    }
+  }, { passive:false });
+
+  dom.game.addEventListener('mousedown', e => {
+    if(e.cancelable) e.preventDefault();
+    onPointerDown(makeMousePointerEvent(e));
+  }, { passive:false });
+
+  window.addEventListener('mousemove', e => {
+    onPointerMove(makeMousePointerEvent(e));
+  }, { passive:false });
+
+  window.addEventListener('mouseup', e => {
+    onPointerUp(makeMousePointerEvent(e));
+  }, { passive:false });
+}
+window.addEventListener('message', e => {
+  if(!e.data || e.data.type !== 'gameInit') return;
+  initFromParams(e.data);
+});
+
+window.addEventListener('beforeunload', () => {
+  if(!state.finishSent){
+    try{
+      parent.postMessage({ type:'gameResult', result:0 }, '*');
+    }catch(_){}
+  }
+});
+
+resize();
+requestAnimationFrame(loop);
+
+// fallback для прямого запуска файла без движка новеллы
+setTimeout(() => {
+  if(state.initialized) return;
+
+  initFromParams({
+    type: 'gameInit',
+    gameId: 'screenBenchmark',
+    difficulty: 3
+  });
+}, 60);
+})();
+</script>
+</body>
+</html>

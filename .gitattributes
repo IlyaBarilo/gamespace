@@ -1,0 +1,21 @@
+# Project text files use Windows CRLF line endings.
+* text=auto eol=crlf
+
+# Binary assets must never be modified by line-ending conversion.
+*.7z binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.jar binary
+*.apk binary
+*.aab binary
+*.wasm binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

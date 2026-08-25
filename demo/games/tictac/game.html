@@ -1,0 +1,1283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link href="roboto.css" rel="stylesheet">
+    <title>Крестики-нолики с минами</title>
+    <style>
+        :root {
+            --cell-size: 40px;
+            --page-padding: 10px;
+            --header-gap: 5px;
+            --message-gap: 15px;
+            --board-gap: 2px;
+            --board-border: 2px;
+            --board-radius: 5px;
+            --message-font-size: 16px;
+            --counter-font-size: 16px;
+            --button-font-size: 16px;
+            --button-padding-y: 5px;
+            --button-padding-x: 8px;
+            --button-radius: 5px;
+            --title-font-size: 24px;
+            --game-info-font-size: 18px;
+            --cell-base-font-size: 24px;
+            --number-shadow-size: 3px;
+            --mine-shadow-size: 10px;
+            --controls-top-gap: 20px;
+            --controls-gap: 10px;
+            --board-ratio: 1/1; /* Значение по умолчанию */
+            --symbol-ratio: 0.9;    /* 70% от размера ячейки */
+            --number-ratio: 0.6;    /* 30% от размера ячейки */
+            --mine-ratio: 0.6;      /* 50% от размера ячейки */
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: Roboto, Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            touch-action: manipulation;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .game-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: var(--page-padding);
+            box-sizing: border-box;
+            align-items: center; /* Центрируем содержимое */
+        }
+
+        .header-board-container {
+            width: auto;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .game-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--header-gap);
+            gap: var(--header-gap);
+            margin: 0 auto; /* Центрируем относительно доски */
+            max-width: 100%; /* Не превышаем ширину доски */
+        }
+
+        .board-container {
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            padding: var(--page-padding);
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Центрируем доску и заголовок */
+        }
+
+        .header-board-wrapper {
+            width: 100%;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: var(--header-gap);
+            gap: var(--header-gap);
+            flex-shrink: 0;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            grid-gap: var(--board-gap);
+            width: 100%;
+            aspect-ratio: var(--board-ratio);
+            box-sizing: border-box;
+            background-color: #999;
+            border: var(--board-border) solid #666;
+            border-radius: var(--board-radius);
+            margin: 0 auto;
+        }
+
+
+        .message {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            font-size: var(--message-font-size);
+        }
+
+        .moves-counter {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            font-weight: bold;
+            margin-left: var(--header-gap);
+            font-size: var(--counter-font-size);
+        }
+
+        .x-icon {
+            color: #e74c3c;
+            margin-right: var(--header-gap);
+        }
+
+        #restart-btn {
+            flex-shrink: 0;
+            padding: var(--button-padding-y) var(--button-padding-x);
+            font-size: var(--button-font-size);
+            margin: 0;
+        }
+
+        h1 {
+            font-size: var(--title-font-size);
+            margin-bottom: var(--header-gap);
+            color: #333;
+        }
+
+        .game-info {
+            padding-top: var(--header-gap);
+            margin-bottom: var(--header-gap);
+            font-size: var(--game-info-font-size);
+        }
+
+        .message {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-grow: 1;
+            margin-right: var(--message-gap);
+            font-size: var(--message-font-size);
+        }
+
+
+
+
+
+
+        .cell {
+            background-color: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--cell-base-font-size);
+            font-weight: bold;
+            cursor: pointer;
+            position: relative;
+            aspect-ratio: 1/1;
+            overflow: hidden;
+        }
+
+        .cell.x::before {
+            content: "X";
+            color: #e74c3c;
+            font-size: calc(var(--symbol-ratio) * var(--cell-size));
+            position: absolute;
+            z-index: 2;
+        }
+
+        .cell.o::before {
+            content: "O";
+            color: #3498db;
+            font-size: calc(var(--symbol-ratio) * var(--cell-size));
+            position: absolute;
+            z-index: 2;
+        }
+
+        /* Стиль для последнего нолика */
+        .cell.o.last-move::before {
+            font-size: calc(var(--symbol-ratio) * var(--cell-size) * 1.3);
+            color: #1a6fb3;
+            /* text-shadow: 0 0 8px rgba(26, 111, 179, 0.6); */
+            z-index: 2;
+        }
+
+        @keyframes lastMovePulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        .cell.o.last-move::before {
+            animation: lastMovePulse 0.5s ease 2;
+        }
+
+        .cell.mine {
+            background-color: #ddd;
+        }
+
+        .cell.mine::after {
+            content: "💣";
+            /* font-size: 70%; */
+            font-size: calc(var(--mine-ratio) * var(--cell-size));
+            position: absolute;
+        }
+
+        .cell.revealed {
+            background-color: #f9f9f9;
+        }
+
+        .cell .number {
+            position: absolute;
+            font-size: calc(var(--number-ratio) * var(--cell-size) * 3.5);
+            color: #444444;
+            /* bottom: 10px; */
+            /* right: 10px; */
+            z-index: 1; /* Чтобы было поверх крестика/нолика */
+            opacity: 0.25; /* Полупрозрачность */
+            font-weight: bold;
+            text-shadow: 0 0 var(--number-shadow-size) white;
+            pointer-events: none; /* Чтобы не мешали кликам */
+        }
+
+        .controls {
+            margin-top: var(--controls-top-gap);
+            display: flex;
+            justify-content: center;
+            gap: var(--controls-gap);
+        }
+
+        button {
+            padding: var(--button-padding-y) var(--button-padding-x);
+            font-size: var(--button-font-size);
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: var(--button-radius);
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+
+
+
+
+        .win {
+            color: #108800;
+        }
+
+        .lose {
+            color: #ff1900;
+        }
+
+        .cell.win {
+            background-color: rgba(9, 255, 0, 0.5) !important;
+        }
+
+        .cell.lose {
+            background-color: rgba(255, 0, 0, 0.5) !important;
+        }
+
+        .cell.mine.revealed {
+            background-color: #ddd;
+        }
+
+        .cell.mine-clicked {
+            background-color: rgba(255, 0, 0, 0.8) !important;
+            animation: pulse 0.5s;
+            box-shadow: 0 0 var(--mine-shadow-size) red;
+        }
+
+        .cell.safe-hint {
+            background-color: #fff;
+        }
+
+
+        .board-disabled {
+            pointer-events: none;
+            cursor: not-allowed;
+            /* opacity: 0.5; */
+        }
+
+
+        @keyframes pulse {
+            0% { background-color: #fff; }
+            100% { background-color: #ff0000; }
+        }
+
+/* Анимация появления */
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Анимация исчезновения */
+@keyframes fadeOut {
+    from { opacity: 1; transform: scale(1); }
+    to { opacity: 0; transform: scale(0.95); }
+}
+
+.fade-in {
+    animation: fadeIn 0.6s forwards;
+}
+
+.fade-out {
+    animation: fadeOut 0.6s forwards;
+}
+
+    </style>
+</head>
+<body>
+    <!-- <div class="container">
+        <h1>Крестики-нолики с сапёром</h1>
+        <div class="game-info">
+            <span class="message" id="message"></span>
+            <span style="font-weight:bold"><span style="margin-left:30px;color:red; font-size:90%;">❌ </span><span id="player-moves">0</span></span>
+        </div>
+        <div class="board" id="board"></div>
+        <div class="controls" style="opacity:0">
+            <span id="turn-indicator">X</span>
+            <button id="restart-btn">Новая игра</button>
+        </div>
+    </div> -->
+
+    <div class="game-wrapper">
+        <div class="header-board-container"></div>
+            <div class="game-header">
+                <div class="message" id="message"></div>
+                <div class="moves-counter">
+                    <span class="x-icon">❌</span>
+                    <span id="player-moves">0</span>
+                </div>
+                <button id="restart-btn">🚀</button>
+            </div>
+            <div class="board-container"></div>
+                <div class="board" id="board"></div>
+            </div>
+            <div class="controls" style="opacity:0">
+                <span id="turn-indicator">X</span>
+            </div>
+        </div>
+    </div>
+    <script>
+
+        // Конфигурация сложностей
+        const DIFFICULTIES = {
+            simple: {
+                width: 10,
+                height: 20,
+                mines: 10,
+                winCondition: 4,
+                winConditionText: '❌❌❌❌',
+                safeHints: 10,
+                stars: '🎮⭐'
+            },
+            normal: {
+                width: 10,
+                height: 20,
+                mines: 30,
+                winCondition: 4,
+                winConditionText: '❌❌❌❌',
+                safeHints: 3,
+                stars: '🎮⭐⭐⭐'
+            },
+            hard: {
+                width: 10,
+                height: 20,
+                mines: 35,
+                winCondition: 5,
+                winConditionText: '❌❌❌❌❌',
+                safeHints: 2,
+                stars: '🎮⭐⭐⭐⭐⭐'
+            },
+            expert: {
+                width: 10,
+                height: 20,
+                mines: 50,
+                winCondition: 5,
+                winConditionText: '❌❌❌❌❌',
+                safeHints: 2,
+                stars: '🎮⭐⭐⭐⭐⭐⭐'
+            },
+            test: {
+                width: 10,
+                height: 20,
+                mines: 0,
+                winCondition: 5,
+                winConditionText: '❌❌❌❌❌',
+                safeHints: 2,
+                stars: '🎮⭐'
+            }
+        };
+
+        //🌱
+
+        // Получаем параметр сложности из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const difficulty = urlParams.get('dif') || urlParams.get('diff') || urlParams.get('difficulty') || 'normal';
+        const config = DIFFICULTIES[difficulty] || DIFFICULTIES.normal;
+
+        // Конфигурация игры
+        //const BOARD_SIZE = 5;
+        const BOARD_WIDTH = config.width;  // Количество столбцов
+        const BOARD_HEIGHT = config.height; // Количество строк
+        const MINES_COUNT = config.mines;
+        const WIN_CONDITION = config.winCondition;
+        const VISIBLE_SAFE_CELLS = config.safeHints; // Количество временно подсвечиваемых безопасных клеток
+
+        const CONFIG_STARS = config.stars;
+
+        let lastHighlightedCells = []; // Массив последних подсвеченных клеток
+
+        document.documentElement.style.setProperty('--board-ratio', `${BOARD_WIDTH}/${BOARD_HEIGHT}`);
+
+        // Состояние игры
+        let board = [];
+        let mines = [];
+        let gameOver = false;
+        let playerTurn = true;
+        let winner = null;
+
+        let clickedRow = null;
+        let clickedCol = null;
+
+        // В начале кода
+        let currentHighlightedCells = [];
+
+        let currentHighlighted = new Set(); // Для хранения координат
+
+        let lastComputerMove = null;
+
+        let playerMoveCount = 0;
+
+        // Элементы DOM
+        const containerElement = document.getElementById('container');
+        const boardElement = document.getElementById('board');
+        const messageElement = document.getElementById('message');
+        const turnIndicator = document.getElementById('turn-indicator');
+        const restartBtn = document.getElementById('restart-btn');
+
+        function fitHeaderToWidth(cellSize = 16) {
+            const root = document.documentElement;
+            const gameHeader = document.querySelector('.game-header');
+            const message = document.getElementById('message');
+            const restartButton = document.getElementById('restart-btn');
+
+            if (!gameHeader || !message || !restartButton) return;
+
+            const headerWidth = gameHeader.getBoundingClientRect().width;
+            if (!Number.isFinite(headerWidth) || headerWidth <= 0) return;
+
+            const viewport = window.visualViewport || window;
+            const viewportWidth = viewport.width || window.innerWidth || headerWidth;
+            const viewportHeight = viewport.height || window.innerHeight || headerWidth;
+            const phoneLikeViewport = Math.min(viewportWidth, viewportHeight) <= 600;
+            const baseFontSize = phoneLikeViewport
+                ? Math.min(20, Math.max(14, headerWidth * 0.06))
+                : Math.max(cellSize * 0.26, Math.min(22, headerWidth * 0.045));
+            const messageSafetyScale = 0.9;
+
+            const applyHeaderChromeSize = (fontSize) => {
+                root.style.setProperty('--message-font-size', `${fontSize.toFixed(2)}px`);
+                root.style.setProperty('--counter-font-size', `${fontSize.toFixed(2)}px`);
+                root.style.setProperty('--button-font-size', `${(fontSize * 1.04).toFixed(2)}px`);
+                root.style.setProperty('--header-gap', `${Math.max(1, fontSize * 0.22).toFixed(2)}px`);
+                root.style.setProperty('--message-gap', `${Math.max(2, fontSize * 0.28).toFixed(2)}px`);
+                root.style.setProperty('--button-padding-y', `${Math.max(2, fontSize * 0.18).toFixed(2)}px`);
+                root.style.setProperty('--button-padding-x', `${Math.max(3, fontSize * 0.28).toFixed(2)}px`);
+                root.style.setProperty('--button-radius', `${Math.max(4, fontSize * 0.28).toFixed(2)}px`);
+            };
+
+            const applyMessageSize = (fontSize) => {
+                root.style.setProperty('--message-font-size', `${fontSize.toFixed(2)}px`);
+            };
+
+            const fits = () => (
+                gameHeader.scrollWidth <= headerWidth + 1 &&
+                message.scrollWidth <= message.clientWidth + 1
+            );
+
+            applyHeaderChromeSize(baseFontSize);
+
+            if (fits()) {
+                applyMessageSize(baseFontSize * messageSafetyScale);
+                return fits();
+            }
+
+            const minMessageFontSize = baseFontSize * 0.25;
+            let bestMessageFontSize = minMessageFontSize;
+            let low = minMessageFontSize;
+            let high = baseFontSize;
+
+            for (let i = 0; i < 10; i++) {
+                const testMessageFontSize = (low + high) / 2;
+                applyMessageSize(testMessageFontSize);
+
+                if (fits()) {
+                    bestMessageFontSize = testMessageFontSize;
+                    low = testMessageFontSize;
+                } else {
+                    high = testMessageFontSize;
+                }
+            }
+
+            applyMessageSize(bestMessageFontSize * messageSafetyScale);
+            return fits();
+        }
+
+        function updateCellSize() {
+            const root = document.documentElement;
+            const gameHeader = document.querySelector('.game-header');
+            const headerBoardContainer = document.querySelector('.header-board-container');
+            const viewport = window.visualViewport || window;
+            const viewportWidth = viewport.width || window.innerWidth;
+            const viewportHeight = viewport.height || window.innerHeight;
+
+            const setPxVar = (name, value) => {
+                root.style.setProperty(name, `${Math.max(0, value).toFixed(2)}px`);
+            };
+
+            const applyScaleVars = (cellSize) => {
+                root.style.setProperty('--cell-size', `${cellSize.toFixed(2)}px`);
+                root.style.setProperty('--symbol-ratio', '0.7');
+                root.style.setProperty('--number-ratio', '0.4');
+                root.style.setProperty('--mine-ratio', '0.6');
+
+                setPxVar('--page-padding', cellSize * 0.14);
+                setPxVar('--header-gap', cellSize * 0.12);
+                setPxVar('--message-gap', cellSize * 0.22);
+                setPxVar('--board-gap', cellSize * 0.035);
+                setPxVar('--board-border', cellSize * 0.035);
+                setPxVar('--board-radius', cellSize * 0.075);
+                setPxVar('--message-font-size', cellSize * 0.26);
+                setPxVar('--counter-font-size', cellSize * 0.26);
+                setPxVar('--button-font-size', cellSize * 0.26);
+                setPxVar('--button-padding-y', cellSize * 0.09);
+                setPxVar('--button-padding-x', cellSize * 0.14);
+                setPxVar('--button-radius', cellSize * 0.075);
+                setPxVar('--title-font-size', cellSize * 0.35);
+                setPxVar('--game-info-font-size', cellSize * 0.28);
+                setPxVar('--cell-base-font-size', cellSize * 0.36);
+                setPxVar('--number-shadow-size', cellSize * 0.045);
+                setPxVar('--mine-shadow-size', cellSize * 0.15);
+                setPxVar('--controls-top-gap', cellSize * 0.3);
+                setPxVar('--controls-gap', cellSize * 0.15);
+            };
+
+            const applyBoardSize = (cellSize) => {
+                const boardWidth = cellSize * BOARD_WIDTH;
+                boardElement.style.width = `${boardWidth.toFixed(2)}px`;
+                boardElement.style.height = `${(cellSize * BOARD_HEIGHT).toFixed(2)}px`;
+
+                if (headerBoardContainer) {
+                    headerBoardContainer.style.width = `${boardWidth.toFixed(2)}px`;
+                }
+
+                if (gameHeader) {
+                    gameHeader.style.width = `${boardWidth.toFixed(2)}px`;
+                }
+            };
+
+            const applyLayout = (cellSize) => {
+                applyScaleVars(cellSize);
+                applyBoardSize(cellSize);
+                fitHeaderToWidth(cellSize);
+            };
+
+            let cellSize = Math.min(
+                viewportWidth / (BOARD_WIDTH + 0.35),
+                viewportHeight / (BOARD_HEIGHT + 1.2)
+            );
+
+            cellSize = Math.max(1, cellSize);
+            applyLayout(cellSize);
+
+            for (let i = 0; i < 2; i++) {
+                const styles = getComputedStyle(root);
+                const pagePadding = parseFloat(styles.getPropertyValue('--page-padding')) || 0;
+                const headerGap = parseFloat(styles.getPropertyValue('--header-gap')) || 0;
+                const headerHeight = gameHeader ? gameHeader.offsetHeight : 0;
+                const maxCellByHeight = (viewportHeight - headerHeight - pagePadding * 2 - headerGap) / BOARD_HEIGHT;
+                const maxCellByWidth = (viewportWidth - pagePadding * 2) / BOARD_WIDTH;
+                const fittedCellSize = Math.max(1, Math.min(cellSize, maxCellByHeight, maxCellByWidth));
+
+                if (Number.isFinite(fittedCellSize) && Math.abs(fittedCellSize - cellSize) > 0.25) {
+                    cellSize = fittedCellSize;
+                    applyLayout(cellSize);
+                }
+            }
+        }
+
+        // Вызываем при инициализации и при ресайзе окна
+        window.addEventListener('resize', () => {
+            updateCellSize();
+            renderBoard(); // Также перерисовываем доску при изменении размера
+        });
+
+        // Инициализация игры
+        function initGame() {
+
+            // Показываем текущий уровень сложности
+            showMessage(`Собрать ${config.winConditionText}      ${config.stars}      💣${config.mines}`, 'info');
+
+            updateCellSize();
+
+            // Очищаем доску
+            //boardElement.innerHTML = '';
+            //hideMessage();
+
+            // Разблокируем доску при перезапуске.
+            boardElement.classList.remove('board-disabled');
+
+            playerMoveCount = 0;
+            updatePlayerMovesDisplay();
+
+            lastComputerMove = null;
+            board = [];
+            mines = [];
+            gameOver = false;
+            playerTurn = true;
+            winner = null;
+            //messageElement.textContent = '';
+            //messageElement.className = 'message';
+            turnIndicator.textContent = 'X';
+
+            // Создаем пустую доску
+            for (let i = 0; i < BOARD_HEIGHT; i++) {
+                board[i] = [];
+                for (let j = 0; j < BOARD_WIDTH; j++) {
+                    board[i][j] = {
+                        value: null, // 'x' или 'o'
+                        mine: false,
+                        revealed: false,
+                        minesAround: 0
+                    };
+                }
+            }
+
+            // Размещаем мины
+            placeMines();
+
+            // Подсчитываем мины вокруг каждой клетки
+            calculateMinesAround();
+
+
+            // Создаем клетки на доске
+            renderBoard();
+
+            //clearHighlightedCells();
+            highlightRandomSafeCells();
+        }
+
+
+
+        // Размещение мин на поле
+        function placeMines() {
+            let minesPlaced = 0;
+
+            while (minesPlaced < MINES_COUNT) {
+                const row = Math.floor(Math.random() * BOARD_HEIGHT);
+                const col = Math.floor(Math.random() * BOARD_WIDTH);
+
+                if (!board[row][col].mine) {
+                    board[row][col].mine = true;
+                    mines.push({row, col});
+                    minesPlaced++;
+                }
+            }
+        }
+
+        // Подсчет мин вокруг каждой клетки
+        function calculateMinesAround() {
+            const directions = [
+                [-1, -1], [-1, 0], [-1, 1],
+                [0, -1],           [0, 1],
+                [1, -1],  [1, 0],  [1, 1]
+            ];
+
+            for (let i = 0; i < BOARD_HEIGHT; i++) {
+                for (let j = 0; j < BOARD_WIDTH; j++) {
+                    if (board[i][j].mine) continue;
+
+                    let count = 0;
+
+                    for (const [di, dj] of directions) {
+                        const ni = i + di;
+                        const nj = j + dj;
+
+                        if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH && board[ni][nj].mine) {
+                            count++;
+                        }
+                    }
+
+                    board[i][j].minesAround = count;
+                }
+            }
+        }
+
+        // Отрисовка доски
+        function renderBoard() {
+
+            // Сохраняем координаты подсвеченных клеток
+            const highlightedCoords = currentHighlightedCells.map(cell => ({
+                row: parseInt(cell.dataset.row),
+                col: parseInt(cell.dataset.col)
+            }));
+
+
+
+            // Сохраняем состояние последнего хода
+            const wasLastMove = lastComputerMove
+                ? {row: lastComputerMove.row, col: lastComputerMove.col}
+                : null;
+
+            // Очищаем доску перед перерисовкой
+            boardElement.innerHTML = '';
+
+            // Устанавливаем grid с разным количеством колонок и строк
+            boardElement.style.gridTemplateColumns = `repeat(${BOARD_WIDTH}, 1fr)`;
+            boardElement.style.gridTemplateRows = `repeat(${BOARD_HEIGHT}, 1fr)`;
+
+            for (let i = 0; i < BOARD_HEIGHT; i++) {
+                for (let j = 0; j < BOARD_WIDTH; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+
+                    const cellData = board[i][j];
+
+                    if (cellData.revealed) {
+                        cell.classList.add('revealed');
+
+                        if (cellData.mine) {
+                            cell.classList.add('mine');
+                        } else if (cellData.value) {
+                            cell.classList.add(cellData.value);
+                        }
+
+                        if (cellData.minesAround > 0) {
+                            const number = document.createElement('span');
+                            number.className = 'number';
+                            number.textContent = cellData.minesAround;
+                            cell.appendChild(number);
+                        }
+                    }
+
+                    cell.addEventListener('click', () => handleCellClick(i, j));
+                    boardElement.appendChild(cell);
+                }
+            }
+
+            // Восстанавливаем подсветку только для тех клеток, которые остались безопасными
+            highlightedCoords.forEach(coord => {
+                if (board[coord.row] && board[coord.row][coord.col] &&
+                    !board[coord.row][coord.col].value &&
+                    !board[coord.row][coord.col].revealed &&
+                    !board[coord.row][coord.col].mine) {
+
+                    const cellElement = document.querySelector(
+                        `.cell[data-row="${coord.row}"][data-col="${coord.col}"]`
+                    );
+
+                    if (cellElement) {
+                        cellElement.classList.add('safe-hint');
+                        currentHighlightedCells.push(cellElement);
+                    }
+                }
+            });
+
+            // Восстанавливаем выделение последнего хода
+            if (wasLastMove && board[wasLastMove.row][wasLastMove.col].value === 'o') {
+                lastComputerMove = wasLastMove;
+                const cell = document.querySelector(
+                    `.cell[data-row="${wasLastMove.row}"][data-col="${wasLastMove.col}"]`
+                );
+                cell?.classList.add('last-move');
+            }
+        }
+
+        // Обработка клика по клетке
+        function handleCellClick(row, col) {
+
+            if (gameOver || !playerTurn || board[row][col].value || board[row][col].revealed) return;
+
+            // Увеличиваем счетчик ходов
+            playerMoveCount++;
+            updatePlayerMovesDisplay();
+
+            // Скрываем подсветку только при успешном ходе игрока
+            clearHighlightedCells();
+
+            // Мгновенно обновляем доску для крестика игрока
+            // Открываем клетку
+            board[row][col].revealed = true;
+            // board[row][col].value = 'x';
+            renderBoard(); // Немедленный рендер
+
+
+
+            // Проверяем, не мина ли это
+            if (board[row][col].mine) {
+
+                clickedRow = row;
+                clickedCol = col;
+
+                // Сначала отмечаем клетку как раскрытую
+                board[row][col].revealed = true;
+
+                // Находим элемент клетки в DOM
+                const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+
+                // Добавляем классы для мины и подсветки
+                cellElement.classList.add('mine', 'mine-clicked', 'revealed');
+
+                // Показываем все мины
+                revealAllMines();
+
+                // Игрок наступил на мину
+                gameOver = true;
+                //messageElement.textContent = 'Вы проиграли!';
+                //messageElement.className = 'message lose';
+                showMessage('Вы проиграли!', 'lose');
+                return;
+            }
+
+            // Ставим крестик
+            board[row][col].value = 'x';
+            playerTurn = false;
+            turnIndicator.textContent = 'O';
+            renderBoard(); // Немедленный рендер
+
+            // Проверяем победу игрока
+            const winCells = checkWin('x');
+            if (winCells) {
+                gameOver = true;
+                highlightWinningCells(winCells, 'win');
+                winner = 'player';
+                //messageElement.textContent = 'Вы победили!';
+                //messageElement.className = 'message win';
+
+                showMessage('Вы победили!', 'win');
+                return;
+            }
+
+            // Передаем ход компьютеру БЕЗ задержки
+            playerTurn = false;
+            turnIndicator.textContent = 'O';
+            computerMove(); // Убрали setTimeout
+            // Ход компьютера
+            //setTimeout(computerMove, 500);
+        }
+
+        // Ход компьютера
+        function computerMove() {
+            if (gameOver) return;
+
+            // 🟢 Блокируем доску в начале хода компьютера
+            boardElement.classList.add('board-disabled');
+
+            // Скрываем предыдущие подсвеченные клетки
+            clearHighlightedCells();
+
+            // Находим и подсвечиваем новые безопасные клетки
+            // highlightRandomSafeCells();
+
+            // Находим все возможные ходы (клетки без мин и без крестиков/ноликов)
+            const availableMoves = [];
+
+            for (let i = 0; i < BOARD_HEIGHT; i++) {
+                for (let j = 0; j < BOARD_WIDTH; j++) {
+                    if (!board[i][j].value && !board[i][j].mine && !board[i][j].revealed) {
+                        availableMoves.push({row: i, col: j});
+                    }
+                }
+            }
+
+            if (availableMoves.length === 0) {
+                // Нет доступных ходов - ничья
+                gameOver = true;
+                //messageElement.textContent = 'Ничья!';
+                showMessage('Ничья!', 'lose');
+                return;
+            }
+
+            // Простая стратегия: сначала пытаемся выиграть, потом блокируем игрока, потом случайный ход
+
+            // 1. Попытка выиграть (поставить 3 нолика)
+            const winningMove = findWinningMove('o', availableMoves);
+            if (winningMove) {
+                makeComputerMove(winningMove.row, winningMove.col);
+                return;
+            }
+
+            // 2. Блокировка игрока (если у него 2 крестика в ряд)
+            const blockingMove = findWinningMove('x', availableMoves);
+            if (blockingMove) {
+                makeComputerMove(blockingMove.row, blockingMove.col);
+                return;
+            }
+
+            // 3. Блокировка линий из 2 элементов (исправленная версия)
+            const doubleLineMove = findAdjacentDoubleLines('x', availableMoves);
+            if (doubleLineMove) {
+                makeComputerMove(doubleLineMove.row, doubleLineMove.col);
+                return;
+            }
+
+            // 3. Случайный ход
+            const randomIndex = Math.floor(Math.random() * availableMoves.length);
+            const move = availableMoves[randomIndex];
+            makeComputerMove(move.row, move.col);
+
+            clearHighlightedCells();
+            //highlightRandomSafeCells();
+        }
+
+        function findAdjacentDoubleLines(symbol, availableMoves) {
+    const directions = [[0,1],[1,0],[1,1],[1,-1]];
+    const availableSet = new Set(availableMoves.map(m => `${m.row},${m.col}`));
+
+
+
+    // 2. Затем блокируем линии игрока из 2 элементов
+    for (let i = 0; i < BOARD_HEIGHT; i++) {
+        for (let j = 0; j < BOARD_WIDTH; j++) {
+            if (board[i][j].value === symbol) {
+                for (const [di, dj] of directions) {
+                    // Проверяем линию из 2 элементов
+                    const ni = i + di;
+                    const nj = j + dj;
+
+                    // Проверяем следующую клетку в линии
+                    if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH &&
+                        board[ni][nj].value === symbol) {
+
+                        // Проверяем клетку перед началом линии
+                        const pi = i - di;
+                        const pj = j - dj;
+                        if (pi >= 0 && pi < BOARD_HEIGHT && pj >= 0 && pj < BOARD_WIDTH) {
+                            const key = `${pi},${pj}`;
+                            if (availableSet.has(key)) {
+                                console.log('Блокируем линию игрока из 2 элементов (начало)');
+                                return {row: pi, col: pj};
+                            }
+                        }
+
+                        // Проверяем клетку после линии
+                        const ai = ni + di;
+                        const aj = nj + dj;
+                        const key = `${ai},${aj}`;
+                        if (ai >= 0 && ai < BOARD_HEIGHT && aj >= 0 && aj < BOARD_WIDTH &&
+                            availableSet.has(key)) {
+                            console.log('Блокируем линию игрока из 2 элементов (конец)');
+                            return {row: ai, col: aj};
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 1. Сначала ищем свои линии из 2 для развития
+    for (const move of availableMoves) {
+        for (const [di, dj] of directions) {
+            // Проверяем в обе стороны от потенциального хода
+            let count = 1; // Учитываем текущую пустую клетку как потенциальный нолик
+
+            // Проверяем в одном направлении
+            for (let k = 1; k < WIN_CONDITION; k++) {
+                const ni = move.row + di*k;
+                const nj = move.col + dj*k;
+                if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH) {
+                    if (board[ni][nj].value === 'o') count++;
+                    else break;
+                }
+            }
+
+            // Проверяем в противоположном направлении
+            for (let k = 1; k < WIN_CONDITION; k++) {
+                const ni = move.row - di*k;
+                const nj = move.col - dj*k;
+                if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH) {
+                    if (board[ni][nj].value === 'o') count++;
+                    else break;
+                }
+            }
+
+            if (count >= 2) {
+                console.log('Развиваем свою линию из', count-1, 'ноликов');
+                return move;
+            }
+        }
+    }
+
+    return null;
+}
+
+        // Поиск выигрышного хода
+        function findWinningMove(symbol, availableMoves) {
+            for (const move of availableMoves) {
+                const {row, col} = move;
+                board[row][col].value = symbol;
+                const wins = checkWin(symbol);
+                board[row][col].value = null;
+
+                if (wins)
+                {
+                    console.log('нашли выигрышный ход');
+                    return move;
+                }
+            }
+            return null;
+        }
+
+        // Совершение хода компьютером
+        function makeComputerMove(row, col) {
+
+            // Убираем выделение с предыдущего последнего хода
+            if (lastComputerMove) {
+                const lastCell = document.querySelector(
+                    `.cell[data-row="${lastComputerMove.row}"][data-col="${lastComputerMove.col}"]`
+                );
+                lastCell?.classList.remove('last-move');
+            }
+
+            // Запоминаем новый ход
+            lastComputerMove = {row, col};
+
+            renderBoard();
+
+            // Добавляем класс последнего хода
+            const currentCell = document.querySelector(
+                `.cell[data-row="${row}"][data-col="${col}"]`
+            );
+            currentCell?.classList.add('last-move');
+
+            // Задержка только для визуального отображения нолика
+            setTimeout(() => {
+                board[row][col].revealed = true;
+                board[row][col].value = 'o';
+
+                // Проверяем победу компьютера
+                const winCells = checkWin('o');
+                if (winCells) {
+                    gameOver = true;
+
+                    // Сначала обновляем DOM
+                    renderBoard();
+                    setTimeout(() => {
+                        highlightWinningCells(winCells, 'lose');
+                        winner = 'computer';
+                        //messageElement.textContent = 'Компьютер победил!';
+                        //messageElement.className = 'message lose';
+
+                        showMessage('Компьютер победил!', 'lose');
+                    }, 10);
+                    return;
+                }
+
+                renderBoard();
+
+                highlightRandomSafeCells();
+
+                // 🟢 Разблокируем доску после завершения хода компьютера
+                boardElement.classList.remove('board-disabled');
+                playerTurn = true;
+                turnIndicator.textContent = 'X';
+
+            }, 200); // Задержка только здесь
+        }
+
+        function highlightWinningCells(cells, type) {
+
+            // Сначала сбрасываем все предыдущие подсветки
+            document.querySelectorAll('.cell.win, .cell.lose').forEach(cell => {
+                cell.classList.remove('win', 'lose');
+            });
+
+            // Затем добавляем новые
+            cells.forEach(({row, col}) => {
+                const selector = `.cell[data-row="${row}"][data-col="${col}"]`;
+                const cellElement = document.querySelector(selector);
+                if (cellElement) {
+                    cellElement.classList.add(type);
+                }
+            });
+        }
+
+        function checkWin(symbol) {
+            const directions = [
+                { dr: 0, dc: 1 },   // Горизонталь →
+                { dr: 1, dc: 0 },   // Вертикаль ↓
+                { dr: 1, dc: 1 },   // Диагонал ↘
+                { dr: 1, dc: -1 }   // Диагонал ↙
+            ];
+
+            for (const { dr, dc } of directions) {
+                const startRow = dr > 0 ? 0 : (dr === 0 ? 0 : WIN_CONDITION - 1);
+                const endRow = dr > 0 ? BOARD_HEIGHT - WIN_CONDITION : (dr === 0 ? BOARD_HEIGHT - 1 : BOARD_HEIGHT - 1);
+                const startCol = dc > 0 ? 0 : (dc === 0 ? 0 : WIN_CONDITION - 1);
+                const endCol = dc > 0 ? BOARD_WIDTH - WIN_CONDITION : (dc === 0 ? BOARD_WIDTH - 1 : BOARD_WIDTH - 1);
+
+                for (let i = startRow; i <= endRow; i++) {
+                    for (let j = startCol; j <= endCol; j++) {
+                        const winningCells = [];
+                        let valid = true;
+
+                        for (let k = 0; k < WIN_CONDITION; k++) {
+                            const ni = i + dr * k;
+                            const nj = j + dc * k;
+                            if (board[ni][nj].value !== symbol) {
+                                valid = false;
+                                break;
+                            }
+                            winningCells.push({ row: ni, col: nj });
+                        }
+
+                        if (valid) return winningCells;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // Показать все мины (при проигрыше)
+        function revealAllMines() {
+            for (const {row, col} of mines) {
+                const cell = board[row][col];
+                cell.revealed = true;
+                const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                if (cellElement) {
+                    cellElement.classList.add('mine', 'revealed');
+                    // Если это та самая мина, на которую нажали
+                    if (cell === board[clickedRow][clickedCol]) {
+                        cellElement.classList.add('mine-clicked');
+                    }
+                }
+            }
+        }
+
+        // Функция показа сообщения
+        function showMessage(text, type = 'info') {
+            const messageElement = document.getElementById('message');
+            // Устанавливаем сообщение
+            let messageText = String(text).replace(/\s+/g, ' ').trim();
+
+            if (type != 'info')
+            {
+                //showMessage(`Собрать в линию ${config.winCondition}❌      ⚙️ ${config.stars}      💣${config.mines}`, 'info');
+                messageText = `${messageText} ${config.stars}`.replace(/\s+/g, ' ').trim();
+            }
+
+            messageElement.textContent = messageText;
+            messageElement.className = `message ${type} visible`;
+            updateCellSize();
+        }
+
+
+
+        // Функция скрытия сообщения
+        function hideMessage() {
+            const messageElement = document.getElementById('message');
+            messageElement.textContent = 'Поставьте 4 в ряд';
+            messageElement.className = 'message';
+            updateCellSize();
+        }
+
+        // Функция подсветки случайных безопасных клеток
+        // Обновленная функция highlightRandomSafeCells()
+        function highlightRandomSafeCells() {
+            const safeCells = [];
+
+            // Собираем безопасные клетки
+            for (let i = 0; i < BOARD_HEIGHT; i++) {
+                for (let j = 0; j < BOARD_WIDTH; j++) {
+                    if (!board[i][j].mine && !board[i][j].value && !board[i][j].revealed) {
+                        safeCells.push(`${i},${j}`);
+                    }
+                }
+            }
+
+            // Выбираем новые клетки для подсветки
+            const shuffled = [...safeCells].sort(() => 0.5 - Math.random());
+            const newHighlighted = new Set(shuffled.slice(0, VISIBLE_SAFE_CELLS));
+
+            // Находим клетки для скрытия (старые, которых нет в новых)
+            const toRemove = [...currentHighlighted].filter(coord => !newHighlighted.has(coord));
+
+            // Находим клетки для показа (новые, которых не было в старых)
+            const toAdd = [...newHighlighted].filter(coord => !currentHighlighted.has(coord));
+
+            // Применяем изменения
+            toRemove.forEach(coord => {
+                const [row, col] = coord.split(',');
+                const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                cell?.classList.remove('safe-hint', 'fade-out', 'fade-in');
+            });
+
+            toAdd.forEach(coord => {
+                const [row, col] = coord.split(',');
+                const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                cell?.classList.add('safe-hint', 'fade-in');
+            });
+
+            currentHighlighted = newHighlighted;
+        }
+
+        // Функция очистки подсветки
+        function clearHighlightedCells() {
+            currentHighlightedCells.forEach(cell => {
+                cell.classList.remove('safe-hint');
+            });
+            currentHighlightedCells = [];
+        }
+
+        // Новая функция для обновления отображения
+        function updatePlayerMovesDisplay() {
+            document.getElementById('player-moves').textContent = playerMoveCount;
+            updateCellSize();
+            requestAnimationFrame(updateCellSize);
+        }
+
+        // Обработчик кнопки перезапуска
+        restartBtn.addEventListener('click', initGame);
+
+        // Запуск игры при загрузке страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            updateCellSize();
+            initGame();
+            requestAnimationFrame(updateCellSize);
+
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(updateCellSize);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.vite/
+pages-dist/
+pages-output/
+releases/
+release-packages/
+public/demo.7z
+playwright-report/
+test-results/
+*.log

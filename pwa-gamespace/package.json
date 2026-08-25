@@ -1,0 +1,36 @@
+{
+  "name": "gamespace-pwa",
+  "version": "0.3.0",
+  "author": {
+    "name": "Илья Барило (Ilya Barilo)",
+    "url": "https://barilo.ru"
+  },
+  "private": true,
+  "type": "module",
+  "description": "Offline-first GameSpace PWA for importing and running large local site archives.",
+  "scripts": {
+    "sync:demo": "node scripts/sync-demo.mjs",
+    "version:apply": "node scripts/apply-release-version.mjs",
+    "predev": "node scripts/sync-demo.mjs",
+    "dev": "vite --host 0.0.0.0",
+    "prebuild": "node scripts/sync-demo.mjs",
+    "build": "vite build",
+    "release:prepare": "npm run build && node scripts/prepare-release.mjs",
+    "verify:runtime": "node scripts/verify-runtime.mjs",
+    "verify:releases": "node scripts/verify-releases.mjs",
+    "verify:release-source": "node scripts/verify-release-source.mjs",
+    "pages:assemble": "node scripts/assemble-pages.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@zip.js/zip.js": "^2.8.15",
+    "un7z-opfs": "^1.0.1"
+  },
+  "devDependencies": {
+    "vite": "^7.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

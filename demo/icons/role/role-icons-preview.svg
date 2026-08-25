@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" role="img" aria-labelledby="title desc">
+  <title id="title">Role icon variants preview</title>
+  <desc id="desc">Preview of teacher and student SVG badge variants.</desc>
+  <rect width="560" height="160" rx="16" fill="#061934"/>
+  <g transform="translate(26 18)">
+    <image href="teacher-cap-solid.svg" x="0" y="0" width="80" height="80"/>
+    <image href="teacher-cap-outline.svg" x="88" y="0" width="80" height="80"/>
+    <image href="teacher-cap-minimal.svg" x="176" y="0" width="80" height="80"/>
+    <image href="students-duo-solid.svg" x="264" y="0" width="80" height="80"/>
+    <image href="students-duo-outline.svg" x="352" y="0" width="80" height="80"/>
+    <image href="students-duo-minimal.svg" x="440" y="0" width="80" height="80"/>
+    <g fill="#b9d8f4" font-family="Inter, Arial, sans-serif" font-size="12" text-anchor="middle">
+      <text x="40" y="108">teacher solid</text>
+      <text x="128" y="108">teacher line</text>
+      <text x="216" y="108">teacher small</text>
+      <text x="304" y="108">students solid</text>
+      <text x="392" y="108">students line</text>
+      <text x="480" y="108">students small</text>
+    </g>
+  </g>
+</svg>

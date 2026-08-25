@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Пазл Игра</title>
+    <style>
+        :root {
+            --cell-size: 40px;
+            --page-padding: 12px;
+            --title-gap: 20px;
+            --title-font-size: 24px;
+            --caption-padding-top: 2px;
+            --caption-font-size: 14px;
+            --status-gap: 6px;
+            --counter-gap: 8px;
+            --counter-padding-y: 5px;
+            --counter-padding-x: 10px;
+            --counter-radius: 18px;
+            --counter-font-size: 22px;
+            --counter-icon-size: 24px;
+            --counter-icon-gap: 5px;
+            --counter-shadow-y: 2px;
+            --counter-shadow-blur: 4px;
+            --board-gap: 3px;
+            --board-padding: 3px;
+            --piece-radius: 8px;
+            --piece-shadow-size: 1px;
+            --piece-correct-shadow-size: 3px;
+            --drop-target-shadow-size: 3px;
+            /* Контур плитки, на которую наведена перетаскиваемая плитка.
+               По умолчанию это темный, но очень прозрачный контур.
+               Менять цвет нужно здесь, в CSS-переменной. */
+            --drop-target-shadow-color: rgba(0,0,0,0.2);
+            --game-width: 320px;
+            --game-height: 320px;
+            --container-radius: 12px;
+            --container-shadow-y: 4px;
+            --container-shadow-blur: 12px;
+            --win-font-size: 24px;
+            --win-button-gap: 20px;
+            --button-font-size: 16px;
+            --button-padding-y: 10px;
+            --button-padding-x: 10px;
+            --button-radius: 4px;
+            --win-stats-gap: 15px;
+            --win-stats-font-size: 20px;
+            --stat-line-gap: 8px;
+            --backdrop-blur: 50px;
+            --bg-image: none;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: Roboto, Arial, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: var(--page-padding);
+            touch-action: manipulation;
+        }
+
+        .version {
+            padding-top: var(--caption-padding-top);
+            font-size: var(--caption-font-size);
+        }
+
+            .version a {
+                text-decoration: none;
+            }
+
+        h1 {
+            margin-bottom: var(--title-gap);
+            font-size: var(--title-font-size);
+            text-align: center;
+            color: #333;
+        }
+
+        .puzzle-board {
+            display: grid;
+            width: 100%;
+            height: 100%;
+            gap: var(--board-gap); /* Прозрачные промежутки между плитками */
+            padding: var(--board-padding); /* Чтобы фон был виден по краям */
+            background-color: transparent;
+            /* Важно: убираем overflow: hidden у родителя */
+        }
+
+        .puzzle-piece {
+            position: relative;
+            background-size: cover;
+            background-position: center;
+            border: none; /* Убираем границы */
+            /* Скругление углов (регулируйте это значение) */
+            border-radius: var(--piece-radius);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+            /* Убираем margin, так как используем gap */
+            box-shadow: 0 0 0 var(--piece-shadow-size) rgba(0,0,0,0.1); /* Мягкая тень вместо границы */
+        }
+
+        /* Стили применяются ТОЛЬКО когда есть параметр help */
+        body.show-help .puzzle-piece.in-correct-position {
+            transform: scale(1);
+            box-shadow: 0 0 0 var(--piece-correct-shadow-size) #000F;
+            z-index: 2;
+        }
+
+        body.show-help .puzzle-piece:not(.in-correct-position) {
+            transform: scale(0.85);
+            opacity: 1;
+        }
+
+        /* Базовый стиль для всех плиток */
+        .puzzle-piece {
+            transition: all 0.001s ease;
+            transform-origin: center;
+        }
+
+        .status {
+            width: var(--game-width);
+            max-width: calc(100vw - var(--page-padding) * 2);
+            margin-bottom: var(--status-gap);
+            display: flex;
+            justify-content: center;
+        }
+
+        .counters-wrapper {
+            display: flex;
+            gap: var(--counter-gap);
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .counter-box {
+            background-color: rgba(255, 255, 255, 0.85);
+            padding: var(--counter-padding-y) var(--counter-padding-x);
+            border-radius: var(--counter-radius);
+            font-size: var(--counter-font-size);
+            font-weight: bold;
+            color: #333;
+            box-shadow: 0 var(--counter-shadow-y) var(--counter-shadow-blur) rgba(0,0,0,0.1);
+            display: inline-flex;
+            align-items: center;
+            min-width: auto;
+        }
+
+            .counter-box .icon {
+                margin-right: var(--counter-icon-gap);
+                font-size: var(--counter-icon-size);
+            }
+
+        .win-message {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: var(--win-font-size);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s;
+            z-index: 100;
+        }
+
+            .win-message.show {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .win-message button {
+                margin-top: var(--win-button-gap);
+                padding: var(--button-padding-y) var(--button-padding-x);
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: var(--button-radius);
+                cursor: pointer;
+                font-size: var(--button-font-size);
+            }
+
+        #download-btn {
+            background-color: #007BFF;
+        }
+
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+            /* Настройка размытия (чем больше значение, тем сильнее размытие) */
+            filter: blur(var(--backdrop-blur)) brightness(1.5);
+            /* Настройка светлоты (1 = нормально, >1 - светлее, <1 - темнее) */
+            z-index: -1;
+        }
+
+
+        .game-container {
+            position: relative;
+            width: var(--game-width);
+            height: var(--game-height);
+            max-width: calc(100vw - var(--page-padding) * 2);
+            max-height: calc(100vh - var(--page-padding) * 2);
+            border-radius: var(--container-radius);
+            box-shadow: 0 var(--container-shadow-y) var(--container-shadow-blur) rgba(0, 0, 0, 0.15);
+            margin: 0 auto; /* Центрируем */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .win-stats {
+            margin: var(--win-stats-gap) 0;
+            text-align: center;
+            font-size: var(--win-stats-font-size);
+        }
+
+        .stat-line {
+            margin: var(--stat-line-gap) 0;
+            line-height: 1.4;
+        }
+
+
+
+
+
+
+        /* Режим res=table: не показываем оверлей победы и кнопку скачивания */
+        body.table-mode #win-message {
+            display: none !important;
+        }
+        body.table-mode #download-btn {
+            display: none !important;
+        }
+
+        /* Кнопка "Новая игра" наверху (когда мы перенесём её в counters-wrapper) */
+        #restart-btn.restart-top {
+            margin-top: 0 !important;
+            padding: var(--counter-padding-y) var(--counter-padding-x);
+            border-radius: var(--counter-radius);
+            font-size: var(--counter-font-size);
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            background: rgba(255,255,255,0.85);
+            box-shadow: 0 var(--counter-shadow-y) var(--counter-shadow-blur) rgba(0,0,0,0.1);
+        }
+
+        /* В res=table убираем “красоту” плиток при показе итоговой таблицы */
+        body.table-win .puzzle-board {
+            gap: 0 !important;
+            padding: 0 !important;
+        }
+        body.table-win .puzzle-piece {
+            border-radius: 0 !important;
+            box-shadow: none !important;
+        }
+
+        .puzzle-piece {
+            touch-action: none; /* важно для pointermove на телефонах */
+        }
+
+        .puzzle-piece.dragging {
+            transform: scale(0.95);
+            z-index: 20;
+            pointer-events: none; /* чтобы под пальцем определялась плитка-цель, а не сама перетаскиваемая */
+        }
+
+        .puzzle-piece.drop-target {
+            box-shadow: 0 0 0 var(--drop-target-shadow-size) var(--drop-target-shadow-color);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="status">
+        <div class="counters-wrapper">
+            <div class="counter-box" id="tiles-counter">
+                <span class="icon">🧩</span>
+                <span class="count">16</span>
+            </div>
+            <div class="counter-box" id="moves-counter">
+                <span class="icon">🔄</span>
+                <span class="count">0</span>
+            </div>
+            <div class="counter-box" id="time-counter">
+                <span class="icon">🕒</span>
+                <span class="count">00:00</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="game-container">
+        <div class="puzzle-board" id="puzzle-board"></div>
+        <div class="win-message" id="win-message">
+            <p>Вы собрали пазл!</p>
+            <!-- <div class="win-stats">
+                <div class="stat-line">Сложность: <span id="tiles-count">0</span> плиток</div>
+                <div class="stat-line">Ходов: <span id="moves-count">0</span></div>
+                <div class="stat-line">Время: <span id="time-result">00:00</span></div>
+            </div>
+            -->
+            <button id="restart-btn">Новая игра</button>
+            <button id="download-btn">Скачать изображение</button>
+        </div>
+    </div>
+
+    <!-- <div class="version">Версия: 0.5.2. Автор: <a href="https://vk.com/id4022887">Барило И.И.</a></div> -->
+
+    <script>
+
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // Параметры игры
+            const urlParams = new URLSearchParams(window.location.search);
+            const isTableMode = (urlParams.get('res') === 'table');
+
+            // Локальные коэффициенты от cellSize для визуальной подстройки.
+            // Они не читаются из URL: менять их нужно здесь, в коде.
+            const scaleTuning = {
+                tileRadius: 0.04,
+                topScale: 0.6,
+                topGap: 0.12,
+                topPaddingY: 0.08,
+                topPaddingX: 0.14,
+                topRadius: 0.25,
+                topFont: 0.22,
+                topIcon: 0.24,
+                topIconGap: 0.06,
+                topShadowY: 0.025,
+                topShadowBlur: 0.055,
+                dropTargetShadowSize: 0.025
+            };
+
+            // Состояние выбора изображения.
+            let lastImageSrc = ''; // Переменная для отслеживания предыдущего изображения
+            let imageSrc = '';     // Текущее изображение для игры
+            // Категория изображений, полученная из URL или по умолчанию.
+            // Определяется при каждом вызове startGame.
+            let currentImageCategory = '';
+
+            // Список изображений с вероятностями.
+            const imageList = {
+                "kalancha-akvarium": [
+                    { src: "images/kalancha/web/kalancha-akvarium-06.jpg", weight: 1 }
+                ],
+                "kalancha-atlantida": [
+                    { src: "images/kalancha/web/kalancha-atlantida-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-06.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-07.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-atlantida-08.jpg", weight: 1 }
+                ],
+                "kalancha-candy": [
+                    { src: "images/kalancha/web/kalancha-candy-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-candy-02.jpg", weight: 1 }
+                ],
+                "kalancha-dragon": [
+                    { src: "images/kalancha/web/kalancha-dragon-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-dragon-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-dragon-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-dragon-04.jpg", weight: 1 }
+                ],
+                "kalancha-egipet": [
+                    { src: "images/kalancha/web/kalancha-egipet-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-egipet-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-egipet-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-egipet-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-egipet-06.jpg", weight: 1 }
+                ],
+                "kalancha-elf": [
+                    { src: "images/kalancha/web/kalancha-elf-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-elf-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-elf-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-elf-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-elf-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-elf-06.jpg", weight: 1 }
+                ],
+                "kalancha-fire": [
+                    { src: "images/kalancha/web/kalancha-fire-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-fire-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-fire-03.jpg", weight: 1 }
+                ],
+                "kalancha-space": [
+                    { src: "images/kalancha/web/kalancha-space-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-06.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-07.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-08.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-09.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-10.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-11.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-12.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-13.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-14.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-15.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-16.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-17.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-18.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-19.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-20.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-space-21.jpg", weight: 1 }
+                ],
+                "kalancha-steampunk": [
+                    { src: "images/kalancha/web/kalancha-steampunk-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-steampunk-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-steampunk-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-steampunk-04.jpg", weight: 1 }
+                ],
+                "kalancha-volshebniy": [
+                    { src: "images/kalancha/web/kalancha-volshebniy-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-06.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-07.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-08.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-09.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-10.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-11.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-volshebniy-12.jpg", weight: 1 }
+                ],
+                "kalancha-vozdushniy": [
+                    { src: "images/kalancha/web/kalancha-vozdushniy-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-vozdushniy-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-vozdushniy-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-vozdushniy-06.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-vozdushniy-07.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-vozdushniy-08.jpg", weight: 1 }
+                ],
+                "kalancha-wood": [
+                    { src: "images/kalancha/web/kalancha-wood-01.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-02.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-03.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-04.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-05.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-06.jpg", weight: 1 },
+                    { src: "images/kalancha/web/kalancha-wood-07.jpg", weight: 1 }
+                ],
+                "8march2026-robots": [
+                    { src: "images/8march2026/robots/web/008.jpg", weight: 1 }
+                ],
+                // Изображение по умолчанию, если категория не найдена.
+                "default": [
+                    { src: "images/default.webp", weight: 1.0 }
+                ]
+            };
+            // Состояние таймера.
+            let startTime = 0;
+            let timerInterval = null;
+            let elapsedTime = 0;
+
+            // Выбор изображения по вероятности с необязательным исключением.
+            function chooseImage(category, excludeSrc = '') {
+                let images = imageList[category] || imageList["default"];
+                console.log('Выбираем изображение из категории:', category, 'Исключаем:', excludeSrc);
+
+                // Если есть исключаемое изображение и в списке больше одного варианта,
+                // отфильтровываем его.
+                if (excludeSrc && images.length > 1) {
+                    const filteredImages = images.filter(img => img.src !== excludeSrc);
+                    console.log('Отфильтрованные изображения:', filteredImages.map(img => img.src));
+                    // Если после фильтрации список стал пустым (т.е., excludeSrc был единственным вариантом),
+                    // используем оригинальный список, чтобы не остаться без изображения.
+                    images = filteredImages.length > 0 ? filteredImages : images;
+                }
+
+                let totalWeight = 0;
+                for (const img of images) {
+                    totalWeight += img.weight;
+                }
+
+                let randomNum = Math.random() * totalWeight;
+                for (const img of images) {
+                    if (randomNum < img.weight) {
+                        console.log('Выбрано изображение:', img.src);
+                        return img.src;
+                    }
+                    randomNum -= img.weight;
+                }
+                console.log('Fallback: Возвращаем первое изображение из списка:', images[0].src);
+                return images[0].src; // Резервный результат при пограничном значении суммы весов.
+            }
+
+            // Функции для работы с таймером
+            function startTimer() {
+                startTime = Date.now() - elapsedTime;
+                timerInterval = setInterval(updateTimer, 1000);
+            }
+
+            function updateTimer() {
+                if (!gameStarted) { return };
+
+                const currentTime = Date.now();
+                elapsedTime = currentTime - startTime;
+                const seconds = Math.floor(elapsedTime / 1000) % 60;
+                const minutes = Math.floor(elapsedTime / (1000 * 60));
+                document.getElementById('time-counter').querySelector('.count').textContent =
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+
+            function stopTimer() {
+                clearInterval(timerInterval);
+            }
+
+            function resetTimer() {
+                stopTimer();
+                elapsedTime = 0;
+                document.getElementById('time-counter').querySelector('.count').textContent = '00:00';
+            }
+
+
+
+            function startGame(isRestart = false) {
+
+                clearAllDrags();
+
+                console.log('startGame вызвана. isRestart:', isRestart);
+
+                // Добавлен параметр isRestart
+                resetTimer();
+                gameStarted = true;
+                moves = 0;
+                movesCounterEl.querySelector('.count').textContent = '0';
+
+                winMessage.classList.remove('show'); // Скрываем сообщение о победе при старте новой игры
+
+                document.body.classList.remove('table-win'); // вернуть обычный вид (зазоры) при старте
+
+                currentImageCategory = urlParams.get('image') || "default";
+                console.log('Текущая категория изображения:', currentImageCategory);
+
+                let newImageSrc;
+                if (isRestart) {
+                    // Для перезапуска выбираем другое изображение, исключая последнее
+                    newImageSrc = chooseImage(currentImageCategory, lastImageSrc);
+                } else {
+                    // Для первого запуска или если нет информации о категории
+                    newImageSrc = chooseImage(currentImageCategory);
+                }
+
+                imageSrc = newImageSrc; // Обновляем глобальную переменную imageSrc
+                lastImageSrc = newImageSrc; // Запоминаем текущее изображение как последнее сыгранное
+
+                console.log('Установлено imageSrc:', imageSrc, 'lastImageSrc:', lastImageSrc);
+
+                // Устанавливаем счетчик плиток
+                document.getElementById('tiles-counter').querySelector('.count').textContent = rows * cols;
+
+                // Загружаем новое изображение, затем создаем пазл и запускаем таймер
+                const imgToLoad = new Image();
+
+                imgToLoad.onload = function () {
+                    console.log('Изображение загружено');
+
+                    imageAspectRatio = imgToLoad.naturalWidth / imgToLoad.naturalHeight;
+
+                    // --- автоподбор cols/rows по size (если задан) ---
+                    if (targetSize) {
+                        const picked = pickGridXY({
+                        imgW: imgToLoad.naturalWidth,
+                        imgH: imgToLoad.naturalHeight,
+                        baseX: baseCols ?? cols,
+                        baseY: baseRows ?? rows,
+                        size: targetSize,
+                        maxExtra: 5
+                        });
+
+                        cols = picked.x;
+                        rows = picked.y;
+
+                        console.log('Автоподбор сетки:', { cols, rows, tiles: picked.tiles, targetSize });
+                    } else {
+                        console.log('Автоподбор пропущен: targetSize =', targetSize);
+                    }
+
+                    updateScale();
+
+                    // обновим счётчик ПЕРЕД созданием (у вас он ещё выставляется выше, но теперь он может поменяться)
+                    document.getElementById('tiles-counter').querySelector('.count').textContent = rows * cols;
+
+                    createPuzzle();
+                };
+
+
+                imgToLoad.onerror = function () {
+                    console.error('Не удалось загрузить изображение'); // + imageSrc + '. Используется стандартное.');
+                    // Если выбранное изображение не загрузилось, используем изображение по умолчанию
+                    imageSrc = chooseImage("default"); // Выбираем из списка по умолчанию
+                    lastImageSrc = imageSrc; // Обновляем lastImageSrc
+                    const defaultImgToLoad = new Image();
+                    defaultImgToLoad.onload = function() {
+                        imageAspectRatio = defaultImgToLoad.naturalWidth / defaultImgToLoad.naturalHeight;
+
+                        // Автоподбор cols/rows по size для более квадратных плиток.
+                        if (targetSize) {
+                        const picked = pickGridXY({
+                            imgW: defaultImgToLoad.naturalWidth,
+                            imgH: defaultImgToLoad.naturalHeight,
+                            baseX: baseCols,
+                            baseY: baseRows,
+                            size: targetSize
+                        });
+
+                        cols = picked.x;
+                        rows = picked.y;
+
+                        // обновим счётчик плиток (вы уже делаете это в createPuzzle, но лучше сразу)
+                        document.getElementById('tiles-counter').querySelector('.count').textContent = rows * cols;
+                        }
+
+                        updateScale();
+
+                        createPuzzle();
+                    }
+                    defaultImgToLoad.src = imageSrc;
+                };
+                imgToLoad.src = imageSrc; // Запускаем загрузку изображения
+            }
+
+
+            let imageAspectRatio = 1; // По умолчанию квадратное
+
+            function updateScale() {
+                if (!cols || !rows) return;
+
+                const root = document.documentElement;
+                const status = document.querySelector('.status');
+                const viewport = window.visualViewport || window;
+                const viewportWidth = viewport.width || window.innerWidth;
+                const viewportHeight = viewport.height || window.innerHeight;
+                const boardRatio = Number.isFinite(imageAspectRatio) && imageAspectRatio > 0
+                    ? imageAspectRatio
+                    : cols / rows;
+
+                const setPxVar = (name, value) => {
+                    const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0;
+                    root.style.setProperty(name, `${safeValue.toFixed(2)}px`);
+                };
+
+                const applyScaleVars = (cellSize) => {
+                    const topScale = scaleTuning.topScale;
+
+                    setPxVar('--cell-size', cellSize);
+                    setPxVar('--page-padding', cellSize * 0.22);
+                    setPxVar('--title-gap', cellSize * 0.25);
+                    setPxVar('--title-font-size', cellSize * 0.35);
+                    setPxVar('--caption-padding-top', cellSize * 0.03);
+                    setPxVar('--caption-font-size', cellSize * 0.18);
+                    setPxVar('--status-gap', cellSize * scaleTuning.topGap * topScale);
+                    setPxVar('--counter-gap', cellSize * scaleTuning.topGap * topScale);
+                    setPxVar('--counter-padding-y', cellSize * scaleTuning.topPaddingY * topScale);
+                    setPxVar('--counter-padding-x', cellSize * scaleTuning.topPaddingX * topScale);
+                    setPxVar('--counter-radius', cellSize * scaleTuning.topRadius * topScale);
+                    setPxVar('--counter-font-size', cellSize * scaleTuning.topFont * topScale);
+                    setPxVar('--counter-icon-size', cellSize * scaleTuning.topIcon * topScale);
+                    setPxVar('--counter-icon-gap', cellSize * scaleTuning.topIconGap * topScale);
+                    setPxVar('--counter-shadow-y', cellSize * scaleTuning.topShadowY * topScale);
+                    setPxVar('--counter-shadow-blur', cellSize * scaleTuning.topShadowBlur * topScale);
+                    setPxVar('--board-gap', cellSize * 0.035);
+                    setPxVar('--board-padding', cellSize * 0.035);
+                    setPxVar('--piece-radius', cellSize * scaleTuning.tileRadius);
+                    setPxVar('--piece-shadow-size', cellSize * 0.012);
+                    setPxVar('--piece-correct-shadow-size', cellSize * 0.035);
+                    setPxVar('--drop-target-shadow-size', cellSize * scaleTuning.dropTargetShadowSize);
+                    setPxVar('--container-radius', cellSize * 0.10);
+                    setPxVar('--container-shadow-y', cellSize * 0.05);
+                    setPxVar('--container-shadow-blur', cellSize * 0.15);
+                    setPxVar('--win-font-size', cellSize * 0.26);
+                    setPxVar('--win-button-gap', cellSize * 0.28);
+                    setPxVar('--button-font-size', cellSize * 0.22);
+                    setPxVar('--button-padding-y', cellSize * 0.10);
+                    setPxVar('--button-padding-x', cellSize * 0.14);
+                    setPxVar('--button-radius', cellSize * 0.08);
+                    setPxVar('--win-stats-gap', cellSize * 0.20);
+                    setPxVar('--win-stats-font-size', cellSize * 0.24);
+                    setPxVar('--stat-line-gap', cellSize * 0.10);
+                    setPxVar('--backdrop-blur', cellSize * 0.75);
+                };
+
+                const applyGameSize = (width, height) => {
+                    setPxVar('--game-width', width);
+                    setPxVar('--game-height', height);
+                };
+
+                let cellSize = parseFloat(getComputedStyle(root).getPropertyValue('--cell-size')) || 40;
+                let boardWidth = viewportWidth;
+                let boardHeight = boardRatio > 0 ? boardWidth / boardRatio : viewportHeight;
+
+                for (let i = 0; i < 4; i++) {
+                    applyScaleVars(cellSize);
+
+                    const styles = getComputedStyle(root);
+                    const pagePadding = parseFloat(styles.getPropertyValue('--page-padding')) || 0;
+                    const statusGap = parseFloat(styles.getPropertyValue('--status-gap')) || 0;
+                    const availableWidth = Math.max(0, viewportWidth - pagePadding * 2);
+
+                    applyGameSize(Math.min(boardWidth, availableWidth), boardHeight);
+
+                    const statusHeight = status ? status.getBoundingClientRect().height : 0;
+                    const availableHeight = Math.max(0, viewportHeight - pagePadding * 2 - statusHeight - statusGap);
+
+                    boardWidth = availableWidth;
+                    boardHeight = boardRatio > 0 ? boardWidth / boardRatio : availableHeight;
+
+                    if (boardHeight > availableHeight) {
+                        boardHeight = availableHeight;
+                        boardWidth = boardHeight * boardRatio;
+                    }
+
+                    cellSize = Math.min(boardWidth / cols, boardHeight / rows);
+                    if (!Number.isFinite(cellSize)) {
+                        cellSize = 0;
+                    }
+                }
+
+                applyScaleVars(cellSize);
+                applyGameSize(boardWidth, boardHeight);
+            }
+
+
+            // Элементы DOM
+            const puzzleBoard = document.getElementById('puzzle-board');
+            const restartBtn = document.getElementById('restart-btn');
+            const winMessage = document.getElementById('win-message');
+            const downloadBtn = document.getElementById('download-btn');
+
+            if (isTableMode) {
+                const countersWrapper = document.querySelector('.counters-wrapper');
+                restartBtn.classList.add('restart-top');
+                countersWrapper.appendChild(restartBtn); // переносим кнопку наверх рядом со временем
+            }
+
+            const movesCounterEl = document.getElementById('moves-counter');
+            const timeCounterEl = document.getElementById('time-counter');
+
+            if (isTableMode) {
+                document.body.classList.add('table-mode');
+            }
+
+            console.log('Параметры URL:', Array.from(urlParams.entries()));
+            console.log('Значение image из URL:', urlParams.get('image'));
+
+            // --- НОВАЯ КАРТА СЛОЖНОСТЕЙ ---
+            const difficultyLevels = {
+                'test': { x: 2, y: 2, size: 4 },
+                'small': { x: 3, y: 3, size: 8 },
+                'simple': { x: 3, y: 3, size: 8 },
+                'normal': { x: 4, y: 4, size: 15 }, // Это будет значение по умолчанию, если ничего не указано
+                                                    // size - минимальный размер и +20% для максимального количества плиток. Поэтому он может быть меньше x*y
+                'hard': { x: 5, y: 5, size: 25 },
+                'very': { x: 6, y: 6, size: 36 },
+                'extreme': { x: 8, y: 8, size: 64 } // Пример дополнительной сложности
+            };
+
+            // --- ЛОГИКА ОПРЕДЕЛЕНИЯ COLS И ROWS (ОБНОВЛЕНА) ---
+            let cols, rows;
+            let baseCols, baseRows;
+            let targetSize = null;
+
+            const requestedDifficulty = urlParams.get('diff');
+            const defaultDifficulty = 'normal';
+
+            if (requestedDifficulty && difficultyLevels[requestedDifficulty]) {
+                const lvl = difficultyLevels[requestedDifficulty];
+                baseCols = cols = lvl.x;
+                baseRows = rows = lvl.y;
+                targetSize = lvl.size ?? null;
+                console.log('Сложность установлена через diff');
+            } else {
+            const requestedCols = parseInt(urlParams.get('x'));
+            const requestedRows = parseInt(urlParams.get('y'));
+
+            if (requestedCols >= 2 && requestedCols <= 50 && requestedRows >= 2 && requestedRows <= 50) {
+                baseCols = cols = requestedCols;
+                baseRows = rows = requestedRows;
+                targetSize = null; // если пользователь явно дал x/y — не автоподбор
+                console.log('Размер установлен через x и y');
+            } else {
+                const lvl = difficultyLevels[defaultDifficulty];
+                baseCols = cols = lvl.x;
+                baseRows = rows = lvl.y;
+                targetSize = lvl.size ?? null;
+                console.log('Используется сложность по умолчанию');
+            }
+            }
+
+
+            let pieces = [];
+            let moves = 0;
+            let gameStarted = true;
+
+
+            const DRAG_THRESHOLD_RATIO = 0.08;
+            const activeDrags = new Map(); // key = pointerId
+
+
+            const showHelp = urlParams.has('help'); // true если параметр есть
+
+            // Стандартное изображение (может быть заменено параметром URL)
+            imageSrc = '';
+
+            function getDragThreshold() {
+                const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 0;
+                return cellSize * DRAG_THRESHOLD_RATIO;
+            }
+
+
+            // Обработчики событий
+            restartBtn.addEventListener('click', function () {
+                console.log('Кнопка "Новая игра" нажата. Запускаем новую игру.');
+                if (!isTableMode) {
+                    winMessage.classList.remove('show');
+                }
+                document.body.classList.remove('table-win'); // на всякий случай сбрасываем "итоговую таблицу"
+                startGame(true);
+            });
+
+            function pickGridXY({ imgW, imgH, baseX, baseY, size }) {
+                if (!size || size < 1) return { x: baseX, y: baseY, tiles: baseX * baseY };
+
+                const minTiles = size;
+                const maxTiles = Math.ceil(size * 1.20); // +20%
+
+                // Эпсилон: считаем варианты "равными по квадратности", если разница меньше этого
+                const EPS = 1e-4;
+
+                let best = null;
+
+                for (let tiles = minTiles; tiles <= maxTiles; tiles++) {
+                    for (let x = 1; x <= tiles; x++) {
+                    if (tiles % x !== 0) continue;
+                    const y = tiles / x;
+
+                    const tileW = imgW / x;
+                    const tileH = imgH / y;
+
+                    // 0 = идеальный квадрат
+                    const squareness = Math.abs(Math.log(tileW / tileH));
+
+                    // слегка предпочитаем ближе к size, чтобы не раздувать сетку без нужды
+                    const extraPenalty = (tiles - size) * 0.001;
+
+                    const score = squareness + extraPenalty;
+
+                    const cand = {
+                        x, y, tiles,
+                        score,
+                        squareness,
+                        tileW, tileH,
+                        portrait: tileH >= tileW
+                    };
+
+                    if (!best) {
+                        best = cand;
+                        continue;
+                    }
+
+                    // 1) лучше по score
+                    if (cand.score + EPS < best.score) {
+                        best = cand;
+                        continue;
+                    }
+
+                    // 2) если примерно одинаково по score — приоритет плиткам "выше чем шире"
+                    if (Math.abs(cand.score - best.score) <= EPS) {
+                        if (cand.portrait && !best.portrait) {
+                        best = cand;
+                        continue;
+                        }
+                        // 3) если оба одной ориентации — берём ближе к квадрату "в лоб" (по отношению сторон)
+                        const candRatio = cand.tileW / cand.tileH;
+                        const bestRatio = best.tileW / best.tileH;
+                        if (Math.abs(candRatio - 1) + EPS < Math.abs(bestRatio - 1)) {
+                        best = cand;
+                        continue;
+                        }
+                        // 4) если всё ещё равно — меньше лишних плиток
+                        if (cand.tiles < best.tiles) {
+                        best = cand;
+                        continue;
+                        }
+                    }
+                    }
+                }
+
+                return best ? { x: best.x, y: best.y, tiles: best.tiles } : { x: baseX, y: baseY, tiles: baseX * baseY };
+            }
+
+
+            function clearAllDrags() {
+                for (const drag of activeDrags.values()) {
+                    drag.piece.classList.remove('dragging');
+                    drag.piece.style.transform = drag.prevTransform || '';
+                    drag.piece.style.transition = drag.prevTransition || '';
+                    if (drag.overPiece) drag.overPiece.classList.remove('drop-target');
+                }
+                activeDrags.clear();
+            }
+
+            // Функция создания пазла
+            function createPuzzle() {
+
+                clearAllDrags();
+
+                // Остановите предыдущий таймер, если он был
+                stopTimer();
+
+                document.getElementById('tiles-counter').querySelector('.count').textContent = rows * cols;
+
+                // Устанавливаем фоновое изображение
+                document.documentElement.style.setProperty('--bg-image', `url(${imageSrc})`);
+
+                puzzleBoard.innerHTML = '';
+                puzzleBoard.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                puzzleBoard.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+
+                pieces = [];
+                const totalPieces = rows * cols;
+
+                // Создаем массив индексов и перемешиваем его
+                const indices = [];
+                for (let i = 0; i < totalPieces; i++) {
+                    indices.push(i);
+                }
+                shuffleArray(indices);
+
+                // Создаем плитки
+                for (let i = 0; i < totalPieces; i++) {
+                    const pieceIndex = indices[i];
+                    const piece = document.createElement('div');
+                    piece.className = 'puzzle-piece';
+                    piece.dataset.index = i;
+                    piece.dataset.correctIndex = pieceIndex;
+
+                    const row = Math.floor(pieceIndex / cols);
+                    const col = pieceIndex % cols;
+
+                    piece.style.backgroundImage = `url(${imageSrc})`;
+                    piece.style.backgroundSize = `${cols * 100}% ${rows * 100}%`;
+                    const bgX = cols > 1 ? (col / (cols - 1)) * 100 : 0;
+                    const bgY = rows > 1 ? (row / (rows - 1)) * 100 : 0;
+                    piece.style.backgroundPosition = `${bgX}% ${bgY}%`;
+
+
+
+                    piece.addEventListener('pointerdown', (e) => onPiecePointerDown(e, piece));
+                    piece.addEventListener('pointermove', (e) => onPiecePointerMove(e));
+                    piece.addEventListener('pointerup', (e) => onPiecePointerUp(e));
+                    piece.addEventListener('pointercancel', (e) => onPiecePointerUp(e));
+
+
+                    puzzleBoard.appendChild(piece);
+                    pieces.push(piece);
+                }
+
+                updatePieceVisuals(); // При создании пазла
+
+                // Запустите новый таймер
+                startTimer();
+            }
+
+            function updatePieceVisuals() {
+                pieces.forEach(piece => {
+                    const currentIndex = parseInt(piece.dataset.index);
+                    const correctIndex = parseInt(piece.dataset.correctIndex);
+
+                    // Всегда обновляем data-атрибуты для логики игры
+                    piece.dataset.correct = (currentIndex === correctIndex).toString();
+
+                    // Применяем стили только если включены подсказки
+                    if (showHelp) {
+                        if (currentIndex === correctIndex) {
+                            piece.classList.add('in-correct-position');
+                            piece.classList.remove('wrong-position');
+                        } else {
+                            piece.classList.add('wrong-position');
+                            piece.classList.remove('in-correct-position');
+                        }
+                    } else {
+                        // Если подсказки выключены - сбрасываем все спецстили
+                        piece.classList.remove('in-correct-position', 'wrong-position');
+                        piece.style.transform = '';
+                        piece.style.boxShadow = '';
+                    }
+                });
+            }
+
+            // Меняем плитки местами
+            function swapPieces(piece1, piece2) {
+                const index1 = parseInt(piece1.dataset.index);
+                const index2 = parseInt(piece2.dataset.index);
+
+                // Обновляем данные в массиве
+                [pieces[index1], pieces[index2]] = [pieces[index2], pieces[index1]];
+
+                // Обновляем data-атрибуты
+                piece1.dataset.index = index2;
+                piece2.dataset.index = index1;
+
+                // Перемещаем плитки в DOM
+                const temp = document.createElement('div');
+                piece1.parentNode.insertBefore(temp, piece1);
+                piece2.parentNode.insertBefore(piece1, piece2);
+                temp.parentNode.insertBefore(piece2, temp);
+                temp.parentNode.removeChild(temp);
+            }
+
+
+            function onPiecePointerDown(e, piece) {
+                if (!gameStarted) return;
+
+                // Если эту плитку уже тащит кто-то другой — не даём второй захват
+                for (const drag of activeDrags.values()) {
+                    if (drag.piece === piece) return;
+                }
+
+                activeDrags.set(e.pointerId, {
+                    piece,
+                    startX: e.clientX,
+                    startY: e.clientY,
+                    isDragging: false,
+                    overPiece: null,
+                    dx: 0,
+                    dy: 0,
+                    prevTransition: piece.style.transition || '',
+                    prevTransform: piece.style.transform || ''
+                });
+
+                piece.setPointerCapture?.(e.pointerId);
+            }
+
+            function onPiecePointerMove(e) {
+                if (!gameStarted) return;
+
+                const drag = activeDrags.get(e.pointerId);
+                if (!drag) return;
+
+                const dx = e.clientX - drag.startX;
+                const dy = e.clientY - drag.startY;
+
+                if (!drag.isDragging && Math.hypot(dx, dy) >= getDragThreshold()) {
+                    drag.isDragging = true;
+                    drag.piece.classList.add('dragging');
+                }
+
+                if (!drag.isDragging) return;
+
+                drag.dx = dx;
+                drag.dy = dy;
+
+                drag.piece.style.transition = 'none';
+                drag.piece.style.transform = `translate(${drag.dx}px, ${drag.dy}px) scale(0.95)`;
+
+                const el = document.elementFromPoint(e.clientX, e.clientY);
+                const candidate = el ? el.closest('.puzzle-piece') : null;
+
+                if (candidate !== drag.overPiece) {
+                    if (drag.overPiece) drag.overPiece.classList.remove('drop-target');
+
+                    drag.overPiece = (candidate && candidate !== drag.piece) ? candidate : null;
+
+                    if (drag.overPiece) drag.overPiece.classList.add('drop-target');
+                }
+
+                e.preventDefault?.();
+            }
+
+            function onPiecePointerUp(e) {
+                if (!gameStarted) return;
+
+                const drag = activeDrags.get(e.pointerId);
+                if (!drag) return;
+
+                function restoreDraggedPieceVisual() {
+                    drag.piece.classList.remove('dragging');
+                    drag.piece.style.transform = drag.prevTransform;
+                    drag.piece.style.transition = drag.prevTransition;
+
+                    if (drag.overPiece) {
+                        drag.overPiece.classList.remove('drop-target');
+                    }
+                }
+
+                if (drag.isDragging) {
+                    restoreDraggedPieceVisual();
+
+                    if (drag.overPiece && drag.overPiece !== drag.piece) {
+                        // защита: плитки ещё существуют в DOM и никто их не успел "сломать" параллельным обменом
+                        if (!document.body.contains(drag.piece) || !document.body.contains(drag.overPiece)) {
+                            activeDrags.delete(e.pointerId);
+                            return;
+                        }
+
+                        swapPieces(drag.piece, drag.overPiece);
+
+                        moves++;
+                        movesCounterEl.querySelector('.count').textContent = `${moves}`;
+
+                        updatePieceVisuals();
+
+                        if (checkWin()) {
+                            gameStarted = false;
+
+                            if (isTableMode) {
+                                document.body.classList.add('table-win');
+                            } else {
+                                winMessage.classList.add('show');
+                            }
+                        }
+                    }
+                }
+
+                activeDrags.delete(e.pointerId);
+            }
+
+
+            // Проверка, собран ли пазл
+            function checkWin() {
+                for (let i = 0; i < pieces.length; i++) {
+                    if (parseInt(pieces[i].dataset.index) !== parseInt(pieces[i].dataset.correctIndex)) {
+                        return false;
+                    }
+                }
+
+                stopTimer();
+                const minutes = Math.floor(elapsedTime / (1000 * 60));
+                const seconds = Math.floor((elapsedTime % (1000 * 60)) / 1000);
+
+                /*
+                document.getElementById('tiles-count').textContent = rows * cols;
+                document.getElementById('moves-count').textContent = moves;
+                document.getElementById('time-result').textContent =
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                */
+
+                if (!isTableMode) {
+                    winMessage.classList.add('show');
+                }
+                return true;
+            }
+
+            // Перемешивание массива (алгоритм Фишера-Йетса)
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+
+            function handleViewportResize() {
+                updateScale();
+                resizePuzzlePieces();
+            }
+
+            window.addEventListener('resize', handleViewportResize);
+            window.visualViewport?.addEventListener('resize', handleViewportResize);
+
+            function resizePuzzlePieces() {
+                const board = document.getElementById('puzzle-board');
+                board.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                board.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+            }
+
+            downloadBtn.addEventListener('click', function () {
+                const a = document.createElement('a');
+                a.href = imageSrc; // imageSrc содержит путь к текущему изображению
+                a.download = imageSrc.substring(imageSrc.lastIndexOf('/') + 1); // Имя файла для скачивания
+
+
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+
+            // Теперь вызываем startGame() для первого запуска.
+            startGame(false); // false означает, что это не перезапуск (выбираем любую картинку)
+
+        });
+    </script>
+</body>
+</html>

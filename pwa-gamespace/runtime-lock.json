@@ -1,0 +1,10 @@
+{
+  "runtime": "gamespace-runtime-v1",
+  "publishedFile": "sw-runtime-v1.js",
+  "files": {
+    "public/sw-runtime-v1.js": "26778eac57e9a111785912b047a59ed1e0a1c85e8973f89218804ae78f0feff7"
+  },
+  "releaseFiles": {
+    "sw-runtime-v1.js": "26778eac57e9a111785912b047a59ed1e0a1c85e8973f89218804ae78f0feff7"
+  }
+}

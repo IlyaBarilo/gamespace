@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title desc">
+  <title id="title">Students badge: minimal duo</title>
+  <desc id="desc">Compact student badge with two heads and shared shoulders.</desc>
+  <style>
+    .badge { fill: #031326; fill-opacity: .46; stroke: #bfeeff; stroke-opacity: .28; stroke-width: 2; }
+    .icon { fill: #f4faff; fill-opacity: .88; }
+    .soft { fill: #9ee7ff; fill-opacity: .36; }
+  </style>
+  <circle class="badge" cx="40" cy="40" r="35"/>
+  <circle class="soft" cx="50" cy="32" r="9"/>
+  <path class="soft" d="M36 59c1.3-9.1 6.8-14.5 14-14.5S62.7 49.9 64 59H36Z"/>
+  <circle class="icon" cx="32" cy="33" r="10"/>
+  <path class="icon" d="M16 60c1.5-9.9 7.7-15.8 16-15.8S46.5 50.1 48 60H16Z"/>
+</svg>

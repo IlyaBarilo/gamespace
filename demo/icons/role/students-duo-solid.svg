@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-labelledby="title desc">
+  <title id="title">Students badge: solid duo</title>
+  <desc id="desc">Semi-transparent round badge with two student silhouettes.</desc>
+  <style>
+    .badge { fill: #04162d; fill-opacity: .58; stroke: #bfeeff; stroke-opacity: .42; stroke-width: 2; }
+    .back { fill: #9ee7ff; fill-opacity: .42; }
+    .front { fill: #f4faff; fill-opacity: .9; }
+  </style>
+  <circle class="badge" cx="40" cy="40" r="35"/>
+  <circle class="back" cx="51" cy="31" r="10"/>
+  <path class="back" d="M36 61c1.1-11 7.1-17.8 15-17.8S64.9 50 66 61H36Z"/>
+  <circle class="front" cx="31" cy="32" r="11"/>
+  <path class="front" d="M13 62c1.3-11.8 8.5-19 18-19s16.7 7.2 18 19H13Z"/>
+</svg>

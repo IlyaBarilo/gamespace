@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 80 80"
+   role="img"
+   aria-labelledby="title desc"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="teacher-cap-minimal.svg"
+   inkscape:version="1.4.2 (f4327f4, 2025-05-13)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs3" />
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="5.1574601"
+     inkscape:cx="-1.2603103"
+     inkscape:cy="78.042291"
+     inkscape:window-width="2560"
+     inkscape:window-height="1369"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg3" />
+  <title
+     id="title">Teacher badge: minimal cap</title>
+  <desc
+     id="desc">Small calm teacher badge with a compact mortarboard mark.</desc>
+  <style
+     id="style1">
+    .badge { fill: #031326; fill-opacity: .46; stroke: #bfeeff; stroke-opacity: .28; stroke-width: 2; }
+    .icon { fill: #f4faff; fill-opacity: .86; }
+    .tassel { fill: #9ee7ff; fill-opacity: .76; }
+  </style>
+  <circle
+     class="badge"
+     cx="40"
+     cy="40"
+     r="35"
+     id="circle1" />
+  <path
+     class="icon"
+     d="M29 42.5c3 2.3 6.7 3.5 11 3.5s8-1.2 11-3.5V50c-3 2.7-6.7 4-11 4s-8-1.3-11-4v-7.5Z"
+     id="path2" />
+  <path
+     class="tassel"
+     d="M 57.034276,35.897172 60,34.491859 V 49 h -3 z"
+     id="path3"
+     style="stroke-width:1.05641"
+     sodipodi:nodetypes="ccccc" />
+  <circle
+     class="tassel"
+     cx="58.5"
+     cy="53.5"
+     r="3.5"
+     id="circle3" />
+  <path
+     class="icon"
+     d="M20 34.5 40 25l20 9.5L40 44 20 34.5Z"
+     id="path1" />
+</svg>
