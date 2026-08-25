@@ -512,6 +512,8 @@ async function fetchVersionCatalog() {
 function createReleaseOption(catalog, release, index, activeIndex, list) {
     const article = document.createElement("article");
     article.className = "release-option";
+    const header = document.createElement("div");
+    header.className = "release-option-header";
     const copy = document.createElement("div");
     copy.className = "release-option-copy";
     const title = document.createElement("strong");
@@ -547,7 +549,8 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     description.addEventListener("toggle", updateToggleText);
     updateToggleText();
     description.append(descriptionToggle, descriptionText);
-    article.append(copy, button, description);
+    header.append(copy, button);
+    article.append(header, description);
     return article;
 }
 

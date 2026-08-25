@@ -1030,14 +1030,17 @@ a:focus-visible {
 }
 
 .release-option {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: center;
   padding: 14px 16px;
   border: 1px solid rgba(104, 171, 226, 0.28);
   border-radius: 14px;
   background: rgba(5, 25, 52, 0.66);
+}
+
+.release-option-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
 }
 
 .release-option strong,
@@ -1055,8 +1058,8 @@ a:focus-visible {
 }
 
 .release-description-panel {
-  grid-column: 1 / -1;
   min-width: 0;
+  margin-top: 12px;
   border-top: 1px solid rgba(104, 171, 226, 0.18);
   padding-top: 9px;
 }
@@ -1412,7 +1415,7 @@ body.is-busy button:not(#errorClose) {
     flex-direction: column;
   }
 
-  .release-option {
+  .release-option-header {
     grid-template-columns: 1fr;
   }
 
