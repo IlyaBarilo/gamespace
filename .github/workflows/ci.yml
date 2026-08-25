@@ -1,0 +1,99 @@
+name: Проверка каждого коммита
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gamespace-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pwa:
+    name: PWA и пакет выпуска — Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: pwa-gamespace
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v7
+
+      - name: Настроить Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: pwa-gamespace/package-lock.json
+
+      - name: Проверить наличие 7-Zip
+        shell: bash
+        run: command -v 7zz || command -v 7z || command -v 7za
+
+      - name: Установить точные версии зависимостей
+        run: npm ci
+
+      - name: Выполнить автоматические тесты
+        run: npm test
+
+      - name: Собрать PWA и неизменяемый пакет
+        run: npm run release:prepare
+
+      - name: Проверить исходную сборку и пакет
+        run: |
+          npm run verify:release-source
+          npm run verify:releases
+          npm run verify:runtime
+
+      - name: Собрать тестовый Pages-артефакт
+        shell: bash
+        run: |
+          version="$(node -e "process.stdout.write(JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version)")"
+          npm run pages:assemble -- "$version"
+          test -f "pages-output/$version/index.html"
+
+  apk:
+    name: APK с тестовой подписью — Windows
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Получить исходники
+        uses: actions/checkout@v7
+
+      - name: Настроить Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Подготовить Android SDK
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
+          if (-not $sdkRoot) { throw "ANDROID_SDK_ROOT is not configured on the runner." }
+          $platform = Join-Path $sdkRoot "platforms\android-36\android.jar"
+          $buildTools = Join-Path $sdkRoot "build-tools\36.0.0\aapt2.exe"
+          if (-not (Test-Path -LiteralPath $platform) -or -not (Test-Path -LiteralPath $buildTools)) {
+            $sdkManager = Get-ChildItem -LiteralPath (Join-Path $sdkRoot "cmdline-tools") -Recurse -Filter "sdkmanager.bat" |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1
+            if (-not $sdkManager) { throw "sdkmanager.bat was not found." }
+            & $sdkManager.FullName "--sdk_root=$sdkRoot" "platforms;android-36" "build-tools;36.0.0"
+            if ($LASTEXITCODE -ne 0) { throw "Android SDK package installation failed." }
+          }
+
+      - name: Собрать и проверить тестовый APK
+        shell: pwsh
+        run: |
+          $version = (Get-Content -LiteralPath ".\pwa-gamespace\package.json" -Raw | ConvertFrom-Json).version
+          & .\apk-gamespace\build-apk.ps1 -VersionName $version -AllowTestSigning
+          if (-not (Test-Path -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -PathType Leaf)) {
+            throw "GameSpace.apk was not created."
+          }

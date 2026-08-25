@@ -28,7 +28,8 @@ if ($env:GAMESPACE_7Z -and (Test-Path -LiteralPath $env:GAMESPACE_7Z -PathType L
 }
 if (-not $sevenZip) {
     foreach ($name in @("7zz", "7z", "7za")) {
-        $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue
+        $command = Get-Command $name -CommandType Application -ErrorAction SilentlyContinue |
+            Select-Object -First 1
         if ($command) {
             $sevenZip = $command.Source
             break
