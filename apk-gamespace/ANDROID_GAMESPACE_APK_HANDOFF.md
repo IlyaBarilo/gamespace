@@ -50,7 +50,7 @@ apk-gamespace/
     settings.gradle
     build.gradle
     local.properties
-    debug.keystore
+    debug.keystore (создаваемый тестовый ключ, не хранится в репозитории)
     app/build.gradle
     app/src/main/AndroidManifest.xml
     app/src/main/assets/demo.7z
@@ -575,7 +575,8 @@ apk-gamespace/android-webview-loader/app/build/outputs/apk/debug/app-debug.apk
 9. `d8` создает `classes.dex`.
 10. `classes.dex` добавляется в APK.
 11. `zipalign` выравнивает APK.
-12. `apksigner` подписывает APK debug-ключом.
+12. `apksigner` подписывает локальную сборку тестовым ключом, а сборку GitHub
+    Release — постоянным релизным ключом из Actions Secrets.
 13. APK копируется в `release/GameSpace.apk`.
 
 7-Zip требуется для создания встроенного демо. Основной пользовательский сайт

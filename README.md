@@ -215,8 +215,10 @@ npm run build
 apk-gamespace\build-apk.bat build
 ```
 
+Команда создаёт локальный тестовый APK с отладочной подписью. Официальный APK
+для GitHub Release собирается только с постоянным ключом из Actions Secrets.
 Скрипт использует отдельное Android-окружение проекта. Требования, установка
-SDK и результат сборки описаны в
+SDK, подпись и результат сборки описаны в
 [`apk-gamespace/README_APK.md`](apk-gamespace/README_APK.md).
 
 ## Структура репозитория

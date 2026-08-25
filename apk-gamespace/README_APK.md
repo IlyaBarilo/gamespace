@@ -45,7 +45,12 @@ demo/
 apk-gamespace\build-apk.bat build
 ```
 
-Для проверки сборки с конкретной версией выпуска:
+Эта команда создаёт локальную тестовую сборку с автоматически создаваемым
+отладочным ключом. Она предназначена для проверки APK на собственном устройстве
+и не может обновлять официальные выпуски GameSpace. Публичные APK собирает
+GitHub Actions с постоянным релизным ключом.
+
+Для тестовой сборки с конкретным номером версии:
 
 ```bat
 apk-gamespace\build-apk.bat build 0.5
@@ -96,11 +101,16 @@ APK в автоматическом GitHub Release должен подписыв
 предыдущие версии. Workflow не создаёт новый ключ и останавливается, если
 секреты подписи не настроены.
 
-Чтобы передать существующий keystore в GitHub, откройте PowerShell из корня
-проекта и скопируйте его Base64-представление в буфер обмена:
+Для публичных выпусков нужен отдельный постоянный релизный keystore с сильным
+паролем. Автоматически создаваемый `debug.keystore` и стандартные значения
+`androiddebugkey`/`android` использовать для Release нельзя. Релизный keystore
+следует хранить вне репозитория как минимум в двух защищённых местах.
+
+Чтобы передать релизный keystore в GitHub, откройте PowerShell и скопируйте его
+Base64-представление в буфер обмена, подставив собственный закрытый путь:
 
 ```powershell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("apk-gamespace\android-webview-loader\debug.keystore")) | Set-Clipboard
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("C:\private\gamespace-release.p12")) | Set-Clipboard
 ```
 
 В настройках репозитория **Settings → Secrets and variables → Actions** нужно
@@ -109,14 +119,15 @@ APK в автоматическом GitHub Release должен подписыв
 | Secret | Значение |
 |---|---|
 | `GAMESPACE_APK_KEYSTORE_BASE64` | Строка из буфера обмена |
-| `GAMESPACE_APK_KEY_ALIAS` | Alias существующего ключа |
+| `GAMESPACE_APK_KEY_ALIAS` | Alias постоянного релизного ключа |
 | `GAMESPACE_APK_KEYSTORE_PASSWORD` | Пароль keystore |
 | `GAMESPACE_APK_KEY_PASSWORD` | Пароль ключа |
 
 Keystore, Base64-строку и пароли нельзя добавлять в репозиторий, Release или
-логи. После настройки GitHub Actions восстанавливает файл только во временном
-каталоге runner, подписывает APK, проверяет подпись и удаляет runner после
-завершения задания.
+логи. GitHub не является резервной копией ключа: сохранённое значение Secret
+нельзя посмотреть через интерфейс. После настройки GitHub Actions
+восстанавливает файл только во временном каталоге runner, подписывает APK,
+проверяет подпись и удаляет runner после завершения задания.
 
 ## Подготовка архива
 

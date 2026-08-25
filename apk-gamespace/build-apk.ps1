@@ -3,9 +3,10 @@ param(
     [string]$VersionName = "0.3.0",
     [Nullable[int]]$VersionCode = $null,
     [string]$KeystorePath = "",
-    [string]$KeystorePassword = "android",
-    [string]$KeyAlias = "androiddebugkey",
-    [string]$KeyPassword = "android",
+    [string]$KeystorePassword = "",
+    [string]$KeyAlias = "",
+    [string]$KeyPassword = "",
+    [switch]$AllowTestSigning,
     [switch]$RequireExistingKeystore,
     [switch]$Clean
 )
@@ -489,13 +490,13 @@ function Invoke-DirectSdkBuild($ProjectDir, $SdkDir) {
     if ($LASTEXITCODE -ne 0) { throw "zipalign failed with exit code $LASTEXITCODE" }
     Remove-Item -LiteralPath $dexedApk -Force -ErrorAction SilentlyContinue
 
-    $keystore = if ([string]::IsNullOrWhiteSpace($KeystorePath)) {
+    $keystore = if ($AllowTestSigning) {
         Join-Path $ProjectDir "debug.keystore"
     } else {
         [IO.Path]::GetFullPath($KeystorePath)
     }
     if (-not (Test-Path -LiteralPath $keystore -PathType Leaf)) {
-        if ($RequireExistingKeystore) {
+        if (-not $AllowTestSigning -or $RequireExistingKeystore) {
             throw "The required APK signing keystore was not found: $keystore"
         }
         $keystoreDirectory = Split-Path -Parent $keystore
@@ -534,6 +535,39 @@ function Invoke-DirectSdkBuild($ProjectDir, $SdkDir) {
 if ($Clean) {
     Clear-GeneratedBuildFiles $ProjectDir $ReleaseDir
     exit 0
+}
+
+$hasExplicitKeystore = -not [string]::IsNullOrWhiteSpace($KeystorePath)
+if ($AllowTestSigning -and $hasExplicitKeystore) {
+    throw "AllowTestSigning cannot be combined with KeystorePath. Remove AllowTestSigning when using a release signing key."
+}
+if ($AllowTestSigning -and $RequireExistingKeystore) {
+    throw "AllowTestSigning cannot be combined with RequireExistingKeystore."
+}
+
+if ($AllowTestSigning) {
+    $KeystorePassword = "android"
+    $KeyAlias = "androiddebugkey"
+    $KeyPassword = "android"
+    Write-Host "LOCAL TEST SIGNING: this APK cannot update an official release." -ForegroundColor Yellow
+} else {
+    if (-not $hasExplicitKeystore) {
+        throw "A release signing keystore is required. Pass KeystorePath, KeystorePassword, KeyAlias, and KeyPassword. For a local test APK, use AllowTestSigning explicitly."
+    }
+    $resolvedKeystorePath = [IO.Path]::GetFullPath($KeystorePath)
+    if (-not (Test-Path -LiteralPath $resolvedKeystorePath -PathType Leaf)) {
+        throw "The required APK signing keystore was not found: $resolvedKeystorePath"
+    }
+    $KeystorePath = $resolvedKeystorePath
+    foreach ($signingParameter in @{
+        KeystorePassword = $KeystorePassword
+        KeyAlias = $KeyAlias
+        KeyPassword = $KeyPassword
+    }.GetEnumerator()) {
+        if ([string]::IsNullOrWhiteSpace([string]$signingParameter.Value)) {
+            throw "The release signing parameter $($signingParameter.Key) is required."
+        }
+    }
 }
 
 $VersionName = Normalize-VersionName $VersionName

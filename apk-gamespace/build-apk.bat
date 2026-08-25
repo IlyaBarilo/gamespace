@@ -27,7 +27,7 @@ echo.
 echo GameSpace loader APK builder
 echo This APK does not include the site files.
 echo.
-echo 1 - Build APK
+echo 1 - Build local test APK
 echo 2 - Clean generated files
 echo.
 choice /C 12 /N /M "Choose mode [1/2]: "
@@ -35,7 +35,7 @@ if errorlevel 2 goto clean
 if errorlevel 1 goto build
 
 :build
-set "BUILD_ARGS="
+set "BUILD_ARGS=-AllowTestSigning"
 goto run
 
 :clean
@@ -78,9 +78,12 @@ exit /b %EXITCODE%
 echo.
 echo Usage:
 echo   build-apk.bat       - show menu
-echo   build-apk.bat build - build loader APK
-echo   build-apk.bat build 0.5 - build APK with a release version
+echo   build-apk.bat build - build a local test APK
+echo   build-apk.bat build 0.5 - build a local test APK with version 0.5
 echo   build-apk.bat clean - remove build output and release APK
+echo.
+echo Public GitHub Releases use the permanent signing key from Actions Secrets.
+echo The local test key must not be used for a public release.
 echo.
 echo Ready APK path:
 echo   release\GameSpace.apk
