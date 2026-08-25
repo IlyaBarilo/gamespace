@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants, copyFile, mkdir, readdir, readFile } from "node:fs/promises";
+import { constants, copyFile, mkdir, readdir, readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -58,6 +58,20 @@ export async function readJson(file) {
 
 export async function sha256File(file) {
   return createHash("sha256").update(await readFile(file)).digest("hex");
+}
+
+export async function verifyManifestDirectory(root, manifest) {
+  for (const file of manifest.files) {
+    const absolute = path.join(root, ...file.path.split("/"));
+    const info = await stat(absolute);
+    if (info.size !== file.size) {
+      throw new Error(`Файл ${file.path} изменён после подготовки выпуска: размер ${info.size}, ожидался ${file.size}.`);
+    }
+    const hash = await sha256File(absolute);
+    if (hash !== file.sha256) {
+      throw new Error(`Файл ${file.path} изменён после подготовки выпуска: SHA-256 не совпадает.`);
+    }
+  }
 }
 
 export async function listFiles(root, current = root) {

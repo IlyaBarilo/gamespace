@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { verifyDemoArchive } from "./verify-demo-archive.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.resolve(scriptDirectory, "..");
@@ -20,3 +21,5 @@ await new Promise((resolve, reject) => {
 
 const archiveInfo = await stat(targetArchive);
 console.log(`Собран demo.7z из каталога demo/ (${archiveInfo.size} байт).`);
+const verification = await verifyDemoArchive({ archivePath: targetArchive });
+console.log(`Проверено точное совпадение demo.7z с demo/: файлов ${verification.files}, каталогов ${verification.directories}.`);

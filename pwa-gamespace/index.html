@@ -267,9 +267,12 @@
               <span id="storageBarText">0%</span>
             </div>
             <div class="storage-copy">
-              <strong id="storageUsage">— занято</strong>
-              <span id="storageQuota">— доступная квота</span>
+              <strong id="storageManaged">Сайт GameSpace: —</strong>
+              <span id="storageFiles">— файлов в OPFS</span>
+              <span id="storageUsage">Оценка браузера: —</span>
+              <span id="storageQuota">Доступная квота: —</span>
               <div class="bar-track"><span id="storageBar"></span></div>
+              <button id="storageVerifyButton" class="storage-verify-button" type="button">Перепроверить файлы</button>
             </div>
           </div>
         </article>
@@ -307,7 +310,7 @@
             <span><strong>Проверить версии PWA</strong><small>Требуется подключение к интернету</small></span>
           </button>
           <button id="rollbackPwaButton" class="version-secondary-button" type="button" disabled>Вернуться к предыдущей версии</button>
-          <a class="recovery-link" href="./__gamespace_recovery__/">Открыть страницу восстановления</a>
+          <a id="recoveryLink" class="recovery-link" href="./__gamespace_recovery__/">Открыть страницу восстановления</a>
         </div>
         <div id="pwaVersionsList" class="release-list" hidden></div>
       </section>

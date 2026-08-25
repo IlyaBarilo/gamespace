@@ -8,6 +8,7 @@ import {
   readJson,
   releasesDirectory,
   validateVersion,
+  verifyManifestDirectory,
 } from "./release-utils.mjs";
 
 const latestVersion = validateVersion(process.argv[2]);
@@ -56,6 +57,7 @@ await writeFile(path.join(pagesDirectory, "latest.json"), `${JSON.stringify({
   schema: 1,
   ...releases.find((release) => release.version === latestVersion),
 }, null, 2)}\n`, "utf8");
-await writeFile(path.join(pagesDirectory, "version.json"), `${JSON.stringify({ version: latestVersion }, null, 2)}\n`, "utf8");
 await writeFile(path.join(pagesDirectory, ".nojekyll"), "", "utf8");
+
+await verifyManifestDirectory(pagesDirectory, latestManifest);
 console.log(`Собран GitHub Pages: последняя версия ${latestVersion}, выпусков ${releases.length}, каталог ${pagesDirectory}.`);

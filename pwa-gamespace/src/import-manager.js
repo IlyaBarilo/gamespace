@@ -16,6 +16,7 @@ import {
   mergeDirectoryWithRollback,
   removePath,
   rollbackMergedDirectory,
+  summarizeDirectory,
 } from "./opfs.js";
 
 const APP_ROOT = "gamespace";
@@ -76,6 +77,11 @@ export async function installFullArchive(file, onEvent) {
     if (!await fileExists(root, indexStoragePath)) {
       throw new Error("Распаковка закончилась, но index.html отсутствует в OPFS.");
     }
+    const revisionDirectory = await getDirectoryAt(root, revisionPath, false);
+    const stored = await summarizeDirectory(revisionDirectory);
+    if (stored.files !== result.files || stored.bytes !== result.uncompressedBytes) {
+      throw new Error(`Проверка OPFS не пройдена: сохранено ${stored.files} файлов (${stored.bytes} байт), ожидалось ${result.files} файлов (${result.uncompressedBytes} байт).`);
+    }
 
     const state = {
       schema: 1,
@@ -90,9 +96,10 @@ export async function installFullArchive(file, onEvent) {
       installedAt: Date.now(),
       operation: "full",
       operationDurationMs: Date.now() - startedAt,
-      writtenBytes: result.writtenBytes,
-      files: result.files,
+      writtenBytes: stored.bytes,
+      files: stored.files,
       entries: result.entries,
+      storageVerifiedAt: Date.now(),
     };
     await writeState(state);
     emitServiceWorkerStateChanged();
@@ -152,6 +159,8 @@ export async function applyUpdateArchive(file, onEvent) {
     if (!await fileExists(root, `${state.revisionPath}/${state.indexPath}`)) {
       throw new Error("После обновления не найден установленный index.html.");
     }
+    const targetDirectory = await getDirectoryAt(root, state.revisionPath, false);
+    const stored = await summarizeDirectory(targetDirectory);
 
     const updatedState = {
       ...state,
@@ -161,9 +170,10 @@ export async function applyUpdateArchive(file, onEvent) {
       installedAt: Date.now(),
       operation: "fast",
       operationDurationMs: Date.now() - startedAt,
-      writtenBytes: result.writtenBytes,
-      files: merge.files,
+      writtenBytes: stored.bytes,
+      files: stored.files,
       entries: result.entries,
+      storageVerifiedAt: Date.now(),
     };
     await commitStateAndClearOperationJournal(updatedState);
     mergeJournal = null;
@@ -195,6 +205,25 @@ export async function removeInstalledSite() {
   await removePath(root, ROLLBACK_ROOT).catch(() => {});
   await clearState();
   emitServiceWorkerStateChanged();
+}
+
+export async function refreshInstalledSiteStatistics(currentState = null) {
+  const installedState = currentState || await readState();
+  if (!installedState?.revisionPath) return { state: installedState, files: 0, bytes: 0 };
+  const root = await getOpfsRoot();
+  const directory = await getDirectoryAt(root, installedState.revisionPath, false);
+  const stored = await summarizeDirectory(directory);
+  if (!await fileExists(root, `${installedState.revisionPath}/${installedState.indexPath}`)) {
+    throw new Error("В хранилище не найден стартовый файл установленного сайта.");
+  }
+  const updatedState = {
+    ...installedState,
+    files: stored.files,
+    writtenBytes: stored.bytes,
+    storageVerifiedAt: Date.now(),
+  };
+  await writeState(updatedState);
+  return { state: updatedState, ...stored };
 }
 
 export async function cleanupOrphans(state = null) {

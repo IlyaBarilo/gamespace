@@ -910,7 +910,7 @@ a:focus-visible {
 }
 
 .storage-copy > span {
-  margin-top: 6px;
+  margin-top: 5px;
   color: var(--soft);
   font-size: 0.77rem;
 }
@@ -928,6 +928,22 @@ a:focus-visible {
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, var(--blue), var(--blue-bright));
+}
+
+.storage-verify-button {
+  margin-top: 14px;
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--blue-bright);
+  background: rgba(0, 116, 184, 0.13);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.storage-verify-button:hover {
+  border-color: var(--line-strong);
+  background: rgba(0, 116, 184, 0.22);
 }
 
 .action-stack {

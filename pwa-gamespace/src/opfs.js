@@ -72,6 +72,22 @@ export async function collectFiles(directory, prefix = "") {
   return files;
 }
 
+export async function summarizeDirectory(directory) {
+  const summary = { files: 0, bytes: 0 };
+  for await (const [, handle] of directory.entries()) {
+    if (handle.kind === "directory") {
+      const nested = await summarizeDirectory(handle);
+      summary.files += nested.files;
+      summary.bytes += nested.bytes;
+    } else {
+      const file = await handle.getFile();
+      summary.files += 1;
+      summary.bytes += file.size;
+    }
+  }
+  return summary;
+}
+
 export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal }) {
   const root = await getOpfsRoot();
   const sourceDirectory = await getDirectoryAt(root, sourcePath, false);

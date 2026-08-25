@@ -1,7 +1,13 @@
 import "./styles.css";
 import { readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
-import { cleanupOrphans, installFullArchive, applyUpdateArchive, removeInstalledSite } from "./import-manager.js";
+import {
+  cleanupOrphans,
+  installFullArchive,
+  applyUpdateArchive,
+  refreshInstalledSiteStatistics,
+  removeInstalledSite,
+} from "./import-manager.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 
@@ -64,9 +70,8 @@ bootWatchdog = window.setTimeout(() => {
   if (!document.documentElement.classList.contains("gamespace-boot-pending")) return;
   showAppShell();
   finishBoot();
-  setStatus("Запуск приложения не завершён", "bad");
-  showError(new Error("GameSpace не смог завершить запуск. Обновите окно приложения или полностью закройте и снова откройте его."));
-}, 15_000);
+  setStatus("Подготавливаю автономный запуск…", "neutral");
+}, 10_000);
 
 function setBusy(value) {
   busy = value;
@@ -86,6 +91,7 @@ function renderState() {
   elements.fastUpdateButton.disabled = !installed || busy;
   elements.fullUpdateButton.disabled = busy;
   elements.removeSiteButton.disabled = !installed || busy;
+  elements.storageVerifyButton.disabled = !installed || busy;
 
   if (!installed) {
     elements.siteSummary.textContent = "Основной сайт ещё не установлен";
@@ -247,16 +253,48 @@ function attachFrameGuards() {
 }
 
 async function refreshStorage() {
-  if (!navigator.storage?.estimate) return;
+  const managedBytes = state?.writtenBytes || 0;
+  const managedFiles = Number(state?.files || 0);
+  elements.storageManaged.textContent = state ? `Сайт GameSpace: ${formatBytes(managedBytes)}` : "Сайт GameSpace: не установлен";
+  elements.storageFiles.textContent = state ? `${managedFiles.toLocaleString("ru-RU")} файлов в OPFS` : "0 файлов в OPFS";
+  if (!navigator.storage?.estimate) {
+    elements.storageUsage.textContent = "Оценка браузера: недоступна";
+    elements.storageQuota.textContent = "Доступная квота: не сообщается";
+    elements.storageBar.style.width = "0%";
+    elements.storageRing.style.setProperty("--fill", "0deg");
+    elements.storageBarText.textContent = "—";
+    elements.storagePersistent.textContent = "Не определено";
+    return;
+  }
   const estimate = await navigator.storage.estimate();
-  elements.storageUsage.textContent = formatBytes(estimate.usage || 0);
-  elements.storageQuota.textContent = formatBytes(estimate.quota || 0);
-  const percent = estimate.quota ? Math.min(100, Math.round((estimate.usage || 0) / estimate.quota * 100)) : 0;
+  elements.storageUsage.textContent = `Оценка браузера: ${formatBytes(estimate.usage || 0)}`;
+  elements.storageQuota.textContent = `Доступная квота: ${formatBytes(estimate.quota || 0)}`;
+  const percent = estimate.quota ? Math.min(100, (estimate.usage || 0) / estimate.quota * 100) : 0;
   elements.storageBar.style.width = `${percent}%`;
   elements.storageRing.style.setProperty("--fill", `${percent * 3.6}deg`);
-  elements.storageBarText.textContent = `${percent}%`;
+  elements.storageBarText.textContent = percent > 0 && percent < 0.1
+    ? "<0,1%"
+    : `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
   const persisted = await navigator.storage.persisted?.().catch(() => false);
   elements.storagePersistent.textContent = persisted ? "Постоянное" : "По решению браузера";
+}
+
+async function verifyStoredSite() {
+  if (!state || busy) return;
+  setBusy(true);
+  setStatus("Перепроверяю файлы сайта", "neutral");
+  try {
+    const result = await refreshInstalledSiteStatistics(state);
+    state = result.state;
+    renderState();
+    await refreshStorage();
+    setStatus(`Проверено: ${result.files.toLocaleString("ru-RU")} файлов, ${formatBytes(result.bytes)}`, "good");
+  } catch (error) {
+    showError(error);
+    setStatus("Проверка файлов не выполнена", "bad");
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function ensureServiceWorker() {
@@ -273,7 +311,13 @@ async function ensureServiceWorker() {
     });
   }
   if (!serviceWorkerRegistration.active) {
-    serviceWorkerRegistration = await navigator.serviceWorker.ready;
+    const pendingWorker = serviceWorkerRegistration.installing || serviceWorkerRegistration.waiting;
+    if (pendingWorker) await waitForWorkerInstalled(pendingWorker, 60_000);
+    serviceWorkerRegistration = await withTimeout(
+      navigator.serviceWorker.ready,
+      60_000,
+      "Service Worker не активировался за одну минуту. Проверьте подключение и повторите запуск.",
+    );
   }
 
   const worker = serviceWorkerRegistration.active
@@ -570,6 +614,10 @@ async function initialize() {
   let initialViewerOpened = false;
   try {
     state = await readState();
+    if (state && !state.storageVerifiedAt) {
+      const result = await refreshInstalledSiteStatistics(state);
+      state = result.state;
+    }
     renderState();
 
     if (state && navigator.serviceWorker?.controller) {
@@ -618,8 +666,19 @@ elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"))
 elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
 elements.landingVersionsButton.addEventListener("click", () => checkForPwaUpdate("landing"));
 elements.rollbackPwaButton.addEventListener("click", rollbackPwaRelease);
+elements.recoveryLink.addEventListener("click", async (event) => {
+  event.preventDefault();
+  try {
+    await ensureServiceWorker();
+    location.assign(elements.recoveryLink.href);
+  } catch (error) {
+    showError(error);
+    setStatus("Страница восстановления пока недоступна", "bad");
+  }
+});
 elements.archiveInput.addEventListener("change", () => importSelectedFile(elements.archiveInput.files?.[0]));
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
+elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerClose.addEventListener("click", closeViewer);
 elements.viewerHome.addEventListener("click", () => {
   elements.siteFrame.src = contentIndexUrl();
