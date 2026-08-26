@@ -622,7 +622,7 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     metadata.textContent = parts.join(" · ") || "Опубликованный выпуск";
     copy.append(title, metadata);
     const button = document.createElement("button");
-    button.className = "version-secondary-button";
+    button.className = "version-secondary-button release-install-button";
     button.type = "button";
     button.dataset.fixedDisabled = current ? "true" : "false";
     button.disabled = current || busy;
@@ -643,8 +643,9 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     description.addEventListener("toggle", updateToggleText);
     updateToggleText();
     description.append(descriptionToggle, descriptionText);
-    header.append(copy, button);
-    article.append(header, description);
+    header.append(copy);
+    // UX contract: the release description always precedes its install button.
+    article.append(header, description, button);
     return article;
 }
 

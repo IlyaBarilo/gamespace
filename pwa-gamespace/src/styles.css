@@ -1033,6 +1033,7 @@ a:focus-visible {
 }
 
 .release-option {
+  display: grid;
   padding: 14px 16px;
   border: 1px solid rgba(104, 171, 226, 0.28);
   border-radius: 14px;
@@ -1040,10 +1041,7 @@ a:focus-visible {
 }
 
 .release-option-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: center;
+  min-width: 0;
 }
 
 .release-option strong,
@@ -1058,6 +1056,11 @@ a:focus-visible {
 
 .release-option button {
   min-width: 128px;
+}
+
+.release-install-button {
+  justify-self: end;
+  margin-top: 12px;
 }
 
 .release-description-panel {
@@ -1613,8 +1616,9 @@ body.is-busy button:not(#errorClose) {
     flex-direction: column;
   }
 
-  .release-option-header {
-    grid-template-columns: 1fr;
+  .release-install-button {
+    width: 100%;
+    justify-self: stretch;
   }
 
   .hero {

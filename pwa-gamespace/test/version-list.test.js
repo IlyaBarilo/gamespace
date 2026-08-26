@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   getVersionBatch,
@@ -27,4 +28,10 @@ test("expands only versions newer than the active release", () => {
 
 test("preserves release description line breaks", () => {
   assert.equal(normalizeReleaseDescription("Первая строка\r\n\r\n- пункт"), "Первая строка\n\n- пункт");
+});
+
+test("renders every release description above its install button", async () => {
+  const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(appSource, /article\.append\(header, description, button\);/);
+  assert.doesNotMatch(appSource, /header\.append\(copy, button\);/);
 });
