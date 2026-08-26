@@ -6,6 +6,7 @@ import {
   listFiles,
   projectDirectory,
   readJson,
+  releaseLicenseBundleVersion,
   releasesDirectory,
   sha256File,
   validateVersion,
@@ -55,6 +56,7 @@ for (const relative of paths) {
 
 const manifest = {
   schema: 1,
+  licenseBundle: releaseLicenseBundleVersion,
   product: "gamespace-pwa",
   version,
   runtime: releaseInfo.runtime,

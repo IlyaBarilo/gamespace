@@ -41,6 +41,8 @@ export const requiredReleaseThirdPartySourceFiles = Object.freeze([
   "third_party/sources/un7z-opfs-1.0.2/un7z-opfs-1.0.2.tgz",
 ]);
 
+export const releaseLicenseBundleVersion = 1;
+
 export function verifyRequiredReleaseLicenseFiles(paths, label = "выпуск") {
   const available = new Set(paths);
   for (const required of requiredReleaseLicenseFiles) {
@@ -59,6 +61,17 @@ export function verifyRequiredReleaseLicenseFiles(paths, label = "выпуск")
       throw new Error(`В ${label} отсутствует обязательный архив исходного кода: ${required}.`);
     }
   }
+}
+
+export function verifyReleaseLicenseBundle(manifest, paths, label = "выпуск") {
+  if (manifest.licenseBundle === undefined) {
+    return false;
+  }
+  if (manifest.licenseBundle !== releaseLicenseBundleVersion) {
+    throw new Error(`В ${label} указана неподдерживаемая версия лицензионного комплекта: ${manifest.licenseBundle}.`);
+  }
+  verifyRequiredReleaseLicenseFiles(paths, label);
+  return true;
 }
 
 export function normalizeVersion(version) {

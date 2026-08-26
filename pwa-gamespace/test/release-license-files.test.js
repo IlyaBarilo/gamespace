@@ -5,6 +5,8 @@ import {
   requiredReleaseLicenseFiles,
   requiredReleaseThirdPartyLicenseFiles,
   requiredReleaseThirdPartySourceFiles,
+  releaseLicenseBundleVersion,
+  verifyReleaseLicenseBundle,
   verifyRequiredReleaseLicenseFiles,
 } from "../scripts/release-utils.mjs";
 import { verifyRequiredDemoLicenseFiles } from "../scripts/verify-demo-archive.mjs";
@@ -27,6 +29,27 @@ test("release license verification requires the complete public license set", ()
   assert.throws(
     () => verifyRequiredReleaseLicenseFiles(paths.filter((file) => file !== "third_party/sources/un7z-opfs-1.0.2/7zip-26.02-source.tar.gz")),
     /7zip-26\.02-source\.tar\.gz/,
+  );
+});
+
+test("release license bundle verification preserves immutable legacy releases", () => {
+  const paths = [
+    ...requiredReleaseLicenseFiles,
+    ...requiredReleaseThirdPartyLicenseFiles.map((name) => `third_party/licenses/${name}`),
+    ...requiredReleaseThirdPartySourceFiles,
+  ];
+  assert.equal(verifyReleaseLicenseBundle({}, [], "старом выпуске"), false);
+  assert.equal(
+    verifyReleaseLicenseBundle({ licenseBundle: releaseLicenseBundleVersion }, paths, "новом выпуске"),
+    true,
+  );
+  assert.throws(
+    () => verifyReleaseLicenseBundle({ licenseBundle: releaseLicenseBundleVersion }, [], "новом выпуске"),
+    /LICENSE\.txt/,
+  );
+  assert.throws(
+    () => verifyReleaseLicenseBundle({ licenseBundle: releaseLicenseBundleVersion + 1 }, paths, "выпуске"),
+    /неподдерживаемая версия/,
   );
 });
 
