@@ -342,6 +342,18 @@
         <button id="removeSiteButton" class="danger-button" type="button">Удалить распакованный сайт</button>
       </section>
 
+      <section class="panel licenses-panel">
+        <div class="licenses-copy">
+          <p class="section-kicker">О ПРИЛОЖЕНИИ</p>
+          <h2>Лицензии</h2>
+          <p>MIT License, условия использования фирменных и демонстрационных материалов, а также лицензии сторонних компонентов.</p>
+        </div>
+        <button id="openLicensesButton" class="action-button license-open-button" type="button">
+          <span class="action-symbol">§</span>
+          <span><strong>Открыть лицензии</strong><small>Документы доступны без интернета</small></span>
+        </button>
+      </section>
+
       <footer class="app-footer">
         <span>GameSpace PWA · версия 0.3.0</span>
         <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
@@ -350,6 +362,27 @@
 
       <input id="archiveInput" type="file" accept=".7z,.zip,application/x-7z-compressed,application/zip" hidden>
     </main>
+
+    <div id="licenseModal" class="license-modal" hidden>
+      <button id="licenseModalBackdrop" class="license-modal-backdrop" type="button" aria-label="Закрыть лицензии"></button>
+      <section class="license-modal-card" role="dialog" aria-modal="true" aria-labelledby="licenseModalTitle">
+        <header class="license-modal-header">
+          <div>
+            <p class="section-kicker">ДОКУМЕНТЫ GAMESPACE</p>
+            <h2 id="licenseModalTitle">Лицензии</h2>
+          </div>
+          <button id="closeLicensesButton" class="license-close-button" type="button" aria-label="Закрыть">×</button>
+        </header>
+        <div class="license-modal-body">
+          <nav id="licenseDocumentList" class="license-document-list" aria-label="Список лицензионных документов"></nav>
+          <article class="license-document-viewer">
+            <h3 id="licenseDocumentTitle">Выберите документ</h3>
+            <p id="licenseDocumentStatus" class="license-document-status" role="status"></p>
+            <pre id="licenseDocumentContent" tabindex="0"></pre>
+          </article>
+        </div>
+      </section>
+    </div>
 
     <section id="viewer" class="viewer" hidden>
       <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">

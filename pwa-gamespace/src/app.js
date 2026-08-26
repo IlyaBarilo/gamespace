@@ -16,6 +16,10 @@ import {
   normalizeReleaseDescription,
   shouldExpandDescription,
 } from "./version-list.js";
+import {
+  fetchLicenseDocument,
+  licenseDocumentGroups,
+} from "./license-documents.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -30,6 +34,8 @@ let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
 let siteInterfaceRefreshTimer = null;
+let licenseModalPreviousFocus = null;
+let licenseDocumentRequest = 0;
 const progressEstimator = new ProgressEstimator();
 let progressUnit = null;
 
@@ -95,6 +101,64 @@ function setBusy(value) {
   elements.archiveInput.disabled = value;
   renderState();
   elements.rollbackPwaButton.disabled = value || !runtimeState?.previousVersion;
+}
+
+function renderLicenseDocumentList() {
+  if (elements.licenseDocumentList.childElementCount) return;
+  for (const group of licenseDocumentGroups) {
+    const heading = document.createElement("p");
+    heading.className = "license-group-title";
+    heading.textContent = group.title;
+    elements.licenseDocumentList.append(heading);
+    for (const licenseDocument of group.documents) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "license-document-button";
+      button.textContent = licenseDocument.title;
+      button.addEventListener("click", () => { void showLicenseDocument(licenseDocument, button); });
+      elements.licenseDocumentList.append(button);
+    }
+  }
+}
+
+async function showLicenseDocument(licenseDocument, button) {
+  const request = ++licenseDocumentRequest;
+  for (const item of elements.licenseDocumentList.querySelectorAll("button")) {
+    item.classList.toggle("is-active", item === button);
+  }
+  elements.licenseDocumentTitle.textContent = licenseDocument.title;
+  elements.licenseDocumentStatus.textContent = "Открываю документ…";
+  elements.licenseDocumentContent.textContent = "";
+  try {
+    const content = await fetchLicenseDocument(licenseDocument.path);
+    if (request !== licenseDocumentRequest) return;
+    elements.licenseDocumentStatus.textContent = "";
+    elements.licenseDocumentContent.textContent = content;
+    elements.licenseDocumentContent.scrollTop = 0;
+  } catch (error) {
+    if (request !== licenseDocumentRequest) return;
+    elements.licenseDocumentStatus.textContent = errorMessage(error);
+  }
+}
+
+function openLicenses() {
+  renderLicenseDocumentList();
+  licenseModalPreviousFocus = document.activeElement;
+  elements.licenseModal.hidden = false;
+  elements.appShell.inert = true;
+  document.body.classList.add("license-modal-open");
+  elements.closeLicensesButton.focus();
+  const firstButton = elements.licenseDocumentList.querySelector("button");
+  if (firstButton) firstButton.click();
+}
+
+function closeLicenses() {
+  licenseDocumentRequest += 1;
+  elements.licenseModal.hidden = true;
+  elements.appShell.inert = false;
+  document.body.classList.remove("license-modal-open");
+  licenseModalPreviousFocus?.focus?.();
+  licenseModalPreviousFocus = null;
 }
 
 function renderState() {
@@ -790,6 +854,9 @@ elements.demoButton.addEventListener("click", async () => {
 elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full"));
 elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"));
 elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
+elements.openLicensesButton.addEventListener("click", openLicenses);
+elements.closeLicensesButton.addEventListener("click", closeLicenses);
+elements.licenseModalBackdrop.addEventListener("click", closeLicenses);
 elements.landingVersionsButton.addEventListener("click", () => checkForPwaUpdate("landing"));
 elements.rollbackPwaButton.addEventListener("click", rollbackPwaRelease);
 elements.recoveryLink.addEventListener("click", async (event) => {
@@ -892,6 +959,12 @@ window.addEventListener("offline", () => {
 });
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && !elements.viewer.hidden) showViewerToolbar();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !elements.licenseModal.hidden) {
+    event.preventDefault();
+    closeLicenses();
+  }
 });
 
 if (import.meta.env.DEV && new URLSearchParams(location.search).has("gamespaceE2E")) {

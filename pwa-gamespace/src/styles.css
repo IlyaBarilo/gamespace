@@ -1181,6 +1181,187 @@ a:focus-visible {
   background: rgba(125, 20, 56, 0.24);
 }
 
+.licenses-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 0.55fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.licenses-copy h2,
+.licenses-copy p {
+  margin: 0;
+}
+
+.licenses-copy > p:last-child {
+  max-width: 650px;
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.license-open-button {
+  margin: 0;
+}
+
+body.license-modal-open {
+  overflow: hidden;
+}
+
+.license-modal {
+  position: fixed;
+  z-index: 200;
+  inset: 0;
+  display: grid;
+  padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+  place-items: center;
+}
+
+.license-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: rgba(0, 7, 20, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.license-modal-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1040px, 100%);
+  height: min(780px, 100%);
+  overflow: hidden;
+  border: 1px solid rgba(112, 190, 244, 0.48);
+  border-radius: 23px;
+  background: #071a36;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58);
+}
+
+.license-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(9, 36, 71, 0.98);
+}
+
+.license-modal-header h2 {
+  margin: 0;
+}
+
+.license-close-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--text);
+  background: rgba(64, 122, 177, 0.18);
+  font-size: 1.5rem;
+}
+
+.license-modal-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(230px, 0.34fr) minmax(0, 1fr);
+}
+
+.license-document-list {
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  background: rgba(4, 22, 46, 0.82);
+}
+
+.license-group-title {
+  margin: 16px 8px 8px;
+  color: var(--soft);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.license-group-title:first-child {
+  margin-top: 0;
+}
+
+.license-document-button {
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px 11px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: #dceefe;
+  background: transparent;
+  font-size: 0.77rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.license-document-button:hover,
+.license-document-button.is-active {
+  border-color: rgba(118, 212, 255, 0.4);
+  background: rgba(0, 116, 184, 0.22);
+}
+
+.license-document-button.is-active {
+  color: #fff;
+  box-shadow: inset 3px 0 0 var(--blue-bright);
+}
+
+.license-document-viewer {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  padding: 22px;
+}
+
+.license-document-viewer h3 {
+  margin: 0 0 12px;
+  color: #eef8ff;
+  font-size: 1rem;
+}
+
+.license-document-status {
+  min-height: 1.3em;
+  margin: 0 0 8px;
+  color: #ffd47c;
+  font-size: 0.76rem;
+}
+
+.license-document-content {
+  min-height: 0;
+}
+
+#licenseDocumentContent {
+  min-width: 0;
+  margin: 0;
+  padding: 18px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: #dbeaf8;
+  background: rgba(1, 13, 29, 0.82);
+  font: 0.76rem/1.55 ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 body.is-busy button:not(#errorClose) {
   pointer-events: none;
 }
@@ -1355,6 +1536,20 @@ body.is-busy button:not(#errorClose) {
     gap: 18px;
   }
 
+  .licenses-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .license-modal-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 0.42fr) minmax(0, 1fr);
+  }
+
+  .license-document-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
   .details-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1481,6 +1676,23 @@ body.is-busy button:not(#errorClose) {
 
   .details-list dd {
     white-space: normal;
+  }
+
+  .license-modal {
+    padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom));
+  }
+
+  .license-modal-card {
+    border-radius: 17px;
+  }
+
+  .license-modal-header,
+  .license-document-viewer {
+    padding: 16px;
+  }
+
+  .license-document-list {
+    padding: 12px;
   }
 }
 
