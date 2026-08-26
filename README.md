@@ -10,6 +10,8 @@ GameSpace запускает локальный HTML/CSS/JavaScript-сайт и�
 
 ![Страница установки PWA и локальный каталог в PWA и APK](docs/images/gamespace-overview.webp)
 
+*На иллюстрации показан интерфейс GameSpace PWA и APK версии 0.3.4.*
+
 Автор: [Илья Барило (Ilya Barilo)](https://barilo.ru)
 
 > **Статус:** GameSpace APK в основном завершён и поддерживается по мере
@@ -253,11 +255,11 @@ site.7z
     </td>
     <td align="center">
       <a href="docs/images/apk-import.webp"><img src="docs/images/apk-import.webp" width="230" alt="Выбор встроенного демо или собственного архива в GameSpace APK"></a>
-      <br><strong>APK: демо или архив</strong>
+      <br><strong>APK 0.3.4: демо или архив</strong>
     </td>
     <td align="center">
       <a href="docs/images/pwa-result.webp"><img src="docs/images/pwa-result.webp" width="230" alt="Пример игр встроенного демонстрационного сайта в GameSpace PWA"></a>
-      <br><strong>Пример демо-игр</strong>
+      <br><strong>PWA 0.3.4: пример демо-игр</strong>
     </td>
   </tr>
 </table>

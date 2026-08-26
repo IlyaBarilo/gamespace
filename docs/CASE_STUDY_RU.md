@@ -11,6 +11,8 @@ GameSpace — два варианта одного продукта для ус�
 
 ![Страница установки PWA и локальный каталог в PWA и APK](images/gamespace-overview.webp)
 
+*На иллюстрации показан интерфейс GameSpace PWA и APK версии 0.3.4.*
+
 ## Исходная задача
 
 Учебные игры, тесты, визуальные новеллы и другие HTML-проекты часто остаются
@@ -97,7 +99,7 @@ PWA даёт вариант без магазина приложений для 
     </td>
     <td align="center">
       <a href="images/pwa-result.webp"><img src="images/pwa-result.webp" width="150" alt="Демонстрационный каталог, открытый в установленной PWA"></a>
-      <br><sub>5. Открыть каталог</sub>
+      <br><sub>5. Открыть каталог (PWA 0.3.4)</sub>
     </td>
   </tr>
 </table>
@@ -117,11 +119,11 @@ GameSpace можно начать использовать одним из дв�
   <tr>
     <td align="center">
       <a href="images/apk-import.webp"><img src="images/apk-import.webp" width="320" alt="Экран APK с выбором архива и установкой встроенного демо"></a>
-      <br><strong>Демо или собственный архив</strong>
+      <br><strong>APK 0.3.4: демо или собственный архив</strong>
     </td>
     <td align="center">
       <a href="images/apk-catalog.webp"><img src="images/apk-catalog.webp" width="320" alt="Локальный демонстрационный каталог, открытый в GameSpace APK"></a>
-      <br><strong>Примеры встроенного демо</strong>
+      <br><strong>APK 0.3.4: примеры встроенного демо</strong>
     </td>
   </tr>
 </table>
