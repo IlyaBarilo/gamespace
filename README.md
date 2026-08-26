@@ -3,6 +3,7 @@
 [Установить PWA](https://ilyabarilo.github.io/gamespace/) ·
 [Установить APK](https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk) ·
 [Кейс разработки](docs/CASE_STUDY_RU.md) ·
+[Проверенные устройства](docs/TESTED_DEVICES_RU.md) ·
 [Документация PWA](pwa-gamespace/README.md)
 
 GameSpace запускает локальный HTML/CSS/JavaScript-сайт из архива на планшете
@@ -55,6 +56,9 @@ GameSpace представлен двумя приложениями с общи
 Функциональность APK и PWA поддерживается максимально близкой, насколько это
 позволяют ограничения Android, iOS и браузеров. Изменения формата архива не
 должны требовать подготовки разных пакетов для двух приложений.
+
+Фактические результаты ручных проверок PWA и APK приведены в
+[матрице проверенных устройств](docs/TESTED_DEVICES_RU.md).
 
 ## Быстрый старт
 
