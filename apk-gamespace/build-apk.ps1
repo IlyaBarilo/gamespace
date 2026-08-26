@@ -21,6 +21,7 @@ $StringsPath = Join-Path $ProjectDir "app\src\main\res\values\strings.xml"
 $DemoSourceDirectory = Join-Path $WorkspaceDir "demo"
 $DemoBuilderScript = Join-Path $WorkspaceDir "tools\build-demo.ps1"
 $AssetsDemoArchivePath = Join-Path $ProjectDir "app\src\main\assets\demo.7z"
+$LicenseAssetsDirectory = Join-Path $ProjectDir "app\src\main\assets\licenses"
 $MinSdkVersion = 23
 $TargetSdkVersion = 36
 
@@ -269,6 +270,67 @@ function Test-RequiredProjectFiles($ProjectDir) {
         if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
             throw "Required project file is missing: $relative"
         }
+    }
+}
+
+function Get-FileSha256($Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace("-", "")
+    } finally {
+        $algorithm.Dispose()
+        $stream.Dispose()
+    }
+}
+
+function Test-MatchingLicenseFile($SourcePath, $AssetPath, $Label) {
+    if (-not (Test-Path -LiteralPath $SourcePath -PathType Leaf)) {
+        throw "License source file is missing: $SourcePath"
+    }
+    if (-not (Test-Path -LiteralPath $AssetPath -PathType Leaf)) {
+        throw "APK license asset is missing: $Label"
+    }
+
+    $sourceHash = Get-FileSha256 $SourcePath
+    $assetHash = Get-FileSha256 $AssetPath
+    if ($sourceHash -ne $assetHash) {
+        throw "APK license asset does not match its source: $Label"
+    }
+}
+
+function Test-ApkLicenseAssets($WorkspaceDir, $LicenseAssetsDirectory) {
+    $rootFiles = @(
+        @{ Source = (Join-Path $WorkspaceDir "LICENSE"); Asset = "LICENSE.txt" },
+        @{ Source = (Join-Path $WorkspaceDir "BRAND_ASSETS_LICENSE.md"); Asset = "BRAND_ASSETS_LICENSE.md" },
+        @{ Source = (Join-Path $WorkspaceDir "demo\DEMO_CONTENT_LICENSE.md"); Asset = "DEMO_CONTENT_LICENSE.md" },
+        @{ Source = (Join-Path $WorkspaceDir "THIRD_PARTY_NOTICES.md"); Asset = "THIRD_PARTY_NOTICES.md" }
+    )
+
+    foreach ($file in $rootFiles) {
+        Test-MatchingLicenseFile $file.Source (Join-Path $LicenseAssetsDirectory $file.Asset) $file.Asset
+    }
+
+    $sourceDirectory = Join-Path $WorkspaceDir "third_party\licenses"
+    $assetDirectory = Join-Path $LicenseAssetsDirectory "third_party"
+    if (-not (Test-Path -LiteralPath $sourceDirectory -PathType Container)) {
+        throw "Third-party license source directory is missing: $sourceDirectory"
+    }
+    if (-not (Test-Path -LiteralPath $assetDirectory -PathType Container)) {
+        throw "APK third-party license asset directory is missing: $assetDirectory"
+    }
+
+    $sourceFiles = @(Get-ChildItem -LiteralPath $sourceDirectory -File | Sort-Object Name)
+    $assetFiles = @(Get-ChildItem -LiteralPath $assetDirectory -File | Sort-Object Name)
+    if ($sourceFiles.Count -eq 0 -or $sourceFiles.Count -ne $assetFiles.Count) {
+        throw "APK third-party license asset set does not match third_party/licenses/."
+    }
+
+    for ($index = 0; $index -lt $sourceFiles.Count; $index++) {
+        if ($sourceFiles[$index].Name -ne $assetFiles[$index].Name) {
+            throw "APK third-party license asset set does not match third_party/licenses/."
+        }
+        Test-MatchingLicenseFile $sourceFiles[$index].FullName $assetFiles[$index].FullName ("third_party/" + $sourceFiles[$index].Name)
     }
 }
 
@@ -582,6 +644,7 @@ Write-Host "GameSpace release version: $VersionName (Android versionCode $Versio
 
 Write-Step "Checking Android project"
 Test-RequiredProjectFiles $ProjectDir
+Test-ApkLicenseAssets $WorkspaceDir $LicenseAssetsDirectory
 
 Write-Step "Updating app metadata"
 [xml]$stringsXml = Get-Content -LiteralPath $StringsPath -Raw

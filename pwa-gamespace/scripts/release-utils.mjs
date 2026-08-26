@@ -14,6 +14,53 @@ export const pagesOutputDirectory = process.env.GAMESPACE_PAGES_OUTPUT_DIRECTORY
   ? path.resolve(process.env.GAMESPACE_PAGES_OUTPUT_DIRECTORY)
   : path.join(projectDirectory, "pages-output");
 
+export const requiredReleaseLicenseFiles = Object.freeze([
+  "LICENSE.txt",
+  "BRAND_ASSETS_LICENSE.md",
+  "DEMO_CONTENT_LICENSE.md",
+  "THIRD_PARTY_NOTICES.md",
+]);
+
+export const requiredReleaseThirdPartyLicenseFiles = Object.freeze([
+  "7ZIP-UN7Z-LICENSE.txt",
+  "APACHE-2.0.txt",
+  "COMMONS-CODEC-NOTICE.txt",
+  "COMMONS-COMPRESS-NOTICE.txt",
+  "COMMONS-IO-NOTICE.txt",
+  "COMMONS-LANG3-NOTICE.txt",
+  "EMSCRIPTEN-LICENSE.md",
+  "LGPL-2.1.txt",
+  "ROBOTO-OFL-1.1.txt",
+  "XZ-FOR-JAVA-1.12.txt",
+  "ZIP-JS-BSD-3-CLAUSE.txt",
+]);
+
+export const requiredReleaseThirdPartySourceFiles = Object.freeze([
+  "third_party/sources/un7z-opfs-1.0.2/7zip-26.02-source.tar.gz",
+  "third_party/sources/un7z-opfs-1.0.2/README.md",
+  "third_party/sources/un7z-opfs-1.0.2/un7z-opfs-1.0.2.tgz",
+]);
+
+export function verifyRequiredReleaseLicenseFiles(paths, label = "выпуск") {
+  const available = new Set(paths);
+  for (const required of requiredReleaseLicenseFiles) {
+    if (!available.has(required)) {
+      throw new Error(`В ${label} отсутствует обязательный лицензионный файл: ${required}.`);
+    }
+  }
+  for (const name of requiredReleaseThirdPartyLicenseFiles) {
+    const required = `third_party/licenses/${name}`;
+    if (!available.has(required)) {
+      throw new Error(`В ${label} отсутствует обязательный файл сторонней лицензии: ${required}.`);
+    }
+  }
+  for (const required of requiredReleaseThirdPartySourceFiles) {
+    if (!available.has(required)) {
+      throw new Error(`В ${label} отсутствует обязательный архив исходного кода: ${required}.`);
+    }
+  }
+}
+
 export function normalizeVersion(version) {
   const match = /^(0|[1-9]\d*)(?:\.(0|[1-9]\d*))?(?:\.(0|[1-9]\d*))?$/.exec(version || "");
   if (!match) {

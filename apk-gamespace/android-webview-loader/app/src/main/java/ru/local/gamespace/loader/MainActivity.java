@@ -38,6 +38,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -1023,8 +1024,8 @@ public class MainActivity extends Activity {
 
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String[] items = installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1047,6 +1048,8 @@ public class MainActivity extends Activity {
                         reloadSite();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
+                    } else if ("Лицензии".equals(item)) {
+                        showLicensesDialog();
                     } else if ("Очистить сайт".equals(item)) {
                         confirmClearSite();
                     }
@@ -2550,6 +2553,122 @@ public class MainActivity extends Activity {
             .setPositiveButton("OK", null)
             .create();
         showHeldDialog(dialog);
+    }
+
+    private void showLicensesDialog() {
+        final String[] titles = new String[] {
+            "MIT License",
+            "Фирменные материалы GameSpace",
+            "Встроенные демонстрационные материалы",
+            "Уведомления о сторонних компонентах",
+            "Полные тексты сторонних лицензий"
+        };
+        final String[] assetPaths = new String[] {
+            "licenses/LICENSE.txt",
+            "licenses/BRAND_ASSETS_LICENSE.md",
+            "licenses/DEMO_CONTENT_LICENSE.md",
+            "licenses/THIRD_PARTY_NOTICES.md",
+            ""
+        };
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Лицензии")
+            .setItems(titles, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    if (which == titles.length - 1) {
+                        showThirdPartyLicenseList();
+                    } else {
+                        showLicenseDocument(titles[which], assetPaths[which]);
+                    }
+                }
+            })
+            .setNegativeButton("Закрыть", null)
+            .create();
+        showHeldDialog(dialog);
+    }
+
+    private void showThirdPartyLicenseList() {
+        final String[] titles = new String[] {
+            "7-Zip / un7z-opfs",
+            "Apache License 2.0",
+            "Commons Codec NOTICE",
+            "Commons Compress NOTICE",
+            "Commons IO NOTICE",
+            "Commons Lang NOTICE",
+            "Emscripten",
+            "GNU LGPL 2.1",
+            "Roboto SIL OFL 1.1",
+            "XZ for Java 0BSD",
+            "zip.js BSD 3-Clause"
+        };
+        final String[] assetPaths = new String[] {
+            "licenses/third_party/7ZIP-UN7Z-LICENSE.txt",
+            "licenses/third_party/APACHE-2.0.txt",
+            "licenses/third_party/COMMONS-CODEC-NOTICE.txt",
+            "licenses/third_party/COMMONS-COMPRESS-NOTICE.txt",
+            "licenses/third_party/COMMONS-IO-NOTICE.txt",
+            "licenses/third_party/COMMONS-LANG3-NOTICE.txt",
+            "licenses/third_party/EMSCRIPTEN-LICENSE.md",
+            "licenses/third_party/LGPL-2.1.txt",
+            "licenses/third_party/ROBOTO-OFL-1.1.txt",
+            "licenses/third_party/XZ-FOR-JAVA-1.12.txt",
+            "licenses/third_party/ZIP-JS-BSD-3-CLAUSE.txt"
+        };
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Сторонние лицензии")
+            .setItems(titles, new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    showLicenseDocument(titles[which], assetPaths[which]);
+                }
+            })
+            .setNegativeButton("Закрыть", null)
+            .create();
+        showHeldDialog(dialog);
+    }
+
+    private void showLicenseDocument(String title, String assetPath) {
+        final String content;
+        try {
+            content = readAssetText(assetPath);
+        } catch (IOException error) {
+            Toast.makeText(this, "Не удалось открыть лицензию: " + error.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        ScrollView scrollView = new ScrollView(this);
+        TextView textView = new TextView(this);
+        textView.setText(content);
+        textView.setTextSize(13);
+        textView.setTextColor(Color.rgb(30, 34, 38));
+        textView.setTypeface(Typeface.MONOSPACE);
+        textView.setTextIsSelectable(true);
+        textView.setPadding(dp(20), dp(16), dp(20), dp(16));
+        scrollView.addView(textView);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(scrollView)
+            .setPositiveButton("Закрыть", null)
+            .create();
+        showHeldDialog(dialog);
+    }
+
+    private String readAssetText(String assetPath) throws IOException {
+        InputStream input = getAssets().open(assetPath);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        try {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+        } finally {
+            input.close();
+        }
+        return new String(output.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private SharedPreferences getPrefs() {

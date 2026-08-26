@@ -33,6 +33,7 @@ if (await access(target).then(() => true).catch(() => false)) {
 await copyDirectoryContents(distDirectory, target);
 await copyFile(path.join(workspaceDirectory, "LICENSE"), path.join(target, "LICENSE.txt"));
 await copyFile(path.join(workspaceDirectory, "BRAND_ASSETS_LICENSE.md"), path.join(target, "BRAND_ASSETS_LICENSE.md"));
+await copyFile(path.join(workspaceDirectory, "demo", "DEMO_CONTENT_LICENSE.md"), path.join(target, "DEMO_CONTENT_LICENSE.md"));
 await copyFile(path.join(workspaceDirectory, "THIRD_PARTY_NOTICES.md"), path.join(target, "THIRD_PARTY_NOTICES.md"));
 await copyDirectoryContents(path.join(workspaceDirectory, "third_party"), path.join(target, "third_party"));
 

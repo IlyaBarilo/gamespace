@@ -6,6 +6,7 @@ import {
   releasesDirectory,
   sha256File,
   validateVersion,
+  verifyRequiredReleaseLicenseFiles,
 } from "./release-utils.mjs";
 
 const versions = await listFiles(releasesDirectory).catch(() => []);
@@ -34,6 +35,7 @@ for (const manifestPath of manifests) {
   if (actualPaths.size !== expectedPaths.size || [...actualPaths].some((file) => !expectedPaths.has(file))) {
     throw new Error(`Состав каталога выпуска ${version} отличается от release.json.`);
   }
+  verifyRequiredReleaseLicenseFiles(actualPaths, `выпуске ${version}`);
   if (totalSize !== manifest.totalSize) throw new Error(`Общий размер выпуска ${version} не совпадает.`);
   console.log(`Проверен выпуск ${version}: ${manifest.files.length} файлов.`);
 }

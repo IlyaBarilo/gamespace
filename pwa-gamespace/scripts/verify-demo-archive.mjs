@@ -7,6 +7,19 @@ import { parse7zSlt } from "../src/archive/archive-plan.js";
 const scriptPath = fileURLToPath(import.meta.url);
 const projectDirectory = path.resolve(path.dirname(scriptPath), "..");
 const workspaceDirectory = path.resolve(projectDirectory, "..");
+const requiredDemoLicenseFiles = Object.freeze([
+  "DEMO_CONTENT_LICENSE.md",
+  "THIRD_PARTY_LICENSES/ROBOTO-OFL-1.1.txt",
+]);
+
+export function verifyRequiredDemoLicenseFiles(paths, label = "демо") {
+  const available = new Set(paths);
+  for (const required of requiredDemoLicenseFiles) {
+    if (!available.has(required)) {
+      throw new Error(`В ${label} отсутствует обязательный лицензионный файл: ${required}.`);
+    }
+  }
+}
 
 function sevenZipCandidates() {
   const candidates = [];
@@ -84,10 +97,12 @@ export async function verifyDemoArchive({
 } = {}) {
   const executable = findSevenZip();
   const source = await listSource(sourceDirectory);
+  verifyRequiredDemoLicenseFiles(source.files.map((entry) => entry.path), "каталоге demo/");
   const listing = runSevenZip(executable, ["l", "-slt", "-sccUTF-8", archivePath]);
   const archiveEntries = parse7zSlt(listing.split(/\r?\n/));
   const archiveFiles = archiveEntries.filter((entry) => !entry.directory);
   const archiveDirectories = archiveEntries.filter((entry) => entry.directory);
+  verifyRequiredDemoLicenseFiles(archiveFiles.map((entry) => entry.path), "архиве demo.7z");
 
   comparePaths("Список файлов demo.7z не совпадает с demo/", source.files.map((entry) => entry.path), archiveFiles.map((entry) => entry.path));
   comparePaths("Список каталогов demo.7z не совпадает с demo/", source.directories, archiveDirectories.map((entry) => entry.path));
