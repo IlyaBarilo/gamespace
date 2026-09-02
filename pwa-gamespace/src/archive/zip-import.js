@@ -1,11 +1,16 @@
 import { BlobReader, ZipReader } from "@zip.js/zip.js";
 import { dirname, findIndexEntry, summarizeEntries, validateEntries } from "./archive-plan.js";
 import { getFileHandleAt, getOpfsRoot } from "../opfs.js";
+import { addCleanupDiagnostic, OperationDiagnostics } from "../diagnostics.js";
 
 const RESERVE_MINIMUM = 512 * 1024 * 1024;
 
 export async function extractZip({ file, destination, requireIndex, onEvent }) {
+  const diagnostics = new OperationDiagnostics("распаковка ZIP", { file });
+  const callback = onEvent;
+  onEvent = (event) => { diagnostics.observe(event); callback?.(event); };
   const reader = new ZipReader(new BlobReader(file), { checkAmbiguity: true });
+  let failure = null;
   try {
     onEvent?.({ type: "phase", phase: "list", label: "Проверяю структуру ZIP/ZIP64…" });
     const zipEntries = await reader.getEntries();
@@ -17,11 +22,13 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
       source: entry,
     })));
     const summary = summarizeEntries(entries);
+    onEvent({ type: "phase", phase: "index-check", label: "Проверяю стартовую страницу в ZIP…" });
     const indexEntry = findIndexEntry(entries);
     if (requireIndex && !indexEntry) {
       throw new Error("В архиве не найден index.html. Поддерживается файл в корне, в site/ или в одном верхнем каталоге.");
     }
 
+    onEvent({ type: "phase", phase: "quota-check", label: "Проверяю доступную квоту хранилища…" });
     const storage = await navigator.storage.estimate();
     const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
     const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
@@ -46,25 +53,51 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
     let completedFiles = 0;
     for (const entry of entries) {
       if (entry.directory) continue;
+      onEvent({ type: "file-stage", phase: "file-create", label: "Создание файла назначения OPFS", currentFile: entry.path, completedFiles });
       const output = await getFileHandleAt(root, `${destination}/${entry.path}`, true);
       const writable = await output.createWritable({ keepExistingData: false });
+      onEvent({ type: "file-stage", phase: "file-extract", label: "Чтение ZIP-записи и запись файла OPFS", currentFile: entry.path });
       let entryProgress = 0;
-      await entry.source.getData(writable, {
-        onprogress(index) {
-          entryProgress = index;
-          onEvent?.({
-            type: "progress",
-            processedBytes: completedBytes + entryProgress,
-            totalBytes: summary.uncompressedBytes,
-            currentFile: entry.path,
-          });
+      const writer = writable.getWriter();
+      let destinationError = null;
+      // Preserve the original OPFS error even if the ZIP library subsequently fails
+      // while closing an already-errored stream. Writes still use bounded backpressure.
+      const destinationStream = new WritableStream({
+        async write(chunk) {
+          try { await writer.write(chunk); }
+          catch (error) { destinationError = error; throw error; }
         },
       });
+      try {
+        await entry.source.getData(destinationStream, {
+          preventClose: true,
+          onprogress(index) {
+            entryProgress = index;
+            onEvent?.({
+              type: "progress",
+              processedBytes: completedBytes + entryProgress,
+              totalBytes: summary.uncompressedBytes,
+              currentFile: entry.path,
+            });
+          },
+        });
+        if (destinationError) throw destinationError;
+        onEvent({ type: "file-stage", phase: "file-close", label: "Завершение записи файла OPFS", currentFile: entry.path });
+        await writer.close();
+      } catch (error) {
+        const entryFailure = diagnostics.failure(destinationError || error);
+        try { await writer.abort(); }
+        catch (abortError) { addCleanupDiagnostic(entryFailure, "Отмена записи неполного файла", abortError); }
+        throw entryFailure;
+      } finally {
+        writer.releaseLock();
+      }
       completedBytes += entry.size;
       completedFiles += 1;
       onEvent?.({
         type: "progress",
         processedBytes: completedBytes,
+        completedFiles,
         totalBytes: summary.uncompressedBytes,
         currentFile: entry.path,
       });
@@ -77,7 +110,15 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
       indexPath: indexEntry?.path || null,
       contentRoot: indexEntry ? dirname(indexEntry.path) : null,
     };
+  } catch (error) {
+    failure = diagnostics.failure(error);
+    throw failure;
   } finally {
-    await reader.close().catch(() => {});
+    if (!failure) diagnostics.stage("archive-close", "Закрытие ZIP-потока");
+    try { await reader.close(); }
+    catch (closeError) {
+      if (failure) addCleanupDiagnostic(failure, "Закрытие ZIP-потока", closeError);
+      else throw diagnostics.failure(closeError);
+    }
   }
 }

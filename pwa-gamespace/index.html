@@ -163,6 +163,7 @@
         <span>GameSpace PWA · версия 0.3.0</span>
         <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
         <span>Архивы обрабатываются только на устройстве</span>
+        <button id="landingLastErrorButton" class="version-secondary-button" type="button">Последняя ошибка</button>
       </footer>
     </main>
 
@@ -256,6 +257,7 @@
         <div>
           <strong>Операция не выполнена</strong>
           <p id="errorText"></p>
+          <button id="errorDetailsButton" class="version-secondary-button" type="button">Подробности и отправка отчёта</button>
         </div>
         <button id="errorClose" type="button" aria-label="Закрыть сообщение">×</button>
       </section>
@@ -342,6 +344,13 @@
         <button id="removeSiteButton" class="danger-button" type="button">Удалить распакованный сайт</button>
       </section>
 
+      <section class="panel diagnostics-panel" aria-labelledby="diagnosticsTitle">
+        <p class="section-kicker">ПОМОЩЬ ПРИ СБОЕ</p>
+        <h2 id="diagnosticsTitle">Последняя ошибка</h2>
+        <p id="lastErrorSummary">Сохранённых ошибок пока нет.</p>
+        <button id="lastErrorButton" class="version-secondary-button" type="button">Открыть диагностический отчёт</button>
+      </section>
+
       <section class="panel licenses-panel">
         <div class="licenses-copy">
           <p class="section-kicker">О ПРИЛОЖЕНИИ</p>
@@ -362,6 +371,22 @@
 
       <input id="archiveInput" type="file" accept=".7z,.zip,application/x-7z-compressed,application/zip" hidden>
     </main>
+
+    <dialog id="diagnosticDialog" class="diagnostic-dialog" aria-labelledby="diagnosticTitle" aria-describedby="diagnosticPrivacy">
+      <div class="diagnostic-heading">
+        <h2 id="diagnosticTitle">Отчёт об ошибке</h2>
+        <button id="diagnosticClose" class="version-secondary-button" type="button">Закрыть</button>
+      </div>
+      <p id="diagnosticPrivacy">Пришлите отчёт разработчику вместе с описанием своих действий. Перед отправкой проверьте текст: он содержит сведения о браузере и названия файлов. Содержимое архива не включается. Автоматической отправки нет.</p>
+      <p id="diagnosticPersistence" role="status"></p>
+      <label for="diagnosticText">Текст отчёта — можно выделить и скопировать вручную</label>
+      <textarea id="diagnosticText" readonly spellcheck="false" autocomplete="off"></textarea>
+      <div class="diagnostic-actions">
+        <button id="diagnosticCopy" class="version-secondary-button" type="button">Копировать</button>
+        <button id="diagnosticShare" class="version-secondary-button" type="button">Отправить</button>
+      </div>
+      <p id="diagnosticActionStatus" role="status" aria-live="polite"></p>
+    </dialog>
 
     <div id="licenseModal" class="license-modal" hidden>
       <button id="licenseModalBackdrop" class="license-modal-backdrop" type="button" aria-label="Закрыть лицензии"></button>

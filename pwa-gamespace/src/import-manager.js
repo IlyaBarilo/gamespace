@@ -9,6 +9,7 @@ import {
 } from "./db.js";
 import { extractSevenZip } from "./archive/sevenzip-client.js";
 import { extractZip } from "./archive/zip-import.js";
+import { addCleanupDiagnostic, OperationDiagnostics } from "./diagnostics.js";
 import {
   fileExists,
   getDirectoryAt,
@@ -48,10 +49,24 @@ function emitServiceWorkerStateChanged() {
 }
 
 async function extractArchive({ file, destination, requireIndex, onEvent }) {
+  onEvent?.({ type: "phase", phase: "archive-read", label: "Читаю сигнатуру выбранного архива…" });
   const type = await detectArchiveType(file);
+  onEvent?.({ type: "archive-format", format: type });
   const extract = type === "7z" ? extractSevenZip : extractZip;
   const result = await extract({ file, destination, requireIndex, onEvent });
   return { ...result, type };
+}
+
+function diagnosticEvents(diagnostics, onEvent) {
+  return (event) => { diagnostics.observe(event); onEvent?.(event); };
+}
+
+async function diagnosticCleanup(error, label, action) {
+  try {
+    const completed = await action();
+    addCleanupDiagnostic(error, label, completed === false ? new Error("Не все файлы удалось восстановить") : null);
+  }
+  catch (cleanupError) { addCleanupDiagnostic(error, label, cleanupError); }
 }
 
 export async function requestPersistentStorage() {
@@ -64,20 +79,27 @@ export async function requestPersistentStorage() {
 }
 
 export async function installFullArchive(file, onEvent) {
-  await requestPersistentStorage();
-  const previousState = await readState();
-  const revision = jobId();
-  const revisionPath = `${REVISIONS_ROOT}/${revision}`;
+  const diagnostics = new OperationDiagnostics("полная установка", { file });
+  onEvent = diagnosticEvents(diagnostics, onEvent);
+  let revisionPath = null;
   const startedAt = Date.now();
 
   try {
+    diagnostics.stage("storage-prepare", "Подготовка постоянного хранилища");
+    await requestPersistentStorage();
+    diagnostics.stage("state-read", "Чтение сведений об установленном сайте из IndexedDB");
+    const previousState = await readState();
+    const revision = jobId();
+    revisionPath = `${REVISIONS_ROOT}/${revision}`;
     const result = await extractArchive({ file, destination: revisionPath, requireIndex: true, onEvent });
+    onEvent({ type: "phase", phase: "index-check", label: "Проверяю сохранённый index.html…" });
     const indexStoragePath = `${revisionPath}/${result.indexPath}`;
     const root = await getOpfsRoot();
     if (!await fileExists(root, indexStoragePath)) {
       throw new Error("Распаковка закончилась, но index.html отсутствует в OPFS.");
     }
     const revisionDirectory = await getDirectoryAt(root, revisionPath, false);
+    onEvent({ type: "phase", phase: "site-verify", label: "Проверяю число и размер сохранённых файлов…" });
     const stored = await summarizeDirectory(revisionDirectory);
     if (stored.files !== result.files || stored.bytes !== result.uncompressedBytes) {
       throw new Error(`Проверка OPFS не пройдена: сохранено ${stored.files} файлов (${stored.bytes} байт), ожидалось ${result.files} файлов (${result.uncompressedBytes} байт).`);
@@ -101,6 +123,7 @@ export async function installFullArchive(file, onEvent) {
       entries: result.entries,
       storageVerifiedAt: Date.now(),
     };
+    onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
     await writeState(state);
     emitServiceWorkerStateChanged();
 
@@ -111,25 +134,35 @@ export async function installFullArchive(file, onEvent) {
     await cleanupOrphans(state).catch(() => {});
     return state;
   } catch (error) {
-    const root = await getOpfsRoot().catch(() => null);
-    if (root) await removePath(root, revisionPath).catch(() => {});
-    throw error;
+    const failure = diagnostics.failure(error);
+    if (revisionPath) {
+      await diagnosticCleanup(failure, "Очистка неполной ревизии", async () => removePath(await getOpfsRoot(), revisionPath));
+    }
+    throw failure;
   }
 }
 
 export async function applyUpdateArchive(file, onEvent) {
-  await requestPersistentStorage();
-  const state = await readState();
-  if (!state?.revisionPath) throw new Error("Сначала установите основной архив сайта.");
-
-  const updateId = jobId();
-  const updatePath = `${UPDATES_ROOT}/${updateId}`;
-  const rollbackPath = `${ROLLBACK_ROOT}/${updateId}`;
+  const diagnostics = new OperationDiagnostics("быстрое обновление", { file });
+  onEvent = diagnosticEvents(diagnostics, onEvent);
+  let state;
+  let updatePath;
+  let rollbackPath;
+  let root;
   const startedAt = Date.now();
-  const root = await getOpfsRoot();
   let mergeJournal = null;
 
   try {
+    diagnostics.stage("storage-prepare", "Подготовка постоянного хранилища");
+    await requestPersistentStorage();
+    diagnostics.stage("state-read", "Чтение установленного сайта и подготовка обновления");
+    state = await readState();
+    if (!state?.revisionPath) throw new Error("Сначала установите основной архив сайта.");
+    const updateId = jobId();
+    updatePath = `${UPDATES_ROOT}/${updateId}`;
+    rollbackPath = `${ROLLBACK_ROOT}/${updateId}`;
+    diagnostics.stage("storage-open", "Открытие OPFS");
+    root = await getOpfsRoot();
     const result = await extractArchive({ file, destination: updatePath, requireIndex: false, onEvent });
     onEvent?.({ type: "phase", phase: "apply", label: "Применяю обновление с возможностью отката…" });
     const baseJournal = {
@@ -142,11 +175,13 @@ export async function applyUpdateArchive(file, onEvent) {
       createdPaths: [],
       restoredPaths: [],
     };
+    diagnostics.stage("journal-save", "Сохранение журнала отката обновления");
     await writeOperationJournal(baseJournal);
     const merge = await mergeDirectoryWithRollback({
       sourcePath: updatePath,
       targetPath: state.revisionPath,
       rollbackPath,
+      onDiagnostic: onEvent,
       onProgress(progress) {
         onEvent?.({ type: "apply-progress", ...progress });
       },
@@ -156,10 +191,12 @@ export async function applyUpdateArchive(file, onEvent) {
     });
     mergeJournal = merge;
 
+    onEvent({ type: "phase", phase: "index-check", label: "Проверяю index.html после обновления…" });
     if (!await fileExists(root, `${state.revisionPath}/${state.indexPath}`)) {
       throw new Error("После обновления не найден установленный index.html.");
     }
     const targetDirectory = await getDirectoryAt(root, state.revisionPath, false);
+    onEvent({ type: "phase", phase: "site-verify", label: "Проверяю файлы после обновления…" });
     const stored = await summarizeDirectory(targetDirectory);
 
     const updatedState = {
@@ -175,6 +212,7 @@ export async function applyUpdateArchive(file, onEvent) {
       entries: result.entries,
       storageVerifiedAt: Date.now(),
     };
+    onEvent({ type: "phase", phase: "state-save", label: "Сохраняю результат обновления…" });
     await commitStateAndClearOperationJournal(updatedState);
     mergeJournal = null;
     emitServiceWorkerStateChanged();
@@ -182,18 +220,21 @@ export async function applyUpdateArchive(file, onEvent) {
     await removePath(root, rollbackPath).catch(() => {});
     return updatedState;
   } catch (error) {
+    const failure = diagnostics.failure(error);
     if (mergeJournal) {
-      await rollbackMergedDirectory({
+      await diagnosticCleanup(failure, "Откат обновления", () => rollbackMergedDirectory({
         targetPath: state.revisionPath,
         rollbackPath,
         createdPaths: mergeJournal.createdPaths,
         restoredPaths: mergeJournal.restoredPaths,
-      }).catch(() => {});
+      }));
     }
-    await clearOperationJournal().catch(() => {});
-    await removePath(root, updatePath).catch(() => {});
-    await removePath(root, rollbackPath).catch(() => {});
-    throw error;
+    if (root) {
+      await diagnosticCleanup(failure, "Очистка журнала операции", clearOperationJournal);
+      await diagnosticCleanup(failure, "Очистка временного обновления", () => removePath(root, updatePath));
+      await diagnosticCleanup(failure, "Очистка временных резервных файлов", () => removePath(root, rollbackPath));
+    }
+    throw failure;
   }
 }
 

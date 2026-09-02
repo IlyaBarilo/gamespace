@@ -73,6 +73,10 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Проверить диагностику APK
+        shell: pwsh
+        run: .\apk-gamespace\tests\test-diagnostics.ps1
+
       - name: Подготовить Android SDK
         shell: pwsh
         run: |

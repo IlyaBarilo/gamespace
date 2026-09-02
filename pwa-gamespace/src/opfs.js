@@ -88,7 +88,8 @@ export async function summarizeDirectory(directory) {
   return summary;
 }
 
-export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal }) {
+export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal, onDiagnostic }) {
+  onDiagnostic?.({ type: "phase", phase: "update-list", label: "Читаю файлы подготовленного обновления…" });
   const root = await getOpfsRoot();
   const sourceDirectory = await getDirectoryAt(root, sourcePath, false);
   const sourceFiles = await collectFiles(sourceDirectory);
@@ -100,6 +101,7 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
       const item = sourceFiles[index];
       const targetFilePath = `${targetPath}/${item.path}`;
       const rollbackFilePath = `${rollbackPath}/${item.path}`;
+      onDiagnostic?.({ type: "file-stage", phase: "update-backup", label: "Проверка и резервное копирование заменяемого файла", path: item.path });
       const targetExisted = await fileExists(root, targetFilePath);
       if (targetExisted) {
         const existing = await getFileHandleAt(root, targetFilePath, false);
@@ -110,14 +112,21 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
         createdPaths.push(item.path);
       }
 
+      onDiagnostic?.({ type: "file-stage", phase: "journal-save", label: "Сохранение журнала перед заменой файла", path: item.path });
       await onJournal?.({ createdPaths: [...createdPaths], restoredPaths: [...restoredPaths] });
 
+      onDiagnostic?.({ type: "file-stage", phase: "update-write", label: "Запись обновлённого файла в OPFS", path: item.path });
       const target = await getFileHandleAt(root, targetFilePath, true);
       await copyFile(item.handle, target);
       onProgress?.({ current: index + 1, total: sourceFiles.length, path: item.path });
     }
   } catch (error) {
-    await rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths }).catch(() => {});
+    try {
+      const complete = await rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths });
+      onDiagnostic?.({ type: "cleanup-result", label: "Откат изменённых файлов", error: complete ? null : new Error("Не все созданные файлы удалось удалить") });
+    } catch (rollbackError) {
+      onDiagnostic?.({ type: "cleanup-result", label: "Откат изменённых файлов", error: rollbackError });
+    }
     throw error;
   }
 
@@ -126,12 +135,14 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
 
 export async function rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths }) {
   const root = await getOpfsRoot();
+  let completed = true;
   for (const path of [...createdPaths].reverse()) {
-    await removePath(root, `${targetPath}/${path}`).catch(() => {});
+    await removePath(root, `${targetPath}/${path}`).catch(() => { completed = false; });
   }
   for (const path of [...restoredPaths].reverse()) {
     const backup = await getFileHandleAt(root, `${rollbackPath}/${path}`, false);
     const target = await getFileHandleAt(root, `${targetPath}/${path}`, true);
     await copyFile(backup, target);
   }
+  return completed;
 }

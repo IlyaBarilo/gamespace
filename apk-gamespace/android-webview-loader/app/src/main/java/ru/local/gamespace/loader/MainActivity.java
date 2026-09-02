@@ -3,6 +3,8 @@ package ru.local.gamespace.loader;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -18,6 +20,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
+import android.os.PersistableBundle;
 import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.view.View;
@@ -66,6 +69,8 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 public class MainActivity extends Activity {
     private static final int REQUEST_OPEN_ZIP = 7001;
     private static final String PREFS = "gamespace_loader";
+    private static final String DIAGNOSTIC_PREFS = "gamespace_diagnostics";
+    private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
     private static final String PREF_BASE_PATH = "base_path";
     private static final String PREF_INDEX_PATH = "index_path";
     private static final String PREF_CONTENT_ROOT_PATH = "content_root_path";
@@ -121,6 +126,7 @@ public class MainActivity extends Activity {
     private Button demoButton;
 
     private volatile boolean busy;
+    private volatile String lastErrorReport;
     private int topBarHoldCount;
     private int pendingUpdateMode = UPDATE_MODE_FULL;
     private long topBarHideAtMillis;
@@ -1024,8 +1030,8 @@ public class MainActivity extends Activity {
 
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String[] items = installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1048,6 +1054,8 @@ public class MainActivity extends Activity {
                         reloadSite();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
+                    } else if ("Последняя ошибка".equals(item)) {
+                        showLastErrorReport();
                     } else if ("Лицензии".equals(item)) {
                         showLicensesDialog();
                     } else if ("Очистить сайт".equals(item)) {
@@ -1079,7 +1087,10 @@ public class MainActivity extends Activity {
         try {
             startActivityForResult(intent, REQUEST_OPEN_ZIP);
         } catch (ActivityNotFoundException e) {
-            Toast.makeText(this, "Не найден файловый менеджер для выбора архива.", Toast.LENGTH_LONG).show();
+            InstallContext context = new InstallContext(System.currentTimeMillis(), "выбор архива");
+            context.setStage("FILE-PICKER", "открытие системного выбора файлов");
+            context.previousSite = describeInstalledSite();
+            showErrorDialog("Не удалось выбрать архив", saveLastErrorReport(buildInstallErrorDetails(e, context)));
         }
     }
 
@@ -1132,12 +1143,9 @@ public class MainActivity extends Activity {
         busy = true;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        final String archiveName = getDisplayName(uri);
-        final int archiveType = detectArchiveType(uri, archiveName);
-        final String archiveFormat = formatArchiveType(archiveType);
         final File previousIndexFile = currentIndexFile;
         final boolean fastUpdate = updateMode == UPDATE_MODE_FAST && previousIndexFile != null && previousIndexFile.isFile();
-        showProgress(fastUpdate ? "Быстрое обновление сайта" : "Распаковка сайта", "Подготовка хранилища...\nФормат: " + archiveFormat + "\nАрхив: " + archiveName);
+        showProgress(fastUpdate ? "Быстрое обновление сайта" : "Распаковка сайта", "Проверяю выбранный архив...");
 
         Thread worker = new Thread(new Runnable() {
             @Override
@@ -1150,29 +1158,46 @@ public class MainActivity extends Activity {
                 long totalStartedAt = System.currentTimeMillis();
                 long deleteDurationMs = 0L;
                 long extractDurationMs = 0L;
-                String diagnosticMessage = "";
+                InstallContext context = new InstallContext(totalStartedAt, fastUpdate ? "быстрое обновление" : "полная установка");
 
                 try {
+                    context.previousSite = describeInstalledSite();
+                    context.source = "схема=" + uri.getScheme() + "; провайдер=" + uri.getAuthority();
+                    context.setStage("ARCHIVE-METADATA", "определение имени, размера и формата архива");
+                    final String archiveName = getDisplayName(uri);
+                    context.archiveName = archiveName;
+                    context.archiveSize = getContentSize(uri);
+                    final int archiveType = detectArchiveType(uri, archiveName);
+                    final String archiveFormat = formatArchiveType(archiveType);
+                    context.archiveFormat = archiveFormat;
+                    context.setStage("STORAGE-SELECT", "выбор хранилища");
                     updateProgress("Выбираю хранилище...\nФормат: " + archiveFormat + "\nАрхив: " + archiveName);
                     base = chooseStorageBaseForInstall();
+                    context.base = base;
+                    context.setStage("STORAGE-CREATE", "создание базового каталога");
                     updateProgress("Хранилище выбрано:\n" + base.getAbsolutePath() + "\nСвободно: " + formatBytes(base.getUsableSpace()));
                     if (!base.exists() && !base.mkdirs()) {
                         throw new IOException("Не удалось создать каталог: " + base.getAbsolutePath());
                     }
 
                     extractRoot = new File(base, EXTRACT_DIR_NAME);
+                    context.extractRoot = extractRoot;
+                    context.freeBefore = base.getUsableSpace();
                     if (fastUpdate) {
                         updateProgress("Быстрое обновление.\nСтарые файлы не удаляются.\nБудут записаны только новые и более свежие файлы.");
                     } else {
+                        context.setStage("OLD-SITE-DELETE", "удаление предыдущего сайта");
                         long deleteStartedAt = System.currentTimeMillis();
                         DeleteStats deleted = clearExtractedSite(extractRoot, "Удаляю предыдущую версию сайта");
                         deleteDurationMs = System.currentTimeMillis() - deleteStartedAt;
                         updateProgress("Подготовка завершена.\nУдалено файлов: " + deleted.files + ", каталогов: " + deleted.directories + "\nНачинаю распаковку...");
                     }
+                    context.setStage("SITE-DIR-CREATE", "создание каталога распаковки");
                     if (!extractRoot.exists() && !extractRoot.mkdirs()) {
                         throw new IOException("Не удалось создать каталог сайта: " + extractRoot.getAbsolutePath());
                     }
 
+                    context.setStage("ARCHIVE-OPEN", "открытие выбранного архива");
                     long extractStartedAt = System.currentTimeMillis();
                     ZipStats stats = archiveType == ARCHIVE_7Z
                         ? extractSevenZ(uri, extractRoot, archiveName, fastUpdate)
@@ -1181,7 +1206,10 @@ public class MainActivity extends Activity {
                     extractedBytes = stats.bytes;
                     extractedFiles = stats.files;
                     skippedFiles = stats.skippedFiles;
+                    context.writtenBytes = stats.bytes;
+                    context.writtenFiles = stats.files;
 
+                    context.setStage("INDEX-CHECK", "поиск стартового index.html");
                     File index = findIndexInExtractedContent(extractRoot);
                     if (index == null && fastUpdate && previousIndexFile.isFile()) {
                         index = previousIndexFile;
@@ -1190,8 +1218,10 @@ public class MainActivity extends Activity {
                         throw new IOException("В архиве не найден index.html. Поддерживается index.html в корне, site/index.html или один верхний каталог с index.html.");
                     }
 
+                    context.setStage("SITE-VERIFY", "проверка распакованного сайта и подсчёт файлов");
                     SiteStats installedStats = summarizeInstalledSite(extractRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
+                    context.setStage("STATE-SAVE", "сохранение сведений об установленном сайте");
                     saveInstalledSite(
                         base,
                         index,
@@ -1226,15 +1256,20 @@ public class MainActivity extends Activity {
                         }
                     });
                 } catch (final Exception e) {
-                    diagnosticMessage = buildInstallErrorDetails(e, archiveName, fastUpdate, base, extractRoot, totalStartedAt);
-                    final String finalDiagnosticMessage = diagnosticMessage;
+                    String report = buildInstallErrorDetails(e, context);
                     final String finalBriefMessage = buildBriefErrorMessage(e);
                     if (extractRoot != null && !fastUpdate) {
                         try {
                             clearExtractedSite(extractRoot, "Удаляю неполную распаковку");
-                        } catch (IOException ignored) {
+                            report += "\nОчистка неполной установки: завершена.\n";
+                        } catch (Exception cleanupError) {
+                            report += "\nОчистка неполной установки: не завершена; часть файлов могла остаться.\n"
+                                + DiagnosticReport.technicalDetails(cleanupError);
                         }
+                    } else if (fastUpdate) {
+                        report += "\nБыстрое обновление: ранее записанные изменения не отменены.\n";
                     }
+                    final String finalDiagnosticMessage = saveLastErrorReport(report);
 
                     mainHandler.post(new Runnable() {
                         @Override
@@ -1281,38 +1316,58 @@ public class MainActivity extends Activity {
                 long totalStartedAt = System.currentTimeMillis();
                 long deleteDurationMs = 0L;
                 long extractDurationMs = 0L;
+                InstallContext context = new InstallContext(totalStartedAt, "встроенное демо");
+                context.archiveName = BUILTIN_DEMO_ARCHIVE_NAME;
+                context.archiveFormat = "7z";
+                context.source = "встроенный ресурс APK";
 
                 try {
+                    context.previousSite = describeInstalledSite();
+                    context.setStage("DEMO-COPY", "копирование встроенного архива во временный каталог");
                     updateProgress("Копирую встроенный demo.7z во временный каталог...");
                     demoArchive = copyAssetToCache(BUILTIN_DEMO_ASSET_NAME, "builtin-demo.7z");
+                    context.archiveSize = demoArchive.length();
 
+                    context.setStage("STORAGE-SELECT", "выбор хранилища");
                     updateProgress("Выбираю хранилище для демо-сайта...");
                     base = chooseStorageBaseForInstall();
+                    context.base = base;
+                    context.setStage("STORAGE-CREATE", "создание базового каталога");
                     if (!base.exists() && !base.mkdirs()) {
                         throw new IOException("Не удалось создать каталог: " + base.getAbsolutePath());
                     }
 
                     extractRoot = new File(base, EXTRACT_DIR_NAME);
+                    context.extractRoot = extractRoot;
+                    context.freeBefore = base.getUsableSpace();
+                    context.setStage("OLD-SITE-DELETE", "удаление предыдущего сайта");
                     long deleteStartedAt = System.currentTimeMillis();
                     DeleteStats deleted = clearExtractedSite(extractRoot, "Удаляю предыдущую версию сайта");
                     deleteDurationMs = System.currentTimeMillis() - deleteStartedAt;
                     updateProgress("Подготовка завершена.\nУдалено файлов: " + deleted.files + ", каталогов: " + deleted.directories + "\nРаспаковываю встроенный демо-сайт...");
 
+                    context.setStage("SITE-DIR-CREATE", "создание каталога распаковки");
                     if (!extractRoot.exists() && !extractRoot.mkdirs()) {
                         throw new IOException("Не удалось создать каталог сайта: " + extractRoot.getAbsolutePath());
                     }
 
+                    context.setStage("ARCHIVE-OPEN", "открытие встроенного архива");
                     long extractStartedAt = System.currentTimeMillis();
                     ZipStats stats = extractSevenZFromFile(demoArchive, extractRoot, BUILTIN_DEMO_ARCHIVE_NAME, false);
                     extractDurationMs = System.currentTimeMillis() - extractStartedAt;
+                    context.writtenBytes = stats.bytes;
+                    context.writtenFiles = stats.files;
 
+                    context.setStage("INDEX-CHECK", "поиск стартового index.html");
                     File index = findIndexInExtractedContent(extractRoot);
                     if (index == null) {
                         throw new IOException("Во встроенном демо-сайте не найден index.html.");
                     }
 
+                    context.setStage("SITE-VERIFY", "проверка распакованного сайта и подсчёт файлов");
                     SiteStats installedStats = summarizeInstalledSite(extractRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
+                    context.setStage("STATE-SAVE", "сохранение сведений об установленном сайте");
                     saveInstalledSite(
                         base,
                         index,
@@ -1340,14 +1395,18 @@ public class MainActivity extends Activity {
                         }
                     });
                 } catch (final Exception e) {
-                    final String finalDiagnosticMessage = buildInstallErrorDetails(e, BUILTIN_DEMO_ARCHIVE_NAME, false, base, extractRoot, totalStartedAt);
+                    String report = buildInstallErrorDetails(e, context);
                     final String finalBriefMessage = buildBriefErrorMessage(e);
                     if (extractRoot != null) {
                         try {
                             clearExtractedSite(extractRoot, "Удаляю неполную распаковку демо-сайта");
-                        } catch (IOException ignored) {
+                            report += "\nОчистка неполной установки: завершена.\n";
+                        } catch (Exception cleanupError) {
+                            report += "\nОчистка неполной установки: не завершена; часть файлов могла остаться.\n"
+                                + DiagnosticReport.technicalDetails(cleanupError);
                         }
                     }
+                    final String finalDiagnosticMessage = saveLastErrorReport(report);
 
                     mainHandler.post(new Runnable() {
                         @Override
@@ -1375,20 +1434,13 @@ public class MainActivity extends Activity {
 
     private File copyAssetToCache(String assetName, String fileName) throws IOException {
         File out = new File(getCacheDir(), fileName);
-        InputStream input = getAssets().open(assetName);
-        FileOutputStream output = new FileOutputStream(out);
-        try {
+        try (InputStream input = getAssets().open(assetName);
+             FileOutputStream output = new FileOutputStream(out)) {
             byte[] buffer = new byte[BUFFER_SIZE];
             int read;
             while ((read = input.read(buffer)) != -1) {
                 output.write(buffer, 0, read);
             }
-        } finally {
-            try {
-                input.close();
-            } catch (IOException ignored) {
-            }
-            output.close();
         }
         return out;
     }
@@ -1517,8 +1569,7 @@ public class MainActivity extends Activity {
 
             context.stage = "создание ZIP-потока";
             CountingInputStream countingStream = new CountingInputStream(rawStream);
-            ZipInputStream zip = new ZipInputStream(new BufferedInputStream(countingStream, BUFFER_SIZE), charset);
-            try {
+            try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(countingStream, BUFFER_SIZE), charset)) {
                 ZipEntry entry;
                 while (true) {
                     context.stage = "чтение следующей записи ZIP";
@@ -1530,6 +1581,9 @@ public class MainActivity extends Activity {
 
                     context.stage = "проверка имени ZIP-записи";
                     context.currentEntryName = entry.getName();
+                    context.currentEntrySize = entry.getSize();
+                    context.currentFileBytes = 0L;
+                    context.currentOutputPath = null;
                     String safeName = normalizeZipEntryName(entry.getName());
                     if (safeName == null) {
                         context.stage = "пропуск служебной ZIP-записи";
@@ -1578,13 +1632,18 @@ public class MainActivity extends Activity {
                         throw new IOException("Не удалось создать каталог: " + parent.getAbsolutePath());
                     }
 
-                    context.stage = "запись файла";
-                    FileOutputStream output = new FileOutputStream(out);
-                    try {
-                        int read;
-                        while ((read = zip.read(buffer)) != -1) {
+                    context.stage = "открытие файла назначения";
+                    try (FileOutputStream output = new FileOutputStream(out)) {
+                        while (true) {
+                            context.stage = "чтение данных ZIP-записи";
+                            int read = zip.read(buffer);
+                            if (read == -1) {
+                                break;
+                            }
+                            context.stage = "запись файла";
                             output.write(buffer, 0, read);
                             extractedBytes += read;
+                            context.currentFileBytes += read;
                             context.readBytes = countingStream.getBytesRead();
                             context.writtenBytes = extractedBytes;
                             long now = System.currentTimeMillis();
@@ -1593,8 +1652,7 @@ public class MainActivity extends Activity {
                                 updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                             }
                         }
-                    } finally {
-                        output.close();
+                        context.stage = "закрытие записанного файла";
                     }
 
                     long entryTime = entry.getTime();
@@ -1607,9 +1665,7 @@ public class MainActivity extends Activity {
                     context.stage = "закрытие ZIP-записи";
                     zip.closeEntry();
                 }
-            } finally {
                 context.stage = "закрытие ZIP-потока";
-                zip.close();
             }
         } catch (ZipDiagnosticException e) {
             throw e;
@@ -1683,7 +1739,6 @@ public class MainActivity extends Activity {
         context.targetPath = extractRoot.getAbsolutePath();
         context.archiveSize = archiveSize;
 
-        SevenZFile sevenZ = null;
         long extractedBytes = 0L;
         int extractedFiles = 0;
         int skippedFiles = 0;
@@ -1702,105 +1757,107 @@ public class MainActivity extends Activity {
             String canonicalRoot = withTrailingSeparator(extractRoot.getCanonicalPath());
 
             context.stage = "чтение заголовка 7z";
-            sevenZ = new SevenZFile(channel, archiveName);
+            try (SevenZFile sevenZ = new SevenZFile(channel, archiveName)) {
 
-            SevenZArchiveEntry entry;
-            while (true) {
-                context.stage = "чтение следующей записи 7z";
-                context.readBytes = safeChannelPosition(channel);
-                entry = sevenZ.getNextEntry();
-                if (entry == null) {
-                    break;
-                }
-
-                context.stage = "проверка имени 7z-записи";
-                context.currentEntryName = entry.getName();
-                if (entry.isAntiItem()) {
-                    continue;
-                }
-
-                String safeName = normalizeZipEntryName(entry.getName());
-                if (safeName == null) {
-                    continue;
-                }
-
-                entries += 1;
-                context.entries = entries;
-                File out = new File(extractRoot, safeName);
-                context.currentOutputPath = out.getAbsolutePath();
-                String outPath = out.getCanonicalPath();
-                if (!outPath.startsWith(canonicalRoot)) {
-                    throw new IOException("Небезопасный путь в архиве: " + entry.getName());
-                }
-
-                if (entry.isDirectory()) {
-                    context.stage = "создание каталога";
-                    if (!out.exists() && !out.mkdirs()) {
-                        throw new IOException("Не удалось создать каталог: " + out.getAbsolutePath());
+                SevenZArchiveEntry entry;
+                while (true) {
+                    context.stage = "чтение следующей записи 7z";
+                    context.readBytes = safeChannelPosition(channel);
+                    entry = sevenZ.getNextEntry();
+                    if (entry == null) {
+                        break;
                     }
-                    continue;
-                }
 
-                boolean existedBefore = out.isFile();
-                if (fastUpdate && existedBefore && !shouldExtractForFastUpdate(out, entry)) {
-                    context.stage = "пропуск актуального файла";
-                    skippedFiles += 1;
-                    context.skippedFiles = skippedFiles;
-                    long now = System.currentTimeMillis();
-                    if (now - lastUiUpdate > 500L) {
-                        lastUiUpdate = now;
-                        context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
-                        context.writtenBytes = extractedBytes;
-                        updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                    context.stage = "проверка имени 7z-записи";
+                    context.currentEntryName = entry.getName();
+                    context.currentEntrySize = entry.getSize();
+                    context.currentFileBytes = 0L;
+                    context.currentOutputPath = null;
+                    if (entry.isAntiItem()) {
+                        continue;
                     }
-                    continue;
-                }
 
-                context.stage = "создание родительского каталога";
-                File parent = out.getParentFile();
-                if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                    throw new IOException("Не удалось создать каталог: " + parent.getAbsolutePath());
-                }
+                    String safeName = normalizeZipEntryName(entry.getName());
+                    if (safeName == null) {
+                        continue;
+                    }
 
-                context.stage = "запись файла";
-                FileOutputStream output = new FileOutputStream(out);
-                try {
-                    if (entry.hasStream()) {
-                        int read;
-                        while ((read = sevenZ.read(buffer)) != -1) {
-                            output.write(buffer, 0, read);
-                            extractedBytes += read;
+                    entries += 1;
+                    context.entries = entries;
+                    File out = new File(extractRoot, safeName);
+                    context.currentOutputPath = out.getAbsolutePath();
+                    String outPath = out.getCanonicalPath();
+                    if (!outPath.startsWith(canonicalRoot)) {
+                        throw new IOException("Небезопасный путь в архиве: " + entry.getName());
+                    }
+
+                    if (entry.isDirectory()) {
+                        context.stage = "создание каталога";
+                        if (!out.exists() && !out.mkdirs()) {
+                            throw new IOException("Не удалось создать каталог: " + out.getAbsolutePath());
+                        }
+                        continue;
+                    }
+
+                    boolean existedBefore = out.isFile();
+                    if (fastUpdate && existedBefore && !shouldExtractForFastUpdate(out, entry)) {
+                        context.stage = "пропуск актуального файла";
+                        skippedFiles += 1;
+                        context.skippedFiles = skippedFiles;
+                        long now = System.currentTimeMillis();
+                        if (now - lastUiUpdate > 500L) {
+                            lastUiUpdate = now;
                             context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
                             context.writtenBytes = extractedBytes;
-                            long now = System.currentTimeMillis();
-                            if (now - lastUiUpdate > 500L) {
-                                lastUiUpdate = now;
-                                updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                            updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                        }
+                        continue;
+                    }
+
+                    context.stage = "создание родительского каталога";
+                    File parent = out.getParentFile();
+                    if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                        throw new IOException("Не удалось создать каталог: " + parent.getAbsolutePath());
+                    }
+
+                    context.stage = "открытие файла назначения";
+                    try (FileOutputStream output = new FileOutputStream(out)) {
+                        if (entry.hasStream()) {
+                            while (true) {
+                                context.stage = "чтение данных 7z-записи";
+                                int read = sevenZ.read(buffer);
+                                if (read == -1) {
+                                    break;
+                                }
+                                context.stage = "запись файла";
+                                output.write(buffer, 0, read);
+                                extractedBytes += read;
+                                context.currentFileBytes += read;
+                                context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
+                                context.writtenBytes = extractedBytes;
+                                long now = System.currentTimeMillis();
+                                if (now - lastUiUpdate > 500L) {
+                                    lastUiUpdate = now;
+                                    updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                                }
                             }
                         }
+                        context.stage = "закрытие записанного файла";
                     }
-                } finally {
-                    output.close();
-                }
 
-                if (entry.getHasLastModifiedDate() && entry.getLastModifiedDate() != null) {
-                    context.stage = "обновление времени файла";
-                    out.setLastModified(entry.getLastModifiedDate().getTime());
+                    if (entry.getHasLastModifiedDate() && entry.getLastModifiedDate() != null) {
+                        context.stage = "обновление времени файла";
+                        out.setLastModified(entry.getLastModifiedDate().getTime());
+                    }
+                    extractedFiles += 1;
+                    context.extractedFiles = extractedFiles;
                 }
-                extractedFiles += 1;
-                context.extractedFiles = extractedFiles;
+                context.stage = "закрытие 7z-архива";
             }
         } catch (ZipDiagnosticException e) {
             throw e;
         } catch (Exception e) {
             throw buildZipDiagnosticException(e, context);
-        } finally {
-            if (sevenZ != null) {
-                try {
-                    sevenZ.close();
-                } catch (IOException ignored) {
-                }
-            }
         }
 
         updateProgress("Распаковка завершена. Проверяю index.html...");
@@ -1850,7 +1907,7 @@ public class MainActivity extends Activity {
     }
 
     private ZipDiagnosticException buildZipDiagnosticException(Exception error, ZipReadContext context) {
-        return new ZipDiagnosticException(buildZipDiagnosticMessage(error, context), error);
+        return new ZipDiagnosticException(buildZipDiagnosticMessage(error, context), error, context.stage);
     }
 
     private String buildZipDiagnosticMessage(Throwable error, ZipReadContext context) {
@@ -1877,41 +1934,88 @@ public class MainActivity extends Activity {
         details.append("Файлов записано: ").append(context.extractedFiles).append('\n');
         details.append("Файлов пропущено: ").append(context.skippedFiles).append('\n');
         appendDiagnosticLine(details, "Каталог распаковки", context.targetPath);
-        appendDiagnosticLine(details, "Последняя запись архива", context.currentEntryName);
+        appendDiagnosticLine(details, "Последняя полученная запись архива", context.currentEntryName);
         appendDiagnosticLine(details, "Путь назначения", context.currentOutputPath);
+        details.append("Размер текущей записи: ").append(formatBytes(context.currentEntrySize)).append('\n');
+        details.append("Записано текущего файла: ").append(formatBytes(context.currentFileBytes)).append('\n');
         details.append('\n');
         details.append("Ошибка: ").append(root.getClass().getName()).append('\n');
         appendDiagnosticLine(details, "Сообщение", root.getMessage());
         details.append('\n');
-        appendTroubleshootingHints(details, root);
         return details.toString();
     }
 
-    private String buildInstallErrorDetails(Throwable error, String archiveName, boolean fastUpdate, File base, File extractRoot, long startedAt) {
-        String message = error.getMessage();
-        if (message != null && message.length() > 0 && error instanceof ZipDiagnosticException) {
-            return message + "\n\nВремя до ошибки: " + formatDuration(System.currentTimeMillis() - startedAt);
-        }
-
+    private String buildInstallErrorDetails(Throwable error, InstallContext context) {
         Throwable root = getRootCause(error);
+        ZipDiagnosticException archiveError = error instanceof ZipDiagnosticException ? (ZipDiagnosticException) error : null;
+        Throwable originalError = archiveError == null ? error : error.getCause();
+        String stageCode = archiveError == null ? context.stageCode : "EXTRACT";
+        String stage = archiveError == null ? context.stage : archiveError.stage;
         StringBuilder details = new StringBuilder();
-        details.append("Операция не завершена.\n\n");
-        appendDiagnosticLine(details, "Архив", archiveName);
-        details.append("Режим: ").append(fastUpdate ? "быстрое обновление" : "обычное обновление").append('\n');
-        if (base != null) {
-            appendDiagnosticLine(details, "Базовый каталог", base.getAbsolutePath());
-            details.append("Свободно: ").append(formatBytes(base.getUsableSpace())).append('\n');
-        }
-        if (extractRoot != null) {
-            appendDiagnosticLine(details, "Каталог сайта", extractRoot.getAbsolutePath());
-        }
-        details.append("Время до ошибки: ").append(formatDuration(System.currentTimeMillis() - startedAt)).append('\n');
-        details.append('\n');
-        details.append("Ошибка: ").append(root.getClass().getName()).append('\n');
+        details.append("GameSpace APK — отчёт об ошибке, формат 1\n");
+        appendDiagnosticLine(details, "Код", DiagnosticReport.errorCode(originalError, stageCode));
+        appendDiagnosticLine(details, "Этап сбоя", stage);
+        appendDiagnosticLine(details, "Ошибка", root.getClass().getName());
         appendDiagnosticLine(details, "Сообщение", root.getMessage());
+        appendDiagnosticLine(details, "Номер отчёта", Long.toString(context.startedAt, 36));
+        appendDiagnosticLine(details, "Время", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(new Date()));
+        appendDiagnosticLine(details, "Версия APK", getAppVersionName());
+        appendDiagnosticLine(details, "Сборка APK", getString(R.string.app_build_date));
+        appendDiagnosticLine(details, "Android", Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+        appendDiagnosticLine(details, "Устройство", Build.MANUFACTURER + " / " + Build.MODEL);
+        appendDiagnosticLine(details, "Архитектура", android.text.TextUtils.join(", ", Build.SUPPORTED_ABIS));
         details.append('\n');
-        appendTroubleshootingHints(details, root);
-        return details.toString();
+        appendDiagnosticLine(details, "Операция", context.mode);
+        appendDiagnosticLine(details, "Сайт до операции", context.previousSite);
+        appendDiagnosticLine(details, "Источник", context.source);
+        appendDiagnosticLine(details, "Архив", context.archiveName);
+        appendDiagnosticLine(details, "Формат", context.archiveFormat);
+        details.append("Размер архива: ").append(formatBytes(context.archiveSize)).append(" (").append(context.archiveSize).append(" байт; -1 = неизвестно)\n");
+        details.append("Время до ошибки: ").append(formatDuration(System.currentTimeMillis() - context.startedAt)).append('\n');
+        details.append("Свободно перед очисткой/распаковкой: ").append(formatBytes(context.freeBefore)).append('\n');
+        appendStorageDiagnostic(details, "Базовый каталог", context.base);
+        appendStorageDiagnostic(details, "Каталог сайта", context.extractRoot);
+        Runtime runtime = Runtime.getRuntime();
+        details.append("Память Java: занято ").append(formatBytes(runtime.totalMemory() - runtime.freeMemory()))
+            .append(", предел ").append(formatBytes(runtime.maxMemory())).append('\n');
+        if (archiveError != null) {
+            details.append('\n').append(archiveError.getMessage());
+        } else {
+            details.append("Завершено распаковкой: ").append(context.writtenFiles).append(" файлов, ")
+                .append(formatBytes(context.writtenBytes)).append('\n');
+        }
+        details.append('\n');
+        appendTroubleshootingHints(details, originalError);
+        details.append("\nТехнические подробности:\n").append(DiagnosticReport.technicalDetails(originalError));
+        return DiagnosticReport.bounded(details.toString());
+    }
+
+    private void appendStorageDiagnostic(StringBuilder details, String label, File directory) {
+        if (directory == null) {
+            appendDiagnosticLine(details, label, "ещё не выбран");
+            return;
+        }
+        appendDiagnosticLine(details, label, directory.getAbsolutePath());
+        try {
+            details.append("  существует=").append(directory.exists()).append(", каталог=").append(directory.isDirectory())
+                .append(", доступна запись=").append(directory.canWrite()).append('\n');
+            File existing = directory;
+            while (existing != null && !existing.exists()) {
+                existing = existing.getParentFile();
+            }
+            if (existing != null) {
+                details.append("  свободно при сбое (до очистки): ").append(formatBytes(existing.getUsableSpace())).append('\n');
+            }
+        } catch (RuntimeException unavailable) {
+            appendDiagnosticLine(details, "  сведения о хранилище недоступны", unavailable.getClass().getSimpleName());
+        }
+    }
+
+    private String describeInstalledSite() {
+        if (currentIndexFile == null || !currentIndexFile.isFile()) {
+            return "не установлен";
+        }
+        return "demo".equals(getPrefs().getString(PREF_LAST_UPDATE_MODE, "")) ? "встроенное демо" : "пользовательский сайт";
     }
 
     private String buildBriefErrorMessage(Throwable error) {
@@ -1926,10 +2030,40 @@ public class MainActivity extends Activity {
         return message;
     }
 
+    private String saveLastErrorReport(String details) {
+        String report = DiagnosticReport.bounded(details);
+        lastErrorReport = report;
+        try {
+            // Separate preferences survive site cleanup. Only the latest report is retained.
+            if (getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).edit().putString(PREF_LAST_ERROR_REPORT, report).commit()) {
+                return report;
+            }
+        } catch (RuntimeException ignored) {
+            // An error report must remain visible even if storage is full or unavailable.
+        }
+        lastErrorReport = DiagnosticReport.bounded("Не удалось сохранить отчёт на устройстве. Скопируйте его до закрытия приложения.\n\n" + report);
+        return lastErrorReport;
+    }
+
+    private void showLastErrorReport() {
+        String report = lastErrorReport;
+        if (report == null) {
+            report = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).getString(PREF_LAST_ERROR_REPORT, "");
+        }
+        if (report == null || report.length() == 0) {
+            Toast.makeText(this, "Сохранённых ошибок пока нет.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        showErrorDialog("Последняя ошибка", report);
+    }
+
     private void showErrorDialog(String title, String details) {
+        final String report = DiagnosticReport.bounded(details);
         ScrollView scrollView = new ScrollView(this);
         TextView textView = new TextView(this);
-        textView.setText(details);
+        textView.setText("Скопируйте отчёт и пришлите разработчику вместе с описанием своих действий.\n\n"
+            + "Отчёт содержит модель устройства, названия и пути файлов. Проверьте текст перед отправкой. "
+            + "Содержимое файлов не включается; автоматической отправки нет.\n\n" + report);
         textView.setTextSize(14);
         textView.setTextColor(Color.rgb(30, 34, 38));
         textView.setTextIsSelectable(true);
@@ -1939,13 +2073,60 @@ public class MainActivity extends Activity {
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle(title)
             .setView(scrollView)
-            .setPositiveButton("OK", null)
+            .setPositiveButton("Закрыть", null)
+            .setNegativeButton("Копировать", null)
+            .setNeutralButton("Отправить", null)
             .create();
         showHeldDialog(dialog);
+        // Keep the report open after copying or returning from the share sheet.
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                try {
+                    ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (clipboard == null) {
+                        throw new IllegalStateException("Clipboard unavailable");
+                    }
+                    ClipData clip = ClipData.newPlainText("Диагностика GameSpace APK", report);
+                    if (Build.VERSION.SDK_INT >= 24) {
+                        PersistableBundle extras = new PersistableBundle();
+                        extras.putBoolean("android.content.extra.IS_SENSITIVE", true);
+                        clip.getDescription().setExtras(extras);
+                    }
+                    clipboard.setPrimaryClip(clip);
+                    if (Build.VERSION.SDK_INT < 33) {
+                        Toast.makeText(MainActivity.this, "Отчёт скопирован. Вставьте его в сообщение разработчику.", Toast.LENGTH_LONG).show();
+                    }
+                } catch (RuntimeException error) {
+                    Toast.makeText(MainActivity.this, "Не удалось скопировать. Используйте «Отправить» или выделите текст вручную.", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/plain");
+                send.putExtra(Intent.EXTRA_SUBJECT, "Ошибка GameSpace APK");
+                send.putExtra(Intent.EXTRA_TEXT, report);
+                try {
+                    startActivity(Intent.createChooser(send, "Отправить отчёт разработчику"));
+                } catch (RuntimeException error) {
+                    Toast.makeText(MainActivity.this, "Не удалось открыть отправку. Скопируйте отчёт в сообщение.", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
     }
 
     private void appendTroubleshootingHints(StringBuilder details, Throwable error) {
         details.append("Что проверить:\n");
+        String code = DiagnosticReport.errorCode(error, "UNKNOWN");
+        if ("GS-ACCESS".equals(code)) {
+            details.append("- Нет доступа к файлу или каталогу. Выберите архив заново через системный выбор файлов и проверьте подключение носителя.\n");
+        }
+        if ("GS-7Z-SEEK".equals(code)) {
+            details.append("- Источник не поддерживает произвольное чтение, необходимое для 7z. Скопируйте архив в память устройства и выберите локальный файл.\n");
+        }
         if (isMalformedZipNameError(error)) {
             details.append("- Сообщение Malformed обычно означает проблему с кодировкой имени файла в ZIP, а не сам размер архива.\n");
             details.append("- Частая причина: кириллица или спецсимволы в именах файлов/каталогов, записанные старой Windows/DOS-кодировкой без UTF-8-флага.\n");
@@ -1958,10 +2139,10 @@ public class MainActivity extends Activity {
             details.append("- Попробуйте открыть архив в 7-Zip на компьютере и выполнить Test/Проверить.\n");
             details.append("- Если архив больше 2 ГБ, убедитесь, что это ZIP64 и файл был полностью скопирован на телефон.\n");
         }
-        if (isNoSpaceError(error)) {
+        if ("GS-NO-SPACE".equals(code) || isNoSpaceError(error)) {
             details.append("- Похоже на нехватку свободного места или отказ записи. Освободите место и повторите полное обновление.\n");
         }
-        if (isPathLengthError(error)) {
+        if ("GS-PATH-LENGTH".equals(code) || isPathLengthError(error)) {
             details.append("- Похоже на слишком длинный путь или слишком длинное имя файла. Укоротите имена каталогов внутри сайта.\n");
         }
         details.append("- Проверьте имена внутри архива: не должно быть абсолютных путей, ../, C:/, пустых имен и управляющих символов.\n");
@@ -2002,18 +2183,15 @@ public class MainActivity extends Activity {
     }
 
     private Throwable getRootCause(Throwable error) {
-        Throwable current = error;
-        while (current != null && current.getCause() != null && current.getCause() != current) {
-            current = current.getCause();
-        }
-        return current == null ? error : current;
+        return DiagnosticReport.rootCause(error);
     }
 
     private void appendDiagnosticLine(StringBuilder builder, String label, String value) {
         if (value == null || value.length() == 0) {
             return;
         }
-        builder.append(label).append(": ").append(value).append('\n');
+        String safe = DiagnosticReport.safeText(value).replace('\n', ' ').replace('\t', ' ');
+        builder.append(label).append(": ").append(safe.length() > 2048 ? safe.substring(0, 2048) + "…" : safe).append('\n');
     }
 
     private String buildProgressText(String archiveName, long archiveSize, long readBytes, long extractedBytes, int files, int skippedFiles, int entries, File extractRoot, boolean fastUpdate, long progressStartedAt) {
@@ -2418,17 +2596,26 @@ public class MainActivity extends Activity {
         Thread worker = new Thread(new Runnable() {
             @Override
             public void run() {
+                InstallContext context = new InstallContext(System.currentTimeMillis(), "очистка сайта");
                 try {
+                    context.previousSite = describeInstalledSite();
                     SharedPreferences prefs = getPrefs();
+                    context.archiveName = prefs.getString(PREF_ARCHIVE_NAME, "неизвестно");
+                    context.setStage("SITE-DELETE", "удаление установленного сайта");
                     String basePath = prefs.getString(PREF_BASE_PATH, "");
                     if (basePath != null && basePath.length() > 0) {
-                        clearExtractedSite(new File(new File(basePath), EXTRACT_DIR_NAME), "Очищаю установленный сайт");
+                        context.base = new File(basePath);
+                        context.extractRoot = new File(context.base, EXTRACT_DIR_NAME);
+                        clearExtractedSite(context.extractRoot, "Очищаю установленный сайт");
                     } else {
                         for (File base : getCandidateStorageBases()) {
-                            clearExtractedSite(new File(base, EXTRACT_DIR_NAME), "Очищаю установленный сайт");
+                            context.base = base;
+                            context.extractRoot = new File(base, EXTRACT_DIR_NAME);
+                            clearExtractedSite(context.extractRoot, "Очищаю установленный сайт");
                         }
                     }
 
+                    context.setStage("STATE-CLEAR", "очистка сведений об установленном сайте");
                     prefs.edit().clear().apply();
                     mainHandler.post(new Runnable() {
                         @Override
@@ -2439,10 +2626,12 @@ public class MainActivity extends Activity {
                         }
                     });
                 } catch (final Exception e) {
+                    final String report = saveLastErrorReport(buildInstallErrorDetails(e, context));
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            Toast.makeText(MainActivity.this, "Ошибка очистки: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                            loadInstalledSiteOrPrompt();
+                            showErrorDialog("Ошибка очистки сайта", report);
                         }
                     });
                 } finally {
@@ -3032,14 +3221,46 @@ public class MainActivity extends Activity {
         long archiveSize = -1L;
         long readBytes;
         long writtenBytes;
+        long currentEntrySize = -1L;
+        long currentFileBytes;
         int entries;
         int extractedFiles;
         int skippedFiles;
     }
 
     private static class ZipDiagnosticException extends IOException {
-        ZipDiagnosticException(String message, Throwable cause) {
+        final String stage;
+
+        ZipDiagnosticException(String message, Throwable cause, String stage) {
             super(message, cause);
+            this.stage = stage;
+        }
+    }
+
+    private static class InstallContext {
+        final long startedAt;
+        final String mode;
+        String stageCode = "PREPARE";
+        String stage = "подготовка операции";
+        String archiveName = "ещё не определён";
+        String archiveFormat = "ещё не определён";
+        String source = "неизвестно";
+        String previousSite = "неизвестно";
+        long archiveSize = -1L;
+        long freeBefore = -1L;
+        long writtenBytes;
+        int writtenFiles;
+        File base;
+        File extractRoot;
+
+        InstallContext(long startedAt, String mode) {
+            this.startedAt = startedAt;
+            this.mode = mode;
+        }
+
+        void setStage(String code, String description) {
+            stageCode = code;
+            stage = description;
         }
     }
 

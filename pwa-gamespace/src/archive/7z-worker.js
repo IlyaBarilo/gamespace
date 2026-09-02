@@ -1,5 +1,6 @@
 import SevenZipFactory from "../vendor/7zz.js";
 import { dirname, findIndexEntry, parse7zSlt, summarizeEntries } from "./archive-plan.js";
+import { OperationDiagnostics, serializeDiagnosticError } from "../diagnostics.js";
 
 const INPUT_DIRECTORY = "/input";
 const ARCHIVE_PATH = `${INPUT_DIRECTORY}/archive.7z`;
@@ -72,7 +73,8 @@ async function probeCapabilities() {
   return { supported: true, reason: "" };
 }
 
-async function extractArchive({ file, destination, requireIndex }) {
+async function extractArchive({ file, destination, requireIndex }, emit, diagnostics) {
+  emit({ type: "phase", phase: "worker-start", label: "Запускаю обработчик 7z/WASM…" });
   validateDestination(destination);
   if (!(file instanceof File)) throw new Error("7z Worker не получил выбранный файл.");
 
@@ -85,35 +87,41 @@ async function extractArchive({ file, destination, requireIndex }) {
         listLines.push(line);
       } else {
         const match = /-\s(.+)$/.exec(line);
-        if (match) currentFile = match[1];
+        if (match) {
+          currentFile = match[1];
+          emit({ type: "file-stage", phase: "file-extract", label: "Распаковка 7z-записи в OPFS", currentFile });
+        }
       }
     },
     printErr(line) {
-      if (line) self.postMessage({ type: "diagnostic", message: String(line) });
+      if (line) emit({ type: "diagnostic", message: String(line) });
     },
   });
 
+  emit({ type: "phase", phase: "archive-open", label: "Подключаю локальный 7z и хранилище OPFS…" });
   mountLazyArchive(sevenZip, file);
   sevenZip.FS.mkdir(OUTPUT_MOUNT);
   sevenZip.FS.mount(sevenZip.OPFS, {}, OUTPUT_MOUNT);
 
-  self.postMessage({ type: "phase", phase: "list", label: "Проверяю структуру 7z…" });
+  emit({ type: "phase", phase: "list", label: "Проверяю структуру 7z…" });
   const listExit = await sevenZip.callMain(["l", "-slt", ARCHIVE_PATH]);
   if (listExit !== 0) throw new Error(`Не удалось прочитать 7z (код ${listExit}). Архив может быть повреждён или зашифрован.`);
 
   const entries = parse7zSlt(listLines);
   const summary = summarizeEntries(entries);
+  emit({ type: "phase", phase: "index-check", label: "Проверяю стартовую страницу в 7z…" });
   const indexEntry = findIndexEntry(entries);
   if (requireIndex && !indexEntry) {
     throw new Error("В архиве не найден index.html. Поддерживается файл в корне, в site/ или в одном верхнем каталоге.");
   }
 
+  emit({ type: "phase", phase: "quota-check", label: "Проверяю доступную квоту хранилища…" });
   const storage = await navigator.storage.estimate();
   const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
   const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
   const reserveBytes = Math.max(512 * 1024 * 1024, Math.ceil(summary.uncompressedBytes * 0.1));
   const requiredBytes = summary.uncompressedBytes * (requireIndex ? 1 : 2) + reserveBytes;
-  self.postMessage({
+  emit({
     type: "archive-info",
     archiveBytes: file.size,
     availableBytes,
@@ -130,10 +138,11 @@ async function extractArchive({ file, destination, requireIndex }) {
   let lastProgressAt = 0;
   sevenZip.OPFS.onWrite = (_path, bytesWritten) => {
     processedBytes += bytesWritten;
+    diagnostics.observe({ type: "progress", processedBytes, totalBytes: summary.uncompressedBytes, currentFile });
     const now = performance.now();
     if (now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
       lastProgressAt = now;
-      self.postMessage({
+      emit({
         type: "progress",
         processedBytes,
         totalBytes: summary.uncompressedBytes,
@@ -143,12 +152,12 @@ async function extractArchive({ file, destination, requireIndex }) {
   };
 
   phase = "extract";
-  self.postMessage({ type: "phase", phase: "extract", label: "Распаковываю 7z в защищённое хранилище…" });
+  emit({ type: "phase", phase: "extract", label: "Распаковываю 7z в защищённое хранилище…" });
   const outputPath = `${OUTPUT_MOUNT}/${destination}`;
   const extractExit = await sevenZip.callMain(["x", ARCHIVE_PATH, `-o${outputPath}`, "-y", "-bb1", "-bso1"]);
   if (extractExit !== 0) throw new Error(`Распаковка 7z завершилась с кодом ${extractExit}.`);
 
-  self.postMessage({
+  emit({
     type: "progress",
     processedBytes,
     totalBytes: summary.uncompressedBytes,
@@ -165,13 +174,15 @@ async function extractArchive({ file, destination, requireIndex }) {
 self.onmessage = async (event) => {
   const message = event.data;
   if (!message) return;
+  const diagnostics = new OperationDiagnostics("обработка 7z", { file: message.file });
+  const emit = (event) => { diagnostics.observe(event); self.postMessage(event); };
   try {
     if (message.type === "probe") {
       self.postMessage({ type: "probe-result", ...await probeCapabilities() });
       return;
     }
     if (message.type !== "extract") return;
-    const result = await extractArchive(message);
+    const result = await extractArchive(message, emit, diagnostics);
     self.postMessage({ type: "done", result });
   } catch (error) {
     const rawMessage = error?.message;
@@ -180,6 +191,10 @@ self.onmessage = async (event) => {
       : typeof error === "string"
         ? error
         : `${error?.name || error?.constructor?.name || "Ошибка 7z"}${error?.errno ? ` (errno ${error.errno})` : ""}`;
-    self.postMessage({ type: "error", message, stack: typeof error?.stack === "string" ? error.stack : "" });
+    self.postMessage({
+      type: "error", message,
+      error: serializeDiagnosticError(error),
+      diagnosticContext: diagnostics.failure(error).diagnosticContext,
+    });
   }
 };

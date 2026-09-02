@@ -11,6 +11,7 @@ import {
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 import { ProgressEstimator } from "./progress-estimator.js";
+import { createDiagnosticUI } from "./diagnostic-ui.js";
 import {
   getVersionBatch,
   normalizeReleaseDescription,
@@ -38,6 +39,7 @@ let licenseModalPreviousFocus = null;
 let licenseDocumentRequest = 0;
 const progressEstimator = new ProgressEstimator();
 let progressUnit = null;
+let lastStorageEstimate = null;
 
 const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
@@ -60,6 +62,17 @@ function isRunningAsInstalledApp() {
 
 const runningAsInstalledApp = isRunningAsInstalledApp();
 elements.installButton.hidden = runningAsInstalledApp;
+const diagnosticUI = createDiagnosticUI(elements, () => ({
+  version: APP_VERSION,
+  activeVersion: runtimeState?.activeVersion,
+  runtime: navigator.serviceWorker?.controller?.scriptURL?.split("/").at(-1)?.split("?")[0] || RUNTIME_SCRIPT,
+  controlled: Boolean(navigator.serviceWorker?.controller),
+  userAgent: navigator.userAgent,
+  displayMode: runningAsInstalledApp ? "установленное приложение" : "вкладка браузера",
+  online: navigator.onLine,
+  capabilities: `secure=${window.isSecureContext}; OPFS=${Boolean(navigator.storage?.getDirectory)}; Worker=${Boolean(window.Worker)}; WASM=${Boolean(window.WebAssembly)}; IndexedDB=${Boolean(window.indexedDB)}`,
+  storage: lastStorageEstimate,
+}));
 
 function showLanding() {
   elements.landingPage.hidden = false;
@@ -95,7 +108,7 @@ function setBusy(value) {
   busy = value;
   document.body.classList.toggle("is-busy", value);
   for (const button of document.querySelectorAll("button")) {
-    if (button.closest("#viewer")) continue;
+    if (button.closest("#viewer, #diagnosticDialog")) continue;
     button.disabled = value || button.dataset.fixedDisabled === "true";
   }
   elements.archiveInput.disabled = value;
@@ -211,9 +224,14 @@ function hideProgress() {
   elements.progressPanel.hidden = true;
 }
 
-function showError(error) {
+function showError(error, context = {}) {
   elements.errorText.textContent = errorMessage(error);
   elements.errorPanel.hidden = false;
+  diagnosticUI.capture(error, {
+    operation: "операция приложения", stage: "operation", stageLabel: "Операция приложения",
+    previousSite: state ? "установлен" : "не установлен",
+    ...context,
+  });
 }
 
 function showRateEstimate(estimate, unit) {
@@ -276,8 +294,8 @@ async function chooseArchive(mode) {
   elements.archiveInput.click();
 }
 
-async function importSelectedFile(file) {
-  if (!file) return;
+async function importSelectedFile(file, source = "локальный архив") {
+  if (!file || busy) return;
   const isUpdate = pendingMode === "fast";
   const confirmed = window.confirm(isUpdate
     ? `Применить локальное обновление «${file.name}»? Изменённые файлы будут защищены журналом отката.`
@@ -285,6 +303,12 @@ async function importSelectedFile(file) {
       ? `Полностью заменить установленный сайт архивом «${file.name}»? Новая версия станет активной только после успешной проверки.`
       : `Установить сайт из архива «${file.name}»? Архив не будет отправлен в сеть.`);
   if (!confirmed) return;
+  const diagnosticContext = {
+    operation: isUpdate ? "быстрое обновление" : source === "демо" ? "встроенное демо" : "полная установка",
+    previousSite: state ? (state.archiveName?.startsWith("Встроенный демо-сайт") ? "встроенное демо" : "пользовательский сайт") : "не установлен",
+    stage: "prepare", stageLabel: "Подготовка импорта", startedAt: Date.now(),
+    archive: { name: file.name, bytes: file.size, type: file.type },
+  };
 
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
@@ -293,6 +317,8 @@ async function importSelectedFile(file) {
     state = isUpdate
       ? await applyUpdateArchive(file, handleImportEvent)
       : await installFullArchive(file, handleImportEvent);
+    diagnosticContext.stage = "interface-refresh";
+    diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
     await synchronizeSiteInterface({ reloadState: true });
     scheduleSiteInterfaceRefresh();
     elements.progressPhase.textContent = "Готово";
@@ -300,7 +326,7 @@ async function importSelectedFile(file) {
     setStatus("Сайт готов к автономной работе", "good");
     setTimeout(hideProgress, 1600);
   } catch (error) {
-    showError(error);
+    showError(error, diagnosticContext);
     elements.progressPhase.textContent = "Операция остановлена";
     setStatus("Не удалось обработать архив", "bad");
   } finally {
@@ -342,7 +368,7 @@ async function openViewer() {
     showViewerToolbar();
     return true;
   } catch (error) {
-    showError(error);
+    showError(error, { operation: "открытие сайта", stage: "viewer-open", stageLabel: "Подготовка автономного просмотра" });
     setStatus("Локальный сайт пока не открыт", "bad");
     return false;
   }
@@ -391,6 +417,7 @@ async function refreshStorage() {
     return;
   }
   const estimate = await navigator.storage.estimate();
+  lastStorageEstimate = { quota: estimate.quota, usage: estimate.usage, measuredAt: new Date().toISOString() };
   elements.storageUsage.textContent = `Оценка браузера: ${formatBytes(estimate.usage || 0)}`;
   elements.storageQuota.textContent = `Доступная квота: ${formatBytes(estimate.quota || 0)}`;
   const percent = estimate.quota ? Math.min(100, (estimate.usage || 0) / estimate.quota * 100) : 0;
@@ -438,7 +465,7 @@ async function verifyStoredSite() {
     await refreshStorage();
     setStatus(`Проверено: ${result.files.toLocaleString("ru-RU")} файлов, ${formatBytes(result.bytes)}`, "good");
   } catch (error) {
-    showError(error);
+    showError(error, { operation: "проверка сайта", stage: "site-verify", stageLabel: "Проверка файлов в OPFS" });
     setStatus("Проверка файлов не выполнена", "bad");
   } finally {
     setBusy(false);
@@ -722,6 +749,7 @@ async function installPwaRelease(release, target = "app") {
     location.reload();
   } catch (error) {
     status.textContent = `Не удалось установить PWA: ${errorMessage(error)}`;
+    showError(error, { operation: `установка оболочки ${release.version}`, stage: "pwa-install", stageLabel: "Установка и активация версии PWA" });
   } finally {
     setBusy(false);
   }
@@ -745,6 +773,7 @@ async function checkForPwaUpdate(target = "app") {
       : `Последняя версия — ${catalog.latest}. Установка начнётся только после вашего выбора.`;
   } catch (error) {
     status.textContent = `Не удалось проверить версии: ${errorMessage(error)}`;
+    showError(error, { operation: "проверка версий PWA", stage: "pwa-catalog", stageLabel: "Загрузка каталога версий" });
   } finally {
     setBusy(false);
   }
@@ -760,6 +789,7 @@ async function rollbackPwaRelease() {
     location.reload();
   } catch (error) {
     elements.pwaUpdateStatus.textContent = `Не удалось выполнить откат: ${errorMessage(error)}`;
+    showError(error, { operation: "откат оболочки PWA", stage: "pwa-rollback", stageLabel: "Возврат предыдущей версии оболочки" });
   } finally {
     setBusy(false);
   }
@@ -796,6 +826,7 @@ async function initialize() {
       }
     } catch (error) {
       elements.installAvailability.textContent = `Автономный режим пока не подготовлен: ${errorMessage(error)}`;
+      showError(error, { operation: "подготовка к установке PWA", stage: "initialize", stageLabel: "Подготовка автономной оболочки" });
     }
     return;
   }
@@ -830,13 +861,16 @@ async function initialize() {
     setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
   } catch (error) {
     finishBoot();
-    showError(error);
+    showError(error, { operation: "запуск PWA", stage: "initialize", stageLabel: "Инициализация приложения и хранилища" });
     setStatus("Ошибка инициализации", "bad");
   }
 }
 
 elements.chooseArchiveButton.addEventListener("click", () => chooseArchive("full"));
 elements.demoButton.addEventListener("click", async () => {
+  if (busy) return;
+  const startedAt = Date.now();
+  setBusy(true);
   try {
     const demoUrl = new URL("./demo.7z", location.href);
     demoUrl.searchParams.set("gamespace-demo", DEMO_REVISION);
@@ -844,12 +878,15 @@ elements.demoButton.addEventListener("click", async () => {
     if (!response.ok) throw new Error("Встроенный demo.7z недоступен.");
     const blob = await response.blob();
     pendingMode = "full";
+    setBusy(false);
     await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
       type: "application/x-7z-compressed",
       lastModified: Date.now(),
-    }));
+    }), "демо");
   } catch (error) {
-    showError(error);
+    showError(error, { operation: "встроенное демо", stage: "demo-read", stageLabel: "Получение встроенного demo.7z", startedAt });
+  } finally {
+    setBusy(false);
   }
 });
 elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full"));
@@ -866,7 +903,7 @@ elements.recoveryLink.addEventListener("click", async (event) => {
     await ensureServiceWorker();
     location.assign(elements.recoveryLink.href);
   } catch (error) {
-    showError(error);
+    showError(error, { operation: "открытие восстановления", stage: "recovery-open", stageLabel: "Подготовка страницы восстановления" });
     setStatus("Страница восстановления пока недоступна", "bad");
   }
 });
@@ -888,6 +925,7 @@ elements.errorClose.addEventListener("click", () => { elements.errorPanel.hidden
 elements.removeSiteButton.addEventListener("click", async () => {
   if (!state || !window.confirm("Удалить распакованный сайт и его локальные данные из хранилища PWA?")) return;
   const previousState = state;
+  const startedAt = Date.now();
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
   state = null;
@@ -903,7 +941,7 @@ elements.removeSiteButton.addEventListener("click", async () => {
     state = await readState().catch(() => previousState);
     renderState();
     await refreshStorage().catch(() => {});
-    showError(error);
+    showError(error, { operation: "удаление сайта", stage: "site-delete", stageLabel: "Удаление локального сайта", previousSite: "установлен", startedAt });
   } finally {
     setBusy(false);
   }
