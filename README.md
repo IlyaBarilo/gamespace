@@ -4,6 +4,7 @@
 [Установить APK](https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk) ·
 [Кейс разработки](docs/CASE_STUDY_RU.md) ·
 [Проверенные устройства](docs/TESTED_DEVICES_RU.md) ·
+[Постеры A4](#постеры-a4) ·
 [Документация PWA](pwa-gamespace/README.md)
 
 GameSpace запускает локальный HTML/CSS/JavaScript-сайт из архива на планшете
@@ -92,6 +93,25 @@ GameSpace представлен двумя приложениями с общи
 
 Подробнее о двух вариантах содержимого рассказано в разделе
 [«Встроенное демо или свой архив»](#встроенное-демо-или-свой-архив).
+
+## Постеры A4
+
+Постеры с QR-кодами для установки GameSpace PWA и APK. Нажмите на изображение,
+чтобы открыть WebP для печати: 2480 × 3508 пикселей (300 dpi на A4). Выберите
+бумагу A4, книжную ориентацию и вписывание изображения в страницу.
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="docs/images/gamespace-poster-pwa-a4.webp"><img src="docs/images/gamespace-poster-pwa-preview.webp" width="320" alt="Постер A4 с QR-кодом для установки GameSpace PWA"></a>
+      <br><a href="docs/images/gamespace-poster-pwa-a4.webp"><strong>PWA — полный постер A4</strong></a>
+    </td>
+    <td align="center">
+      <a href="docs/images/gamespace-poster-apk-a4.webp"><img src="docs/images/gamespace-poster-apk-preview.webp" width="320" alt="Постер A4 с QR-кодом для скачивания GameSpace APK"></a>
+      <br><a href="docs/images/gamespace-poster-apk-a4.webp"><strong>APK — полный постер A4</strong></a>
+    </td>
+  </tr>
+</table>
 
 ## Возможности
 
@@ -332,7 +352,7 @@ SDK, подпись и результат сборки описаны в
 apk-gamespace/   исходники и сборка Android-приложения
 pwa-gamespace/   исходники, тесты и выпуск PWA
 demo/            исходные материалы встроенного демо
-docs/            кейс разработки и изображения интерфейса
+docs/            документация, изображения интерфейса и постеры A4
 third_party/     лицензии и исходные материалы сторонних компонентов
 tools/           общие инструменты сборки
 .github/         сборка и публикация стабильных выпусков GameSpace
@@ -350,7 +370,7 @@ MIT License является основной лицензией оригина�
 | Оригинальный программный код и текстовая документация GameSpace, если в конкретном файле не указано иное | [MIT License](LICENSE) |
 | Оригинальные материалы встроенного демо | Только как встроенное демо неизменённого официального GameSpace; подробности в [DEMO_CONTENT_LICENSE.md](demo/DEMO_CONTENT_LICENSE.md) |
 | Значок GameSpace и связанные фирменные графические материалы | Не входят в MIT; в изменённой версии должны быть заменены согласно [BRAND_ASSETS_LICENSE.md](BRAND_ASSETS_LICENSE.md) |
-| Официальные изображения документации и социальная обложка | Разрешены только в неизменённом виде как часть официального репозитория, документации и презентационных материалов GameSpace; применяются условия для [фирменной графики](BRAND_ASSETS_LICENSE.md) и [демо-материалов](demo/DEMO_CONTENT_LICENSE.md) |
+| Официальные изображения документации, постеры и социальная обложка | Разрешены только в неизменённом виде как часть официального репозитория, документации и презентационных материалов GameSpace; применяются условия для [фирменной графики](BRAND_ASSETS_LICENSE.md) и [демо-материалов](demo/DEMO_CONTENT_LICENSE.md) |
 | Название и идентичность продукта GameSpace | MIT не предоставляет прав на товарный знак или фирменное обозначение |
 | Сторонние компоненты | Сохраняют собственные лицензии из [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) и `third_party/licenses/` |
 
