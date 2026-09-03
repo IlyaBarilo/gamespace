@@ -511,7 +511,13 @@ function Invoke-DirectSdkBuild($ProjectDir, $SdkDir) {
         throw "No compiled .class files were found."
     }
 
-    $d8Inputs = @($classFiles) + $libraryJars
+    # Passing every nested class to d8.bat can exceed cmd.exe's command-line limit.
+    # A single intermediate JAR keeps the direct SDK build independent of class count.
+    $jarTool = Join-Path $jdkBin "jar.exe"
+    $compiledClassesJar = Join-Path $buildDir "compiled-classes.jar"
+    & $jarTool cf $compiledClassesJar -C $classesDir "."
+    if ($LASTEXITCODE -ne 0) { throw "Packing compiled classes failed with exit code $LASTEXITCODE" }
+    $d8Inputs = @($compiledClassesJar) + $libraryJars
     & $d8 --lib $androidJar --output $dexDir $d8Inputs
     if ($LASTEXITCODE -ne 0) { throw "d8 failed with exit code $LASTEXITCODE" }
 

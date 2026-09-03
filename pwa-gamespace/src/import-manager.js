@@ -65,8 +65,14 @@ async function diagnosticCleanup(error, label, action) {
   try {
     const completed = await action();
     addCleanupDiagnostic(error, label, completed === false ? new Error("Не все файлы удалось восстановить") : null);
+    return completed !== false;
   }
-  catch (cleanupError) { addCleanupDiagnostic(error, label, cleanupError); }
+  catch (cleanupError) { addCleanupDiagnostic(error, label, cleanupError); return false; }
+}
+
+async function cleanupAfterCommit(action, onEvent, label) {
+  try { await action(); }
+  catch (error) { onEvent?.({ type: "cleanup-warning", label, error }); }
 }
 
 export async function requestPersistentStorage() {
@@ -82,12 +88,15 @@ export async function installFullArchive(file, onEvent) {
   const diagnostics = new OperationDiagnostics("полная установка", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let revisionPath = null;
+  let committed = false;
   const startedAt = Date.now();
 
   try {
-    diagnostics.stage("storage-prepare", "Подготовка постоянного хранилища");
+    onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
-    diagnostics.stage("state-read", "Чтение сведений об установленном сайте из IndexedDB");
+    onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
+    await recoverInterruptedOperation();
+    onEvent({ type: "phase", phase: "state-read", label: "Чтение сведений об установленном сайте из IndexedDB" });
     const previousState = await readState();
     const revision = jobId();
     revisionPath = `${REVISIONS_ROOT}/${revision}`;
@@ -125,18 +134,21 @@ export async function installFullArchive(file, onEvent) {
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
     await writeState(state);
+    committed = true;
     emitServiceWorkerStateChanged();
 
     if (previousState?.revisionPath && previousState.revisionPath !== revisionPath) {
       onEvent?.({ type: "phase", phase: "cleanup", label: "Удаляю предыдущую версию сайта…" });
-      await removePath(root, previousState.revisionPath).catch(() => {});
+      await cleanupAfterCommit(() => removePath(root, previousState.revisionPath), onEvent, "Очистка предыдущей ревизии после успешной установки");
     }
-    await cleanupOrphans(state).catch(() => {});
+    await cleanupAfterCommit(() => cleanupOrphans(state), onEvent, "Очистка временных файлов после успешной установки");
     return state;
   } catch (error) {
     const failure = diagnostics.failure(error);
-    if (revisionPath) {
+    if (revisionPath && !committed) {
       await diagnosticCleanup(failure, "Очистка неполной ревизии", async () => removePath(await getOpfsRoot(), revisionPath));
+    } else if (committed) {
+      addCleanupDiagnostic(failure, "Активная ревизия уже сохранена; её файлы оставлены на месте", null);
     }
     throw failure;
   }
@@ -151,17 +163,20 @@ export async function applyUpdateArchive(file, onEvent) {
   let root;
   const startedAt = Date.now();
   let mergeJournal = null;
+  let ownsJournal = false;
 
   try {
-    diagnostics.stage("storage-prepare", "Подготовка постоянного хранилища");
+    onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
-    diagnostics.stage("state-read", "Чтение установленного сайта и подготовка обновления");
+    onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
+    await recoverInterruptedOperation();
+    onEvent({ type: "phase", phase: "state-read", label: "Чтение установленного сайта и подготовка обновления" });
     state = await readState();
     if (!state?.revisionPath) throw new Error("Сначала установите основной архив сайта.");
     const updateId = jobId();
     updatePath = `${UPDATES_ROOT}/${updateId}`;
     rollbackPath = `${ROLLBACK_ROOT}/${updateId}`;
-    diagnostics.stage("storage-open", "Открытие OPFS");
+    onEvent({ type: "phase", phase: "storage-open", label: "Открытие OPFS" });
     root = await getOpfsRoot();
     const result = await extractArchive({ file, destination: updatePath, requireIndex: false, onEvent });
     onEvent?.({ type: "phase", phase: "apply", label: "Применяю обновление с возможностью отката…" });
@@ -175,8 +190,9 @@ export async function applyUpdateArchive(file, onEvent) {
       createdPaths: [],
       restoredPaths: [],
     };
-    diagnostics.stage("journal-save", "Сохранение журнала отката обновления");
+    onEvent({ type: "phase", phase: "journal-save", label: "Сохранение журнала отката обновления" });
     await writeOperationJournal(baseJournal);
+    ownsJournal = true;
     const merge = await mergeDirectoryWithRollback({
       sourcePath: updatePath,
       targetPath: state.revisionPath,
@@ -214,23 +230,28 @@ export async function applyUpdateArchive(file, onEvent) {
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю результат обновления…" });
     await commitStateAndClearOperationJournal(updatedState);
+    ownsJournal = false;
     mergeJournal = null;
     emitServiceWorkerStateChanged();
-    await removePath(root, updatePath).catch(() => {});
-    await removePath(root, rollbackPath).catch(() => {});
+    await cleanupAfterCommit(() => removePath(root, updatePath), onEvent, "Очистка временного обновления после успешной установки");
+    await cleanupAfterCommit(() => removePath(root, rollbackPath), onEvent, "Очистка резервных файлов после успешной установки");
     return updatedState;
   } catch (error) {
     const failure = diagnostics.failure(error);
+    let rollbackComplete = !error.rollbackIncomplete;
     if (mergeJournal) {
-      await diagnosticCleanup(failure, "Откат обновления", () => rollbackMergedDirectory({
+      rollbackComplete = await diagnosticCleanup(failure, "Откат обновления", () => rollbackMergedDirectory({
         targetPath: state.revisionPath,
         rollbackPath,
         createdPaths: mergeJournal.createdPaths,
         restoredPaths: mergeJournal.restoredPaths,
       }));
     }
-    if (root) {
-      await diagnosticCleanup(failure, "Очистка журнала операции", clearOperationJournal);
+    if (!rollbackComplete) {
+      addCleanupDiagnostic(failure, "Журнал и резервные файлы сохранены для повторного восстановления", new Error("Откат не завершён. Не удаляйте данные приложения до получения отчёта."));
+    } else if (root) {
+      const journalCleared = !ownsJournal || await diagnosticCleanup(failure, "Очистка журнала операции", clearOperationJournal);
+      if (!journalCleared) throw failure;
       await diagnosticCleanup(failure, "Очистка временного обновления", () => removePath(root, updatePath));
       await diagnosticCleanup(failure, "Очистка временных резервных файлов", () => removePath(root, rollbackPath));
     }
@@ -242,8 +263,9 @@ export async function removeInstalledSite() {
   const state = await readState();
   const root = await getOpfsRoot();
   if (state?.revisionPath) await removePath(root, state.revisionPath);
-  await removePath(root, UPDATES_ROOT).catch(() => {});
-  await removePath(root, ROLLBACK_ROOT).catch(() => {});
+  await removePath(root, UPDATES_ROOT);
+  await removePath(root, ROLLBACK_ROOT);
+  await clearOperationJournal();
   await clearState();
   emitServiceWorkerStateChanged();
 }
@@ -271,8 +293,8 @@ export async function cleanupOrphans(state = null) {
   await recoverInterruptedOperation();
   const currentState = state || await readState();
   const root = await getOpfsRoot();
-  await removePath(root, UPDATES_ROOT).catch(() => {});
-  await removePath(root, ROLLBACK_ROOT).catch(() => {});
+  await removePath(root, UPDATES_ROOT);
+  await removePath(root, ROLLBACK_ROOT);
 
   try {
     const revisions = await getDirectoryAt(root, REVISIONS_ROOT, false);
@@ -291,15 +313,18 @@ export async function recoverInterruptedOperation() {
   if (!journal) return false;
   const root = await getOpfsRoot();
   if (journal.type === "update-merge") {
-    await rollbackMergedDirectory({
+    const completed = await rollbackMergedDirectory({
       targetPath: journal.targetPath,
       rollbackPath: journal.rollbackPath,
       createdPaths: journal.createdPaths || [],
       restoredPaths: journal.restoredPaths || [],
     });
-    await removePath(root, journal.updatePath).catch(() => {});
-    await removePath(root, journal.rollbackPath).catch(() => {});
+    if (!completed) throw new Error("Восстановление незавершённого обновления не закончено. Журнал и резервные файлы сохранены.");
+    // Clear the journal before deleting backups: a retained journal must remain replayable.
+    await clearOperationJournal();
+    await removePath(root, journal.updatePath);
+    await removePath(root, journal.rollbackPath);
+    return true;
   }
-  await clearOperationJournal();
-  return true;
+  throw new Error("Неизвестный журнал восстановления. Данные сохранены для диагностики.");
 }

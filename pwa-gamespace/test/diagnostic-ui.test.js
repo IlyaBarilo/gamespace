@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("diagnostic controls exist on both app and landing surfaces, with manual-copy fallback", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  for (const id of ["diagnosticDialog", "diagnosticText", "diagnosticCopy", "diagnosticShare", "diagnosticClose", "lastErrorButton", "landingLastErrorButton", "errorDetailsButton"]) {
+  for (const id of ["diagnosticDialog", "diagnosticText", "diagnosticCopy", "diagnosticShare", "diagnosticClose", "lastErrorButton", "landingLastErrorButton", "errorDetailsButton", "manualReportButton", "landingReportButton", "viewerReport", "viewerMenuToggle"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, /<textarea id="diagnosticText" readonly/);
@@ -20,6 +20,7 @@ test("report dialog remains usable while import controls are busy", async () => 
   const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.match(app, /button\.closest\("#viewer, #diagnosticDialog"\)/);
   assert.match(styles, /body\.is-busy button:not\(#errorClose\):not\(#diagnosticDialog button\)/);
+  assert.match(styles, /:not\(\.diagnostic-trigger\)/);
 });
 
 test("site removal does not erase separately stored diagnostics", async () => {

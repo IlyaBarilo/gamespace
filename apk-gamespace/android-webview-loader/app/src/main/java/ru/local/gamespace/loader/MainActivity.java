@@ -27,6 +27,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.WebChromeClient;
+import android.webkit.ConsoleMessage;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
@@ -127,6 +130,11 @@ public class MainActivity extends Activity {
 
     private volatile boolean busy;
     private volatile String lastErrorReport;
+    // Process-scoped: Activity recreation must not masquerade as a terminated operation.
+    private static DiagnosticJournal diagnosticJournal;
+    private int runtimeIssueCount;
+    private boolean rendererRecoveryScheduled;
+    private volatile String diagnosticPage = "оболочка";
     private int topBarHoldCount;
     private int pendingUpdateMode = UPDATE_MODE_FULL;
     private long topBarHideAtMillis;
@@ -198,6 +206,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        initializeDiagnosticJournal();
         buildUi();
         configureWebView(homeWebView, true);
         configureWebView(webView, false);
@@ -207,6 +216,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (diagnosticJournal != null) diagnosticJournal.record("Приложение открыто", false);
         WebView visibleWebView = getVisibleSiteWebView();
         if (visibleWebView != null) {
             visibleWebView.onResume();
@@ -224,6 +234,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        if (diagnosticJournal != null) diagnosticJournal.record("Приложение скрыто", true);
         WebView visibleWebView = getVisibleSiteWebView();
         if (visibleWebView != null) {
             if (visibleWebView == homeWebView && !contentLoadPending) {
@@ -778,7 +789,19 @@ public class MainActivity extends Activity {
             settings.setAllowUniversalAccessFromFileURLs(true);
         }
 
-        view.setWebChromeClient(new WebChromeClient());
+        view.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage message) {
+                if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    String text = message.message();
+                    if (text != null && (text.startsWith("GS-PROMISE:") || text.startsWith("Uncaught "))) {
+                        recordRuntimeIssue("GAME-SCRIPT", new IOException(text),
+                            "Скрипт: " + diagnosticPagePath(message.sourceId()) + "; строка: " + message.lineNumber(), false);
+                    }
+                }
+                return false;
+            }
+        });
         view.setWebViewClient(homeView ? new HomeSiteClient() : new ContentSiteClient());
     }
 
@@ -832,6 +855,10 @@ public class MainActivity extends Activity {
             }
         }
 
+        if (savedIndexPath != null && savedIndexPath.length() > 0) {
+            recordRuntimeIssue("SITE-MISSING", new IOException("Сохранённый index.html не найден ни в одном доступном каталоге. Причина неизвестна; носитель может быть недоступен."),
+                "Ожидался файл: " + savedIndexPath, false);
+        }
         return null;
     }
 
@@ -984,7 +1011,7 @@ public class MainActivity extends Activity {
                 progressDetails.setText(details);
                 backButton.setEnabled(false);
                 homeButton.setEnabled(false);
-                menuButton.setEnabled(false);
+                menuButton.setEnabled(true);
                 chooseButton.setEnabled(false);
                 if (demoButton != null) {
                     demoButton.setEnabled(false);
@@ -995,6 +1022,7 @@ public class MainActivity extends Activity {
     }
 
     private void updateProgress(final String details) {
+        if (diagnosticJournal != null) diagnosticJournal.checkpoint(null, details);
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -1004,6 +1032,7 @@ public class MainActivity extends Activity {
     }
 
     private void finishBusy() {
+        if (diagnosticJournal != null) diagnosticJournal.finish();
         busy = false;
         mainHandler.post(new Runnable() {
             @Override
@@ -1024,14 +1053,10 @@ public class MainActivity extends Activity {
     }
 
     private void showAppMenu() {
-        if (busy) {
-            return;
-        }
-
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
-        final String[] items = installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Последняя ошибка", "Лицензии"};
+        final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"} : installed
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1039,6 +1064,7 @@ public class MainActivity extends Activity {
                 @Override
                 public void onClick(DialogInterface dialog, int which) {
                     String item = items[which];
+                    if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
                     if ("Выбрать архив".equals(item)) {
                         pendingUpdateMode = UPDATE_MODE_FULL;
                         openZipPicker();
@@ -1056,6 +1082,8 @@ public class MainActivity extends Activity {
                         showInfoDialog();
                     } else if ("Последняя ошибка".equals(item)) {
                         showLastErrorReport();
+                    } else if ("Создать отчёт о проблеме".equals(item)) {
+                        showManualDiagnosticReport();
                     } else if ("Лицензии".equals(item)) {
                         showLicensesDialog();
                     } else if ("Очистить сайт".equals(item)) {
@@ -1159,6 +1187,7 @@ public class MainActivity extends Activity {
                 long deleteDurationMs = 0L;
                 long extractDurationMs = 0L;
                 InstallContext context = new InstallContext(totalStartedAt, fastUpdate ? "быстрое обновление" : "полная установка");
+                if (diagnosticJournal != null) diagnosticJournal.begin(context.mode);
 
                 try {
                     context.previousSite = describeInstalledSite();
@@ -1317,6 +1346,7 @@ public class MainActivity extends Activity {
                 long deleteDurationMs = 0L;
                 long extractDurationMs = 0L;
                 InstallContext context = new InstallContext(totalStartedAt, "встроенное демо");
+                if (diagnosticJournal != null) diagnosticJournal.begin(context.mode);
                 context.archiveName = BUILTIN_DEMO_ARCHIVE_NAME;
                 context.archiveFormat = "7z";
                 context.source = "встроенный ресурс APK";
@@ -1581,6 +1611,7 @@ public class MainActivity extends Activity {
 
                     context.stage = "проверка имени ZIP-записи";
                     context.currentEntryName = entry.getName();
+                    checkpointArchive(context);
                     context.currentEntrySize = entry.getSize();
                     context.currentFileBytes = 0L;
                     context.currentOutputPath = null;
@@ -1621,6 +1652,7 @@ public class MainActivity extends Activity {
                             lastUiUpdate = now;
                             context.readBytes = countingStream.getBytesRead();
                             context.writtenBytes = extractedBytes;
+                            checkpointArchive(context);
                             updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                         }
                         continue;
@@ -1649,6 +1681,7 @@ public class MainActivity extends Activity {
                             long now = System.currentTimeMillis();
                             if (now - lastUiUpdate > 500L) {
                                 lastUiUpdate = now;
+                                checkpointArchive(context);
                                 updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                             }
                         }
@@ -1770,6 +1803,7 @@ public class MainActivity extends Activity {
 
                     context.stage = "проверка имени 7z-записи";
                     context.currentEntryName = entry.getName();
+                    checkpointArchive(context);
                     context.currentEntrySize = entry.getSize();
                     context.currentFileBytes = 0L;
                     context.currentOutputPath = null;
@@ -1809,6 +1843,7 @@ public class MainActivity extends Activity {
                             lastUiUpdate = now;
                             context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
                             context.writtenBytes = extractedBytes;
+                            checkpointArchive(context);
                             updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                         }
                         continue;
@@ -1838,6 +1873,7 @@ public class MainActivity extends Activity {
                                 long now = System.currentTimeMillis();
                                 if (now - lastUiUpdate > 500L) {
                                     lastUiUpdate = now;
+                                    checkpointArchive(context);
                                     updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
                                 }
                             }
@@ -1946,6 +1982,7 @@ public class MainActivity extends Activity {
     }
 
     private String buildInstallErrorDetails(Throwable error, InstallContext context) {
+        if (diagnosticJournal != null) diagnosticJournal.record("Ошибка: " + context.stageCode + ": " + error.getMessage(), true);
         Throwable root = getRootCause(error);
         ZipDiagnosticException archiveError = error instanceof ZipDiagnosticException ? (ZipDiagnosticException) error : null;
         Throwable originalError = archiveError == null ? error : error.getCause();
@@ -1986,6 +2023,7 @@ public class MainActivity extends Activity {
         }
         details.append('\n');
         appendTroubleshootingHints(details, originalError);
+        appendRuntimeEnvironment(details);
         details.append("\nТехнические подробности:\n").append(DiagnosticReport.technicalDetails(originalError));
         return DiagnosticReport.bounded(details.toString());
     }
@@ -2045,16 +2083,96 @@ public class MainActivity extends Activity {
         return lastErrorReport;
     }
 
-    private void showLastErrorReport() {
+    private String readLastErrorReport() {
         String report = lastErrorReport;
         if (report == null) {
-            report = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).getString(PREF_LAST_ERROR_REPORT, "");
+            try { report = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).getString(PREF_LAST_ERROR_REPORT, ""); }
+            catch (RuntimeException unavailable) { report = "Сохранённый отчёт недоступен: " + unavailable.getClass().getSimpleName(); }
         }
+        return report == null ? "" : report;
+    }
+
+    private void showLastErrorReport() {
+        String report = readLastErrorReport();
         if (report == null || report.length() == 0) {
             Toast.makeText(this, "Сохранённых ошибок пока нет.", Toast.LENGTH_LONG).show();
             return;
         }
         showErrorDialog("Последняя ошибка", report);
+    }
+
+    private void initializeDiagnosticJournal() {
+        if (diagnosticJournal == null) {
+            final SharedPreferences prefs = getApplicationContext().getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE);
+            diagnosticJournal = new DiagnosticJournal(new DiagnosticJournal.Store() {
+                public String load() { return prefs.getString("activity_journal_v1", ""); }
+                public void save(String value) {
+                    if (!prefs.edit().putString("activity_journal_v1", value).commit()) throw new IllegalStateException("Journal write failed");
+                }
+            }, new DiagnosticJournal.Clock() { public long now() { return System.currentTimeMillis(); } });
+            String pending = diagnosticJournal.takePending();
+            if (pending.length() > 0) {
+                saveLastErrorReport(buildRuntimeReport("INTERRUPTED-OPERATION",
+                    new IOException("После предыдущего процесса осталась операция без отметки о завершении. Причина закрытия неизвестна."), pending));
+            }
+            diagnosticJournal.record("Новый процесс приложения", true);
+        }
+    }
+
+    private static void checkpointArchive(ZipReadContext context) {
+        if (diagnosticJournal != null) diagnosticJournal.file(context.currentEntryName);
+        if (diagnosticJournal != null) diagnosticJournal.checkpoint(context.stage,
+            "Файл: " + context.currentEntryName + "; прочитано: " + context.readBytes + "; записано: " + context.writtenBytes + "; файлов: " + context.extractedFiles);
+    }
+
+    private static String diagnosticPagePath(String url) {
+        try {
+            String path = Uri.parse(url == null ? "" : url).getPath();
+            return path == null || path.length() == 0 ? "[путь недоступен]" : DiagnosticReport.safeText(path);
+        } catch (RuntimeException ignored) { return "[путь недоступен]"; }
+    }
+
+    private void appendRuntimeEnvironment(StringBuilder details) {
+        appendDiagnosticLine(details, "Страница", diagnosticPage);
+        appendDiagnosticLine(details, "Операция выполняется", String.valueOf(busy));
+        try {
+            PackageInfo webViewPackage = Build.VERSION.SDK_INT >= 26 ? WebView.getCurrentWebViewPackage() : null;
+            appendDiagnosticLine(details, "WebView", webViewPackage == null ? "версия недоступна" : webViewPackage.packageName + " " + webViewPackage.versionName);
+        } catch (RuntimeException unavailable) { appendDiagnosticLine(details, "WebView", "сведения недоступны"); }
+        if (diagnosticJournal != null) details.append('\n').append(diagnosticJournal.snapshot());
+    }
+
+    private String buildRuntimeReport(String code, Throwable error, String context) {
+        StringBuilder details = new StringBuilder("GameSpace APK — диагностический отчёт, формат 1\n");
+        appendDiagnosticLine(details, "Код", error == null ? "GS-MANUAL" : DiagnosticReport.errorCode(error, code));
+        appendDiagnosticLine(details, "Номер отчёта", "APK-" + Long.toString(System.currentTimeMillis(), 36));
+        appendDiagnosticLine(details, "Время", new SimpleDateFormat("yyyy-MM-dd HH:mm:ss Z", Locale.US).format(new Date()));
+        appendDiagnosticLine(details, "Версия APK", getAppVersionName());
+        appendDiagnosticLine(details, "Сборка APK", getString(R.string.app_build_date));
+        appendDiagnosticLine(details, "Android", Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
+        appendDiagnosticLine(details, "Устройство", Build.MANUFACTURER + " / " + Build.MODEL);
+        appendDiagnosticLine(details, "Этап", code);
+        appendDiagnosticLine(details, "Сообщение", error == null ? "Ручной отчёт по запросу пользователя; исключение не требуется" : error.getMessage());
+        details.append(DiagnosticReport.safeText(context)).append('\n');
+        appendRuntimeEnvironment(details);
+        appendStorageDiagnostic(details, "Каталог установленного сайта", currentContentRoot);
+        if (error != null) details.append("\nТехнические подробности:\n").append(DiagnosticReport.technicalDetails(error));
+        return DiagnosticReport.bounded(details.toString());
+    }
+
+    private void recordRuntimeIssue(String code, Throwable error, String context, boolean reveal) {
+        if (runtimeIssueCount++ >= 10) return;
+        if (diagnosticJournal != null) diagnosticJournal.record(code + ": " + error.getMessage(), true);
+        String report = saveLastErrorReport(buildRuntimeReport(code, error, context));
+        if (reveal) showErrorDialog("Ошибка GameSpace", report);
+        else if (runtimeIssueCount == 1) Toast.makeText(this, "Сведения о сбое сохранены в меню «Последняя ошибка».", Toast.LENGTH_LONG).show();
+    }
+
+    private void showManualDiagnosticReport() {
+        String latest = readLastErrorReport();
+        String report = buildRuntimeReport("MANUAL", null, "Отчёт не заменяет сохранённую последнюю ошибку.");
+        if (latest.length() > 0) report += "\nПоследняя сохранённая ошибка (возможно, более ранняя):\n" + latest.substring(0, Math.min(8000, latest.length()));
+        showErrorDialog("Отчёт о проблеме", report);
     }
 
     private void showErrorDialog(String title, String details) {
@@ -2597,6 +2715,7 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 InstallContext context = new InstallContext(System.currentTimeMillis(), "очистка сайта");
+                if (diagnosticJournal != null) diagnosticJournal.begin(context.mode);
                 try {
                     context.previousSite = describeInstalledSite();
                     SharedPreferences prefs = getPrefs();
@@ -3039,6 +3158,7 @@ public class MainActivity extends Activity {
         if (url == null || busy) {
             return;
         }
+        if (diagnosticJournal != null) diagnosticJournal.record("Открытие игры: " + diagnosticPagePath(url), true);
 
         emptyPanel.setVisibility(View.GONE);
         progressPanel.setVisibility(View.GONE);
@@ -3087,7 +3207,85 @@ public class MainActivity extends Activity {
         }
     }
 
-    private class HomeSiteClient extends WebViewClient {
+    private class DiagnosticSiteClient extends WebViewClient {
+        private Runnable loadTimeout;
+
+        @Override
+        public void onPageStarted(final WebView view, final String url, android.graphics.Bitmap favicon) {
+            if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
+            if (url == null || url.startsWith("about:")) return;
+            diagnosticPage = diagnosticPagePath(url);
+            if (diagnosticJournal != null) diagnosticJournal.record("Загрузка страницы: " + diagnosticPage, false);
+            loadTimeout = new Runnable() { public void run() {
+                if (isFinishing() || isDestroyed() || (view != webView && view != homeWebView) || view.getVisibility() == View.GONE) return;
+                recordRuntimeIssue("GAME-LOAD-TIMEOUT", new IOException("Страница не завершила загрузку за 30 секунд. Загрузка могла продолжиться; это не доказательство зависания."), "Страница: " + diagnosticPagePath(url), false);
+            } };
+            mainHandler.postDelayed(loadTimeout, 30000);
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
+            if (url == null || !url.startsWith("file:")) return;
+            if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
+            // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
+            view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            if (request == null || error == null) return;
+            if (request.isForMainFrame() && loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
+            recordRuntimeIssue(request.isForMainFrame() ? "GAME-PAGE" : "GAME-RESOURCE", new IOException(String.valueOf(error.getDescription())),
+                "Код WebView: " + error.getErrorCode() + "; основной документ: " + request.isForMainFrame() + "; ресурс: " + diagnosticPagePath(request.getUrl().toString()), false);
+        }
+
+        @Override
+        public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+            if (request != null && response != null) recordRuntimeIssue("GAME-HTTP", new IOException("HTTP " + response.getStatusCode()),
+                "Основной документ: " + request.isForMainFrame() + "; ресурс: " + diagnosticPagePath(request.getUrl().toString()), false);
+        }
+
+        @Override
+        public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
+            recordRuntimeIssue("WEBVIEW-RENDERER", new IOException("Процесс WebView завершён; didCrash=" + detail.didCrash() + ". Причина нехватки памяти не установлена."), "Приоритет при завершении: " + detail.rendererPriorityAtExit(), false);
+            cancelPendingContentLoadState();
+            if (view == homeWebView) homeWebView = null;
+            if (view == webView) webView = null;
+            if (view.getParent() instanceof ViewGroup) ((ViewGroup) view.getParent()).removeView(view);
+            view.destroy();
+            if (!rendererRecoveryScheduled) {
+                rendererRecoveryScheduled = true;
+                mainHandler.post(new Runnable() { public void run() {
+                    rendererRecoveryScheduled = false;
+                    if (isFinishing() || isDestroyed()) return;
+                    if (homeWebView != null) {
+                        if (homeWebView.getParent() instanceof ViewGroup) ((ViewGroup) homeWebView.getParent()).removeView(homeWebView);
+                        homeWebView.destroy();
+                    }
+                    if (webView != null) {
+                        if (webView.getParent() instanceof ViewGroup) ((ViewGroup) webView.getParent()).removeView(webView);
+                        webView.destroy();
+                    }
+                    loadedHomeIndexFile = null;
+                    loadedHomeUrl = "";
+                    buildUi();
+                    configureWebView(homeWebView, true);
+                    configureWebView(webView, false);
+                    emptyTitle.setText("Страница закрыта после сбоя WebView");
+                    emptyDetails.setText("Файлы сайта не удалялись. Откройте меню: можно создать отчёт, посмотреть последнюю ошибку или перезагрузить сайт.");
+                    homeWebView.setVisibility(View.GONE);
+                    webView.setVisibility(View.GONE);
+                    emptyPanel.setVisibility(View.VISIBLE);
+                    showTopBarPersistent();
+                } });
+            }
+            return true;
+        }
+    }
+
+    private class HomeSiteClient extends DiagnosticSiteClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
             return handleHomeUrl(url);
@@ -3125,9 +3323,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    private class ContentSiteClient extends WebViewClient {
+    private class ContentSiteClient extends DiagnosticSiteClient {
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            super.onPageStarted(view, url, favicon);
             if (contentLoadPending && url != null && !url.startsWith("about:")) {
                 contentLoadRequestId += 1L;
                 contentVisualCallbackPending = false;
@@ -3137,6 +3336,7 @@ public class MainActivity extends Activity {
 
         @Override
         public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
             boolean currentPendingPage = contentLoadPending && isCurrentContentPage(view, url);
             if (clearContentHistoryAfterLoad && (!contentLoadPending || currentPendingPage)) {
                 clearContentHistoryAfterLoad = false;
@@ -3153,6 +3353,7 @@ public class MainActivity extends Activity {
             WebResourceRequest request,
             WebResourceError error
         ) {
+            super.onReceivedError(view, request, error);
             if (view != webView
                 || request == null
                 || !request.isForMainFrame()
@@ -3261,6 +3462,7 @@ public class MainActivity extends Activity {
         void setStage(String code, String description) {
             stageCode = code;
             stage = description;
+            if (diagnosticJournal != null) diagnosticJournal.checkpoint(code + ": " + description, null);
         }
     }
 

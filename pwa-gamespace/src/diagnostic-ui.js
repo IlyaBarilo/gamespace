@@ -3,6 +3,8 @@ import {
   createDiagnosticReport,
   createLastReportStore,
   shareDiagnosticReport,
+  safeDiagnosticText,
+  MAX_REPORT_CHARS,
 } from "./diagnostics.js";
 
 export function createDiagnosticUI(elements, getEnvironment) {
@@ -17,9 +19,10 @@ export function createDiagnosticUI(elements, getEnvironment) {
   };
   summarize(store.load());
 
-  function open() {
-    const { report, warning } = store.load();
+  function open(override = null) {
+    const { report, warning } = override?.text ? { report: override, warning: "Ручной отчёт не заменяет сохранённую последнюю ошибку. Скопируйте его перед закрытием." } : store.load();
     if (!elements.diagnosticDialog.open) previousFocus = document.activeElement;
+    if (elements.diagnosticTitle) elements.diagnosticTitle.textContent = override?.text ? "Отчёт о проблеме" : "Отчёт об ошибке";
     elements.diagnosticText.value = report?.text || warning || "Сохранённых ошибок пока нет.";
     elements.diagnosticPersistence.textContent = warning || (report ? "Хранится только последний отчёт, отдельно от установленного сайта." : "");
     elements.diagnosticCopy.disabled = !report;
@@ -85,10 +88,17 @@ export function createDiagnosticUI(elements, getEnvironment) {
   });
   for (const button of [elements.lastErrorButton, elements.landingLastErrorButton, elements.errorDetailsButton]) button.addEventListener("click", open);
   return {
-    capture(error, context = {}) {
+    capture(error, context = {}, { reveal = true } = {}) {
       const report = createDiagnosticReport(error, getEnvironment, context);
       summarize(store.save(report));
-      open();
+      if (reveal) open();
+      return report;
+    },
+    manual(context = {}) {
+      const report = createDiagnosticReport(null, getEnvironment, { ...context, manual: true, stage: "manual", stageLabel: "Состояние приложения по запросу пользователя" });
+      const latest = store.load().report;
+      if (latest) report.text = safeDiagnosticText(`${report.text}\n\nПоследняя сохранённая ошибка (возможно, более ранняя):\n${latest.text.slice(0, 8000)}`, MAX_REPORT_CHARS);
+      open(report);
       return report;
     },
     open,

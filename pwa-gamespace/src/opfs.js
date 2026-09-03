@@ -123,8 +123,10 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
   } catch (error) {
     try {
       const complete = await rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths });
+      if (!complete) error.rollbackIncomplete = true;
       onDiagnostic?.({ type: "cleanup-result", label: "Откат изменённых файлов", error: complete ? null : new Error("Не все созданные файлы удалось удалить") });
     } catch (rollbackError) {
+      error.rollbackIncomplete = true;
       onDiagnostic?.({ type: "cleanup-result", label: "Откат изменённых файлов", error: rollbackError });
     }
     throw error;

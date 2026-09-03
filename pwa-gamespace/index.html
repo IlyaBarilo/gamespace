@@ -164,6 +164,7 @@
         <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
         <span>Архивы обрабатываются только на устройстве</span>
         <button id="landingLastErrorButton" class="version-secondary-button" type="button">Последняя ошибка</button>
+        <button id="landingReportButton" class="version-secondary-button diagnostic-trigger" type="button">Создать отчёт о проблеме</button>
       </footer>
     </main>
 
@@ -349,6 +350,7 @@
         <h2 id="diagnosticsTitle">Последняя ошибка</h2>
         <p id="lastErrorSummary">Сохранённых ошибок пока нет.</p>
         <button id="lastErrorButton" class="version-secondary-button" type="button">Открыть диагностический отчёт</button>
+        <button id="manualReportButton" class="version-secondary-button diagnostic-trigger" type="button">Создать отчёт о проблеме</button>
       </section>
 
       <section class="panel licenses-panel">
@@ -410,8 +412,10 @@
     </div>
 
     <section id="viewer" class="viewer" hidden>
+      <button id="viewerMenuToggle" class="viewer-menu-toggle" type="button" aria-label="Показать панель и отчёт о проблеме" hidden>☰</button>
       <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">
         <strong id="viewerToolbarTitle" class="viewer-toolbar-title">GameSpace PWA</strong>
+        <button id="viewerReport" class="diagnostic-trigger" type="button" aria-label="Создать отчёт о проблеме" title="Создать отчёт о проблеме">?</button>
         <button id="viewerBack" type="button" aria-label="Назад">←</button>
         <button id="viewerHome" type="button" aria-label="На главную">⌂</button>
         <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>

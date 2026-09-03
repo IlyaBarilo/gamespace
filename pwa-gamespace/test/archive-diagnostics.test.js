@@ -110,7 +110,7 @@ test("full and incremental import capture IndexedDB failure before archive extra
   t.after(() => previous ? Object.defineProperty(globalThis, "indexedDB", previous) : delete globalThis.indexedDB);
   for (const install of [installFullArchive, applyUpdateArchive]) {
     await assert.rejects(install(await archive()), (error) => {
-      assert.equal(error.diagnosticContext.stage, "state-read");
+      assert.equal(error.diagnosticContext.stage, "recovery");
       assert.equal(error.diagnosticContext.archive.name, "fixture.zip");
       assert.equal(createDiagnosticReport(error).code, "GS-ACCESS");
       return true;

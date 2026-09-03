@@ -12,6 +12,8 @@ import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 import { ProgressEstimator } from "./progress-estimator.js";
 import { createDiagnosticUI } from "./diagnostic-ui.js";
+import { DiagnosticSession, connectDiagnosticSessions } from "./diagnostic-session.js";
+import { diagnosticPagePath, observeGameWindow } from "./game-diagnostics.js";
 import {
   getVersionBatch,
   normalizeReleaseDescription,
@@ -40,6 +42,12 @@ let licenseDocumentRequest = 0;
 const progressEstimator = new ProgressEstimator();
 let progressUnit = null;
 let lastStorageEstimate = null;
+const diagnosticSession = new DiagnosticSession();
+const diagnosticPresence = connectDiagnosticSessions(diagnosticSession);
+diagnosticSession.record("Запуск оболочки", "", true);
+let detachGameDiagnostics = null;
+let gameLoadTimer = null;
+let backgroundIssueCount = 0;
 
 const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
@@ -72,7 +80,35 @@ const diagnosticUI = createDiagnosticUI(elements, () => ({
   online: navigator.onLine,
   capabilities: `secure=${window.isSecureContext}; OPFS=${Boolean(navigator.storage?.getDirectory)}; Worker=${Boolean(window.Worker)}; WASM=${Boolean(window.WebAssembly)}; IndexedDB=${Boolean(window.indexedDB)}`,
   storage: lastStorageEstimate,
+  ...diagnosticSession.snapshot(),
+  page: currentDiagnosticPage(),
+  revision: state?.activeRevision || state?.revisionPath,
 }));
+
+function currentDiagnosticPage() {
+  try { return elements.viewer.hidden ? "оболочка" : diagnosticPagePath(elements.siteFrame.contentWindow.location.href); }
+  catch { return "[недоступная страница]"; }
+}
+
+function saveBackgroundIssue(error, context = {}) {
+  if (backgroundIssueCount >= 10) return;
+  backgroundIssueCount += 1;
+  diagnosticSession.record("Сбой / предупреждение", `${context.stage || "runtime"}: ${errorMessage(error)}`, true);
+  diagnosticUI.capture(error, { operation: "работа приложения", severity: "предупреждение", ...context }, { reveal: false });
+  elements.viewerReport.textContent = "!";
+  elements.viewerReport.title = "Сохранена ошибка. Создать отчёт о проблеме";
+  if (!elements.viewer.hidden) showViewerToolbar();
+}
+
+function beginGameLoad(url) {
+  clearTimeout(gameLoadTimer);
+  diagnosticSession.record("Открытие страницы", diagnosticPagePath(url), true);
+  gameLoadTimer = setTimeout(() => {
+    saveBackgroundIssue(new Error("Страница не завершила загрузку за 30 секунд. Это не доказывает зависание: загрузка может продолжаться."), {
+      stage: "game-load-timeout", stageLabel: "Ожидание страницы", page: diagnosticPagePath(url),
+    });
+  }, 30_000);
+}
 
 function showLanding() {
   elements.landingPage.hidden = false;
@@ -108,7 +144,7 @@ function setBusy(value) {
   busy = value;
   document.body.classList.toggle("is-busy", value);
   for (const button of document.querySelectorAll("button")) {
-    if (button.closest("#viewer, #diagnosticDialog")) continue;
+    if (button.closest("#viewer, #diagnosticDialog") || button.classList.contains("diagnostic-trigger")) continue;
     button.disabled = value || button.dataset.fixedDisabled === "true";
   }
   elements.archiveInput.disabled = value;
@@ -225,6 +261,7 @@ function hideProgress() {
 }
 
 function showError(error, context = {}) {
+  diagnosticSession.record("Ошибка операции", `${context.stage || "operation"}: ${errorMessage(error)}`, true);
   elements.errorText.textContent = errorMessage(error);
   elements.errorPanel.hidden = false;
   diagnosticUI.capture(error, {
@@ -252,6 +289,11 @@ function showRateEstimate(estimate, unit) {
 
 function handleImportEvent(event) {
   if (!event) return;
+  diagnosticSession.observe(event);
+  if (event.type === "cleanup-warning") {
+    saveBackgroundIssue(event.error, { operation: "очистка после установки", stage: "cleanup", stageLabel: event.label });
+    return;
+  }
   if (event.type === "phase") {
     elements.progressPhase.textContent = event.label;
     if (event.phase === "extract" || event.phase === "apply") {
@@ -289,6 +331,7 @@ function handleImportEvent(event) {
 
 async function chooseArchive(mode) {
   if (busy) return;
+  diagnosticSession.record("Выбор архива", mode);
   pendingMode = mode;
   elements.archiveInput.value = "";
   elements.archiveInput.click();
@@ -313,10 +356,13 @@ async function importSelectedFile(file, source = "локальный архив"
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
+  let outcome = "ошибка";
   try {
+    diagnosticSession.begin(diagnosticContext.operation, file.name);
     state = isUpdate
       ? await applyUpdateArchive(file, handleImportEvent)
       : await installFullArchive(file, handleImportEvent);
+    diagnosticSession.site(state);
     diagnosticContext.stage = "interface-refresh";
     diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
     await synchronizeSiteInterface({ reloadState: true });
@@ -325,11 +371,13 @@ async function importSelectedFile(file, source = "локальный архив"
     elements.progressFile.textContent = "Сайт проверен и доступен без сети.";
     setStatus("Сайт готов к автономной работе", "good");
     setTimeout(hideProgress, 1600);
+    outcome = "успешно";
   } catch (error) {
     showError(error, diagnosticContext);
     elements.progressPhase.textContent = "Операция остановлена";
     setStatus("Не удалось обработать архив", "bad");
   } finally {
+    diagnosticSession.finish(outcome);
     setBusy(false);
   }
 }
@@ -342,6 +390,7 @@ function contentIndexUrl() {
 }
 
 function showViewerToolbar() {
+  elements.viewerMenuToggle.hidden = true;
   elements.viewerToolbar.classList.remove("is-hidden");
   elements.viewerToolbar.classList.remove("is-counting");
   void elements.viewerToolbar.offsetWidth;
@@ -350,6 +399,7 @@ function showViewerToolbar() {
   toolbarTimer = setTimeout(() => {
     elements.viewerToolbar.classList.remove("is-counting");
     elements.viewerToolbar.classList.add("is-hidden");
+    elements.viewerMenuToggle.hidden = false;
   }, 5000);
 }
 
@@ -360,10 +410,19 @@ async function openViewer() {
     if (!navigator.serviceWorker.controller) {
       throw new Error("Локальный сайт нельзя открыть до активации Service Worker.");
     }
+    const url = contentIndexUrl();
+    const response = await withTimeout(fetch(url, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка входной страницы не завершилась за 15 секунд.");
+    if (!response.ok) {
+      const error = new Error(`Входная страница установленного сайта недоступна: HTTP ${response.status}. Данные не удалялись автоматически.`);
+      error.diagnosticContext = { httpStatus: response.status, page: diagnosticPagePath(url), stage: "site-content-check", stageLabel: "Проверка входной страницы" };
+      closeViewer();
+      throw error;
+    }
     elements.viewer.hidden = false;
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.appShell.inert = true;
-    elements.siteFrame.src = contentIndexUrl();
+    beginGameLoad(url);
+    elements.siteFrame.src = url;
     elements.viewerLoading.hidden = false;
     showViewerToolbar();
     return true;
@@ -375,6 +434,10 @@ async function openViewer() {
 }
 
 function closeViewer() {
+  clearTimeout(gameLoadTimer);
+  detachGameDiagnostics?.();
+  detachGameDiagnostics = null;
+  diagnosticSession.record("Закрытие просмотра");
   elements.viewer.hidden = true;
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
@@ -383,10 +446,22 @@ function closeViewer() {
 }
 
 function attachFrameGuards() {
+  clearTimeout(gameLoadTimer);
   elements.viewerLoading.hidden = true;
   try {
     const frameWindow = elements.siteFrame.contentWindow;
     const frameDocument = elements.siteFrame.contentDocument;
+    detachGameDiagnostics?.();
+    detachGameDiagnostics = null;
+    if (frameWindow?.location.href === "about:blank") return;
+    diagnosticSession.record("Страница загружена", diagnosticPagePath(frameWindow.location.href));
+    detachGameDiagnostics = observeGameWindow(frameWindow, (error, context) => saveBackgroundIssue(error, { operation: "просмотр игры", ...context }));
+    const checkedUrl = frameWindow.location.href;
+    if (new URL(checkedUrl).origin === location.origin) {
+      void withTimeout(fetch(checkedUrl, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка страницы не завершилась за 15 секунд.").then((response) => {
+        if (!response.ok) saveBackgroundIssue(new Error(`Страница вернула HTTP ${response.status}.`), { operation: "просмотр игры", stage: "game-page", stageLabel: "Загрузка страницы игры", page: diagnosticPagePath(checkedUrl), httpStatus: response.status });
+      }).catch((error) => saveBackgroundIssue(error, { stage: "game-page-check", page: diagnosticPagePath(checkedUrl) }));
+    }
     frameDocument?.addEventListener("click", (event) => {
       const link = event.target.closest?.("a[href]");
       if (!link) return;
@@ -394,9 +469,10 @@ function attachFrameGuards() {
       if (target.origin !== location.origin) {
         event.preventDefault();
         window.open(target.href, "_blank", "noopener,noreferrer");
+      } else if (target.pathname !== frameWindow.location.pathname && !link.hasAttribute("download") && (!link.target || link.target === "_self")) {
+        beginGameLoad(target.href);
       }
     }, true);
-    frameWindow?.addEventListener("error", () => {}, { once: true });
   } catch {
     // External pages are not expected, but a cross-origin frame must stay isolated.
   }
@@ -534,27 +610,40 @@ function waitForWorkerInstalled(worker, timeoutMs = 30_000) {
   });
 }
 
-function withTimeout(promise, timeoutMs, message) {
-  return Promise.race([
+async function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  try { return await Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error(message)), timeoutMs)),
-  ]);
+    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), timeoutMs); }),
+  ]); } finally { clearTimeout(timer); }
 }
 
 async function runtimeMessage(type, data = {}, timeoutMs = 300_000) {
+  diagnosticSession.observe({ phase: type.toLowerCase().replaceAll("_", "-"), label: `Команда Service Worker: ${type}` });
+  diagnosticSession.record("Команда Service Worker", `${type}${data.version ? `: ${data.version}` : ""}`);
+  try {
   const registration = await ensureServiceWorker();
   const worker = navigator.serviceWorker.controller || registration.active || registration.waiting;
   if (!worker) throw new Error("Активный Service Worker не найден.");
-  return new Promise((resolve, reject) => {
+  return await new Promise((resolve, reject) => {
     const channel = new MessageChannel();
-    const timeout = setTimeout(() => reject(new Error("Service Worker не завершил операцию вовремя.")), timeoutMs);
+    const fail = (error) => { clearTimeout(timeout); channel.port1.close(); channel.port2.close(); reject(error); };
+    const timeout = setTimeout(() => fail(new Error(`Service Worker не ответил на ${type} за ${timeoutMs / 1000} секунд. Операция могла продолжиться; проверьте состояние перед повтором.`)), timeoutMs);
     channel.port1.onmessage = (event) => {
       clearTimeout(timeout);
+      channel.port1.close();
+      channel.port2.close();
       if (event.data?.ok) resolve(event.data);
       else reject(new Error(event.data?.error || "Service Worker сообщил об ошибке."));
     };
-    worker.postMessage({ type, ...data }, [channel.port2]);
+    try { worker.postMessage({ type, ...data }, [channel.port2]); }
+    catch (error) { fail(error); }
   });
+  } catch (error) {
+    const failure = new Error(errorMessage(error), { cause: error });
+    failure.diagnosticContext = { command: type, stage: `runtime-${type.toLowerCase().replaceAll("_", "-")}`, stageLabel: `Выполнение команды ${type}` };
+    throw failure;
+  }
 }
 
 function waitForControllerChange(timeoutMs = 30_000) {
@@ -599,9 +688,13 @@ async function fetchVersionCatalog() {
     );
   } catch (error) {
     if (error?.message?.includes("15 секунд")) throw error;
-    throw new Error("Сервер версий недоступен. Локальная версия продолжает работать.");
+    throw new Error("Сервер версий недоступен. Локальная версия продолжает работать.", { cause: error });
   }
-  if (!response.ok) throw new Error(`Сервер версий ответил HTTP ${response.status}.`);
+  if (!response.ok) {
+    const error = new Error(`Сервер версий ответил HTTP ${response.status}.`);
+    error.diagnosticContext = { httpStatus: response.status, resource: "versions.json", stage: "pwa-catalog", stageLabel: "Загрузка каталога версий" };
+    throw error;
+  }
   const data = await response.json();
   if (data?.schema !== 1 || !Array.isArray(data.versions) || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(data.latest || "")) {
     throw new Error("Сервер вернул некорректный каталог версий.");
@@ -715,6 +808,7 @@ async function installNewRuntime(release) {
   serviceWorkerRegistration = registration;
   if (registration.installing) await waitForWorkerInstalled(registration.installing, 120_000);
   await controllerChanged;
+  diagnosticSession.finish("новый runtime зарегистрирован; перезапуск");
   location.reload();
   return true;
 }
@@ -734,7 +828,9 @@ async function installPwaRelease(release, target = "app") {
 
   setBusy(true);
   status.textContent = `Подготавливаю GameSpace ${release.version}…`;
+  let outcome = "ошибка или отмена";
   try {
+    diagnosticSession.begin("установка оболочки PWA", release.version);
     if (release.runtime !== RUNTIME_SCRIPT) {
       await installNewRuntime(release);
       return;
@@ -746,11 +842,14 @@ async function installPwaRelease(release, target = "app") {
     }
     status.textContent = `Версия ${release.version} проверена. Переключаю оболочку…`;
     await runtimeMessage("ACTIVATE_RELEASE", { version: release.version }, 30_000);
+    diagnosticSession.finish("версия активирована; перезапуск");
+    outcome = "успешно";
     location.reload();
   } catch (error) {
     status.textContent = `Не удалось установить PWA: ${errorMessage(error)}`;
-    showError(error, { operation: `установка оболочки ${release.version}`, stage: "pwa-install", stageLabel: "Установка и активация версии PWA" });
+    showError(error, { operation: `установка оболочки ${release.version}`, targetVersion: release.version, expectedBytes: release.size, stage: "pwa-install", stageLabel: "Установка и активация версии PWA" });
   } finally {
+    diagnosticSession.finish(outcome);
     setBusy(false);
   }
 }
@@ -764,6 +863,7 @@ async function checkForPwaUpdate(target = "app") {
   }
   setBusy(true);
   status.textContent = "Загружаю каталог опубликованных версий…";
+  diagnosticSession.record("Проверка версий PWA", "", true);
   try {
     await refreshRuntimeState();
     const catalog = await fetchVersionCatalog();
@@ -784,13 +884,16 @@ async function rollbackPwaRelease() {
   if (!window.confirm(`Вернуться к локально сохранённой версии ${runtimeState.previousVersion}? Текущая версия останется доступной для обратного переключения.`)) return;
   setBusy(true);
   try {
+    diagnosticSession.begin("откат оболочки PWA", runtimeState.previousVersion);
     const reply = await runtimeMessage("ROLLBACK_RELEASE", {}, 30_000);
     elements.pwaUpdateStatus.textContent = `Восстановлена версия ${reply.state.activeVersion}. Перезапускаю…`;
+    diagnosticSession.finish("успешно; перезапуск");
     location.reload();
   } catch (error) {
     elements.pwaUpdateStatus.textContent = `Не удалось выполнить откат: ${errorMessage(error)}`;
     showError(error, { operation: "откат оболочки PWA", stage: "pwa-rollback", stageLabel: "Возврат предыдущей версии оболочки" });
   } finally {
+    diagnosticSession.finish("ошибка отката");
     setBusy(false);
   }
 }
@@ -811,6 +914,12 @@ async function initializeCapabilities() {
 }
 
 async function initialize() {
+  for (const record of await diagnosticPresence.unfinished()) {
+    saveBackgroundIssue(new Error("Найдена операция без отметки о завершении. Причина неизвестна; другая вкладка могла продолжить работу."), {
+      operation: "проверка предыдущего запуска", stage: "interrupted-operation", stageLabel: "Последний сохранённый этап", activeOperation: record.active, trail: record.trail,
+    });
+    diagnosticSession.acknowledge(record);
+  }
   if (!runningAsInstalledApp) {
     showLanding();
     elements.installAvailability.textContent = navigator.onLine
@@ -836,6 +945,16 @@ async function initialize() {
   let initialViewerOpened = false;
   try {
     state = await readState();
+    if (!state && diagnosticSession.previousSite()) {
+      saveBackgroundIssue(new Error("Ранее сохранялась установленная версия сайта, но её записи в IndexedDB теперь нет. Причина удаления неизвестна."), { stage: "site-state-missing", stageLabel: "Проверка сведений об установленном сайте" });
+    }
+    if (state) diagnosticSession.site(state);
+    // Restore an interrupted update before exposing potentially half-updated pages.
+    try { await cleanupOrphans(state); }
+    catch (error) {
+      error.diagnosticContext = { ...error.diagnosticContext, stage: "startup-recovery", stageLabel: "Восстановление / очистка при запуске" };
+      throw error;
+    }
     if (state && !state.storageVerifiedAt) {
       const result = await refreshInstalledSiteStatistics(state);
       state = result.state;
@@ -857,7 +976,6 @@ async function initialize() {
     }
 
     await Promise.all([refreshStorage(), initializeCapabilities()]);
-    cleanupOrphans(state).then(refreshStorage).catch(() => {});
     setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
   } catch (error) {
     finishBoot();
@@ -867,17 +985,25 @@ async function initialize() {
 }
 
 elements.chooseArchiveButton.addEventListener("click", () => chooseArchive("full"));
+for (const button of [elements.manualReportButton, elements.landingReportButton, elements.viewerReport]) {
+  button.addEventListener("click", () => {
+    diagnosticSession.record("Ручной отчёт", "", true);
+    diagnosticUI.manual({ operation: busy ? "текущая операция продолжается" : "проверка состояния", previousSite: state ? "установлен" : "не установлен" });
+  });
+}
 elements.demoButton.addEventListener("click", async () => {
   if (busy) return;
   const startedAt = Date.now();
   setBusy(true);
   try {
+    diagnosticSession.begin("получение демо", "demo.7z");
     const demoUrl = new URL("./demo.7z", location.href);
     demoUrl.searchParams.set("gamespace-demo", DEMO_REVISION);
     const response = await fetch(demoUrl);
-    if (!response.ok) throw new Error("Встроенный demo.7z недоступен.");
+    if (!response.ok) throw new Error(`Встроенный demo.7z недоступен: HTTP ${response.status}.`);
     const blob = await response.blob();
     pendingMode = "full";
+    diagnosticSession.finish("демо получено");
     setBusy(false);
     await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
       type: "application/x-7z-compressed",
@@ -886,6 +1012,7 @@ elements.demoButton.addEventListener("click", async () => {
   } catch (error) {
     showError(error, { operation: "встроенное демо", stage: "demo-read", stageLabel: "Получение встроенного demo.7z", startedAt });
   } finally {
+    diagnosticSession.finish("получение демо остановлено");
     setBusy(false);
   }
 });
@@ -911,12 +1038,17 @@ elements.archiveInput.addEventListener("change", () => importSelectedFile(elemen
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerClose.addEventListener("click", closeViewer);
+elements.viewerMenuToggle.addEventListener("click", showViewerToolbar);
+elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
 elements.viewerHome.addEventListener("click", () => {
-  elements.siteFrame.src = contentIndexUrl();
+  const url = contentIndexUrl();
+  beginGameLoad(url);
+  elements.siteFrame.src = url;
   elements.viewerLoading.hidden = false;
   showViewerToolbar();
 });
 elements.viewerBack.addEventListener("click", () => {
+  diagnosticSession.record("Назад в просмотре");
   elements.siteFrame.contentWindow?.history.back();
   showViewerToolbar();
 });
@@ -933,16 +1065,20 @@ elements.removeSiteButton.addEventListener("click", async () => {
   void refreshStorage().catch(() => {});
   setStatus("Удаляю файлы сайта", "neutral");
   try {
+    diagnosticSession.begin("удаление сайта");
     await removeInstalledSite();
+    diagnosticSession.site(null);
     await synchronizeSiteInterface({ reloadState: true });
     scheduleSiteInterfaceRefresh();
     setStatus("Сайт удалён", "neutral");
+    diagnosticSession.finish("успешно");
   } catch (error) {
     state = await readState().catch(() => previousState);
     renderState();
     await refreshStorage().catch(() => {});
     showError(error, { operation: "удаление сайта", stage: "site-delete", stageLabel: "Удаление локального сайта", previousSite: "установлен", startedAt });
   } finally {
+    diagnosticSession.finish("ошибка удаления");
     setBusy(false);
   }
 });
@@ -997,7 +1133,17 @@ window.addEventListener("offline", () => {
   setStatus("Автономный режим", "good");
 });
 document.addEventListener("visibilitychange", () => {
+  diagnosticSession.record(document.hidden ? "Приложение скрыто" : "Приложение открыто", "", true);
   if (!document.hidden && !elements.viewer.hidden) showViewerToolbar();
+});
+window.addEventListener("pagehide", () => diagnosticSession.flush(true));
+window.addEventListener("error", (event) => {
+  if (!event.message && !event.error) return;
+  saveBackgroundIssue(event.error || new Error(event.message), { stage: "shell-script", stageLabel: "JavaScript оболочки", script: diagnosticPagePath(event.filename), line: event.lineno, column: event.colno });
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const error = event.reason instanceof Error ? event.reason : new Error("Необработанный отказ Promise оболочки; содержимое объекта не записывается");
+  if (error.name !== "AbortError") saveBackgroundIssue(error, { stage: "shell-promise", stageLabel: "Асинхронная операция оболочки" });
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && !elements.licenseModal.hidden) {

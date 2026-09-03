@@ -96,7 +96,7 @@ export class OperationDiagnostics {
   }
 
   failure(error) {
-    const original = error?.diagnosticContext ? error.cause : error;
+    const original = error?.diagnosticContext && error.cause ? error.cause : error;
     const wrapped = new Error(original?.message || String(original ?? "Неизвестная ошибка"), { cause: original });
     wrapped.name = original?.name || "Error";
     wrapped.diagnosticContext = {
@@ -129,16 +129,16 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   }
   environment ||= {};
   const context = { ...fallback, ...error?.diagnosticContext };
-  const original = error?.diagnosticContext ? error.cause : error;
+  const original = error?.diagnosticContext && error.cause ? error.cause : error;
   const exception = serializeDiagnosticError(original);
   const timestamp = context.failedAt || Date.now();
   const id = `PWA-${timestamp.toString(36)}`;
-  const code = diagnosticErrorCode(original, context.stage);
-  const lines = ["GameSpace PWA — отчёт об ошибке, формат 1"];
+  const code = context.manual ? "GS-MANUAL" : diagnosticErrorCode(original, context.stage);
+  const lines = [context.manual ? "GameSpace PWA — ручной диагностический отчёт, формат 1" : "GameSpace PWA — отчёт об ошибке, формат 1"];
   const line = (label, value) => lines.push(`${label}: ${value == null || value === "" ? "неизвестно" : safeDiagnosticText(value).replace(/\n/g, " ")}`);
   line("Код", code);
   line("Этап сбоя", context.stageLabel || context.stage);
-  line("Ошибка", `${exception.name}: ${exception.message}`);
+  line(context.manual ? "Причина создания" : "Ошибка", context.manual ? "Пользователь сообщил о проблеме; исключение не требуется" : `${exception.name}: ${exception.message}`);
   line("Номер отчёта", id);
   line("Время", new Date(timestamp).toISOString());
   line("Версия PWA", environment.version);
@@ -149,6 +149,7 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   line("Режим запуска", environment.displayMode);
   line("Онлайн по данным браузера", environment.online);
   line("Возможности", environment.capabilities);
+  for (const [key, label] of Object.entries({ page: "Страница", resource: "Ресурс", script: "Скрипт", line: "Строка", column: "Столбец", command: "Команда runtime", targetVersion: "Выбранная версия", expectedBytes: "Ожидаемый размер загрузки, байт", httpStatus: "HTTP-статус", revision: "Ревизия сайта", storageCheck: "Проверка сайта", severity: "Уровень" })) line(label, context[key] ?? environment[key]);
   line("Операция", fallback.operation && fallback.operation !== "операция приложения" ? fallback.operation : context.operation);
   line("Сайт до операции", fallback.previousSite);
   line("Архив", context.archive?.name);
@@ -165,15 +166,24 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   line("Последняя оценка использования, байт", finite(environment.storage?.usage));
   line("Время оценки хранилища", environment.storage?.measuredAt);
   lines.push("Примечание: квота браузера — не свободное место на всём устройстве.");
+  if (environment.journalWarning) line("Журнал", environment.journalWarning);
+  const active = context.activeOperation || environment.activeOperation;
+  if (active) {
+    lines.push("", "Операция без отметки о завершении:");
+    for (const key of ["operation", "detail", "stage", "stageLabel", "currentFile", "processedBytes", "totalBytes", "completedFiles", "startedAt", "updatedAt"]) line(key, active[key]);
+    lines.push("Это последний сохранённый этап, а не доказательство причины сбоя. Другая вкладка могла продолжить операцию.");
+  }
+  const trail = context.trail || environment.trail;
+  if (trail?.length) lines.push("", "Последние действия:", ...trail.slice(-20).map((item) => safeDiagnosticText(item, 600)));
   if (context.cleanup?.length) lines.push("", "Очистка / откат:", ...context.cleanup);
   if (context.messages?.length) lines.push("", "Последние сообщения обработчика:", ...context.messages);
   lines.push("", "Технические подробности:");
-  for (let current = exception; current; current = current.cause) {
+  for (let current = context.manual ? null : exception; current; current = current.cause) {
     lines.push(`${current.name}: ${current.message}`, current.stack || "Стек не предоставлен браузером");
     if (current.code != null) lines.push(`code: ${current.code}`);
     if (current.errno != null) lines.push(`errno: ${current.errno}`);
   }
-  return { schema: 1, id, timestamp, code, summary: `${code} · ${exception.message}`, text: safeDiagnosticText(lines.join("\n"), MAX_REPORT_CHARS) };
+  return { schema: 1, id, timestamp, code, summary: `${code} · ${context.manual ? "Ручной отчёт о проблеме" : exception.message}`, text: safeDiagnosticText(lines.join("\n"), MAX_REPORT_CHARS) };
 }
 
 // Diagnostics are intentionally device-local, independent of IndexedDB/OPFS and site deletion.

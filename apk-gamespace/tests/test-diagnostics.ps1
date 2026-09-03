@@ -19,6 +19,10 @@ $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic report compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticReportTest
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic report tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "DiagnosticJournal.java") (Join-Path $PSScriptRoot "DiagnosticJournalTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Diagnostic journal compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticJournalTest
+if ($LASTEXITCODE -ne 0) { throw "Diagnostic journal tests failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ZipFailureTest (Join-Path $sourceDirectory "MainActivity.java") $outputDirectory
 if ($LASTEXITCODE -ne 0) { throw "ZIP extraction diagnostic tests failed." }
 
@@ -35,6 +39,12 @@ $checks = @{
     "metadata stage" = 'context\.setStage\("ARCHIVE-METADATA"'
     "missing index stage" = 'context\.setStage\("INDEX-CHECK"'
     "cleanup exception retained" = 'DiagnosticReport\.technicalDetails\(cleanupError\)'
+    "manual report menu during operations" = 'items = busy \? new String\[\] \{"Создать отчёт о проблеме", "Последняя ошибка"\}'
+    "process-scoped journal" = 'private static DiagnosticJournal diagnosticJournal;'
+    "previous process marker" = 'diagnosticJournal\.takePending\(\)'
+    "WebView errors" = 'class DiagnosticSiteClient extends WebViewClient'
+    "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
+    "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'
 }
 foreach ($entry in $checks.GetEnumerator()) {
     if ($activity -notmatch $entry.Value) { throw "Missing diagnostic wiring: $($entry.Key)" }
@@ -45,4 +55,4 @@ if ($activity -match 'finally\s*\{\s*context\.stage\s*=') {
 if ($activity -match 'Build\.SERIAL|Build\.getSerial|ANDROID_ID') {
     throw "Diagnostic reports must not collect unique device identifiers."
 }
-Write-Host "Diagnostic wiring: 12 checks passed. Android UI still requires a device test."
+Write-Host "Diagnostic wiring: $($checks.Count + 2) checks passed. Android UI still requires a device test."

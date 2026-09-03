@@ -41,6 +41,7 @@ public final class ZipFailureTest {
             + "private ContentResolver getContentResolver() { return new ContentResolver(); }\n"
             + "private long getContentSize(Uri uri) { return -1L; }\n"
             + "private void updateProgress(String text) {}\n"
+            + "private static void checkpointArchive(ZipReadContext context) {}\n"
             + "private String withTrailingSeparator(String path) { return path + File.separator; }\n"
             + "private boolean shouldExtractForFastUpdate(File file, ZipEntry entry) { return true; }\n"
             + "private boolean shouldExtractForFastUpdate(File file, SevenZArchiveEntry entry) { return true; }\n"
