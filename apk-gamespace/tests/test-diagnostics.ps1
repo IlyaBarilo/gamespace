@@ -1,4 +1,4 @@
-param([string]$JdkBin = "")
+﻿param([string]$JdkBin = "")
 
 $ErrorActionPreference = "Stop"
 $apkRoot = Split-Path -Parent $PSScriptRoot
@@ -19,7 +19,7 @@ $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\
 if ($LASTEXITCODE -ne 0) { throw "Progress estimator compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ProgressEstimatorTest
 if ($LASTEXITCODE -ne 0) { throw "Progress estimator tests failed." }
-& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ArchiveStatistics.java") (Join-Path $PSScriptRoot "ArchiveStatisticsTest.java")
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ArchiveStatistics.java") (Join-Path $sourceDirectory "ReadAheadSeekableByteChannel.java") (Join-Path $PSScriptRoot "ArchiveStatisticsTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Archive statistics compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ArchiveStatisticsTest $outputDirectory
 if ($LASTEXITCODE -ne 0) { throw "Archive statistics tests failed." }

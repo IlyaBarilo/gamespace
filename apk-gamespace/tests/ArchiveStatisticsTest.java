@@ -33,7 +33,7 @@ public final class ArchiveStatisticsTest {
         }
         check(stats.values[ArchiveStatistics.Metric.WRITE.ordinal()][2] == 4, "output bytes counted exactly once");
         check(Files.size(file) == 4, "output unchanged");
-        try (SeekableByteChannel channel = stats.channel(Files.newByteChannel(file))) {
+        try (SeekableByteChannel channel = stats.decoderChannel(stats.sourceChannel(Files.newByteChannel(file)))) {
             check(channel.read(ByteBuffer.allocate(2)) == 2, "channel read");
             channel.position(0);
             check(channel.read(ByteBuffer.allocate(4)) == 4, "reread");

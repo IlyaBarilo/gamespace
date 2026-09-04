@@ -35,7 +35,7 @@ public final class ZipFailureTest {
             + "import java.io.*; import java.nio.charset.*; import java.nio.channels.*; import java.util.zip.*;\n"
             + "import org.apache.commons.compress.archivers.sevenz.*;\n"
             + "public final class ZipHarness {\n"
-            + "private static final int BUFFER_SIZE=262144; private InputStream input;\n"
+            + "private static final int BUFFER_SIZE=262144; private static final int SEVEN_Z_READ_AHEAD_SIZE=4*1024*1024; private InputStream input;\n"
             + "private static ArchiveStatistics lastStatistics;\n"
             + "public static long[] statistics() { return new long[]{lastStatistics.values[ArchiveStatistics.Metric.READ.ordinal()][2],lastStatistics.values[ArchiveStatistics.Metric.WRITE.ordinal()][2],lastStatistics.completedFiles}; }\n"
             + "private static class Uri {}\n"
