@@ -1,6 +1,7 @@
 import {
   clearOperationJournal,
-  clearState,
+  beginSiteRemoval,
+  clearStateIfRevision,
   commitStateAndClearOperationJournal,
   readOperationJournal,
   readState,
@@ -261,13 +262,31 @@ export async function applyUpdateArchive(file, onEvent) {
 
 export async function removeInstalledSite() {
   const state = await readState();
-  const root = await getOpfsRoot();
-  if (state?.revisionPath) await removePath(root, state.revisionPath);
-  await removePath(root, UPDATES_ROOT);
-  await removePath(root, ROLLBACK_ROOT);
-  await clearOperationJournal();
-  await clearState();
+  const pending = await readOperationJournal();
+  if (pending?.type !== "site-delete") {
+    // Detach the site and persist deletion intent atomically before removing files.
+    await beginSiteRemoval({ schema: 1, type: "site-delete", startedAt: Date.now(), revisionPath: state?.revisionPath || null });
+  }
   emitServiceWorkerStateChanged();
+  await recoverInterruptedOperation();
+}
+
+export async function readInstalledSiteState() {
+  const installed = await readState();
+  if (!installed?.revisionPath) return installed;
+  const root = await getOpfsRoot();
+  try {
+    const directory = await getDirectoryAt(root, installed.revisionPath, false);
+    // An incomplete site with remaining contents must stay available for repair.
+    for await (const entry of directory.entries()) return installed;
+  } catch (error) {
+    if (error?.name !== "NotFoundError") throw error;
+  }
+  // Older deletions could leave metadata pointing to a missing/empty revision.
+  // Compare inside the transaction so a newer installation cannot be cleared.
+  const result = await clearStateIfRevision(installed.revisionPath);
+  if (result.cleared) emitServiceWorkerStateChanged();
+  return result.state;
 }
 
 export async function refreshInstalledSiteStatistics(currentState = null) {
@@ -312,6 +331,14 @@ export async function recoverInterruptedOperation() {
   const journal = await readOperationJournal();
   if (!journal) return false;
   const root = await getOpfsRoot();
+  if (journal.type === "site-delete") {
+    emitServiceWorkerStateChanged();
+    if (journal.revisionPath) await removePath(root, journal.revisionPath);
+    await removePath(root, UPDATES_ROOT);
+    await removePath(root, ROLLBACK_ROOT);
+    await clearOperationJournal();
+    return true;
+  }
   if (journal.type === "update-merge") {
     const completed = await rollbackMergedDirectory({
       targetPath: journal.targetPath,

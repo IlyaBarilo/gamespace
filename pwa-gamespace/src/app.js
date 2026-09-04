@@ -1,5 +1,5 @@
 import "./styles.css";
-import { readState } from "./db.js";
+import { readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import {
   cleanupOrphans,
@@ -7,6 +7,7 @@ import {
   applyUpdateArchive,
   refreshInstalledSiteStatistics,
   removeInstalledSite,
+  readInstalledSiteState,
 } from "./import-manager.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
@@ -957,20 +958,26 @@ async function initialize() {
   }
 
   showAppShell();
+  setBusy(true);
   setStatus(navigator.onLine ? "Подготовка автономного режима" : "Автономный режим", "neutral");
   let initialViewerOpened = false;
+  let initialViewerAttempted = false;
   try {
     state = await readState();
+    if (!state && (await readOperationJournal())?.type === "site-delete") diagnosticSession.site(null);
     if (!state && diagnosticSession.previousSite()) {
       saveBackgroundIssue(new Error("Ранее сохранялась установленная версия сайта, но её записи в IndexedDB теперь нет. Причина удаления неизвестна."), { stage: "site-state-missing", stageLabel: "Проверка сведений об установленном сайте" });
     }
-    if (state) diagnosticSession.site(state);
+    renderState();
+    if (!state) finishBoot();
     // Restore an interrupted update before exposing potentially half-updated pages.
     try { await cleanupOrphans(state); }
     catch (error) {
       error.diagnosticContext = { ...error.diagnosticContext, stage: "startup-recovery", stageLabel: "Восстановление / очистка при запуске" };
       throw error;
     }
+    state = await readInstalledSiteState();
+    diagnosticSession.site(state);
     if (state && !state.storageVerifiedAt) {
       const result = await refreshInstalledSiteStatistics(state);
       state = result.state;
@@ -978,25 +985,30 @@ async function initialize() {
     renderState();
 
     if (state && navigator.serviceWorker?.controller) {
+      initialViewerAttempted = true;
       initialViewerOpened = await openViewer();
-      if (initialViewerOpened) finishBoot();
+      finishBoot();
     } else if (!state) {
       finishBoot();
     }
 
     await ensureServiceWorker();
     await refreshRuntimeState({ confirmHealth: true });
-    if (state && !initialViewerOpened) {
+    if (state && !initialViewerAttempted) {
+      initialViewerAttempted = true;
       initialViewerOpened = await openViewer();
-      if (initialViewerOpened) finishBoot();
+      finishBoot();
     }
 
     await Promise.all([refreshStorage(), initializeCapabilities()]);
-    setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
+    if (state && !initialViewerOpened) setStatus("Локальный сайт пока не открыт", "bad");
+    else setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
   } catch (error) {
     finishBoot();
     showError(error, { operation: "запуск PWA", stage: "initialize", stageLabel: "Инициализация приложения и хранилища" });
     setStatus("Ошибка инициализации", "bad");
+  } finally {
+    setBusy(false);
   }
 }
 
@@ -1085,20 +1097,22 @@ elements.removeSiteButton.addEventListener("click", async () => {
   const startedAt = Date.now();
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
+  closeViewer();
   state = null;
   renderState();
   void refreshStorage().catch(() => {});
   setStatus("Удаляю файлы сайта", "neutral");
   try {
     diagnosticSession.begin("удаление сайта");
-    await removeInstalledSite();
     diagnosticSession.site(null);
+    await removeInstalledSite();
     await synchronizeSiteInterface({ reloadState: true });
     scheduleSiteInterfaceRefresh();
     setStatus("Сайт удалён", "neutral");
     diagnosticSession.finish("успешно");
   } catch (error) {
     state = await readState().catch(() => previousState);
+    diagnosticSession.site(state);
     renderState();
     await refreshStorage().catch(() => {});
     showError(error, { operation: "удаление сайта", stage: "site-delete", stageLabel: "Удаление локального сайта", previousSite: "установлен", startedAt });

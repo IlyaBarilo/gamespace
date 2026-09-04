@@ -69,6 +69,29 @@ export function clearState() {
   return withStore("readwrite", (store) => store.delete(STATE_KEY));
 }
 
+export function beginSiteRemoval(journal) {
+  return withStore("readwrite", (store) => {
+    store.put(journal, JOURNAL_KEY);
+    store.delete(STATE_KEY);
+  });
+}
+
+export function clearStateIfRevision(revisionPath) {
+  return withStore("readwrite", (store) => {
+    const result = { state: null, cleared: false };
+    const request = store.get(STATE_KEY);
+    request.onsuccess = () => {
+      result.state = request.result || null;
+      if (result.state?.revisionPath === revisionPath) {
+        store.delete(STATE_KEY);
+        result.state = null;
+        result.cleared = true;
+      }
+    };
+    return result;
+  });
+}
+
 export async function readOperationJournal() {
   const database = await openDatabase();
   try {
