@@ -11,7 +11,7 @@
 </p>
 
 [Установить PWA](https://ilyabarilo.github.io/gamespace/) ·
-[Установить APK](https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk) ·
+[Скачать APK](https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk) ·
 [Кейс разработки](docs/CASE_STUDY_RU.md) ·
 [Проверенные устройства](docs/TESTED_DEVICES_RU.md) ·
 [Постеры A4](#постеры-a4) ·
