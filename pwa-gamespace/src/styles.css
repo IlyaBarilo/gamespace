@@ -1031,6 +1031,14 @@ a:focus-visible {
   line-height: 1.5;
 }
 
+.pwa-update-copy .runtime-environment {
+  margin: 9px 0 0;
+  color: var(--blue-bright);
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .pwa-update-button {
   margin: 0;
 }

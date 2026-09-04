@@ -25,6 +25,12 @@ import {
   fetchLicenseDocument,
   licenseDocumentGroups,
 } from "./license-documents.js";
+import {
+  detectBrowserEnvironment,
+  formatBrowserEnvironment,
+  readBrowserEnvironment,
+} from "./runtime-environment.js";
+import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-history.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -52,6 +58,8 @@ let gameLoadTimer = null;
 let backgroundIssueCount = 0;
 let archiveStatistics = null;
 const archiveStatisticsStore = createArchiveStatisticsStore();
+const runtimeHistoryStore = createRuntimeHistoryStore();
+let runtimeHistoryState = runtimeHistoryStore.load();
 
 function refreshArchiveStatistics() {
   const { report, warning } = archiveStatisticsStore.load();
@@ -65,9 +73,20 @@ refreshArchiveStatistics();
 const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
 const DEMO_REVISION = "apk-demo-v1";
+let browserEnvironment = detectBrowserEnvironment();
+
+function renderRuntimeEnvironment() {
+  elements.runtimeEnvironment.textContent = `Среда запуска: ${formatBrowserEnvironment(browserEnvironment)}`;
+}
 
 elements.appHeaderVersion.textContent = APP_VERSION;
 elements.viewerToolbarTitle.textContent = `GameSpace PWA ${APP_VERSION}`;
+renderRuntimeEnvironment();
+void readBrowserEnvironment().then((environment) => {
+  browserEnvironment = environment;
+  runtimeHistoryState = runtimeHistoryStore.observe(browserEnvironment);
+  renderRuntimeEnvironment();
+});
 
 const displayOverride = import.meta.env.DEV
   ? new URLSearchParams(location.search).get("gamespaceMode")
@@ -88,6 +107,9 @@ const diagnosticUI = createDiagnosticUI(elements, () => ({
   activeVersion: runtimeState?.activeVersion,
   runtime: navigator.serviceWorker?.controller?.scriptURL?.split("/").at(-1)?.split("?")[0] || RUNTIME_SCRIPT,
   controlled: Boolean(navigator.serviceWorker?.controller),
+  browser: formatBrowserEnvironment(browserEnvironment),
+  engine: browserEnvironment.engine,
+  runtimeHistory: formatRuntimeHistory(runtimeHistoryState.entries),
   userAgent: navigator.userAgent,
   displayMode: runningAsInstalledApp ? "установленное приложение" : "вкладка браузера",
   online: navigator.onLine,
@@ -390,7 +412,12 @@ async function importSelectedFile(file, source = "локальный архив"
     elements.progressPhase.textContent = "Операция остановлена";
     setStatus("Не удалось обработать архив", "bad");
   } finally {
-    const statistics = archiveStatistics.finish(outcome, { version: APP_VERSION, userAgent: navigator.userAgent });
+    const statistics = archiveStatistics.finish(outcome, {
+      version: APP_VERSION,
+      browser: formatBrowserEnvironment(browserEnvironment),
+      engine: browserEnvironment.engine,
+      userAgent: navigator.userAgent,
+    });
     archiveStatisticsStore.save(statistics);
     archiveStatistics = null;
     refreshArchiveStatistics();
@@ -1047,6 +1074,15 @@ elements.demoButton.addEventListener("click", async () => {
 elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full"));
 elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"));
 elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
+elements.runtimeHistoryButton.addEventListener("click", () => {
+  runtimeHistoryState = runtimeHistoryStore.load();
+  diagnosticUI.open({
+    title: "История браузера",
+    text: formatRuntimeHistory(runtimeHistoryState.entries),
+    persistence: runtimeHistoryState.warning || "Хранятся 20 последних замеченных версий в этом браузере. Новые записи находятся сверху.",
+    privacy: "История остаётся на устройстве и передаётся только при ручном копировании или отправке. Даты показывают первое и последнее использование версии в GameSpace; точное время фонового обновления браузера определить нельзя.",
+  });
+});
 elements.openLicensesButton.addEventListener("click", openLicenses);
 elements.closeLicensesButton.addEventListener("click", closeLicenses);
 elements.licenseModalBackdrop.addEventListener("click", closeLicenses);
@@ -1090,6 +1126,9 @@ elements.viewerBack.addEventListener("click", () => {
   showViewerToolbar();
 });
 elements.siteFrame.addEventListener("load", attachFrameGuards);
+window.addEventListener("pagehide", () => {
+  runtimeHistoryState = runtimeHistoryStore.observe(browserEnvironment);
+});
 elements.errorClose.addEventListener("click", () => { elements.errorPanel.hidden = true; });
 elements.removeSiteButton.addEventListener("click", async () => {
   if (!state || !window.confirm("Удалить распакованный сайт и его локальные данные из хранилища PWA?")) return;

@@ -13,12 +13,18 @@ test("diagnostics freeze the original phase before cleanup and retain the actual
   const failure = tracker.failure(new DOMException("No space", "QuotaExceededError"));
   tracker.stage("cleanup", "Удаление");
   addCleanupDiagnostic(failure, "Очистка", new Error("EACCES"));
-  const report = createDiagnosticReport(failure, { version: "0.3.0" }, { previousSite: "не установлен" });
+  const report = createDiagnosticReport(failure, {
+    version: "0.3.0", browser: "Firefox 142.0 · Gecko", engine: "Gecko",
+    runtimeHistory: "Firefox 142.0 · Gecko\n04.09.2026 10:00 — сейчас",
+  }, { previousSite: "не установлен" });
   assert.equal(report.code, "GS-NO-SPACE");
   assert.match(report.text, /Этап сбоя: Создание файла/);
   assert.match(report.text, /site\/index.html/);
   assert.match(report.text, /Обработано данных, байт: 1024/);
   assert.match(report.text, /Очистка: не завершено/);
+  assert.match(report.text, /Среда запуска: Firefox 142\.0 · Gecko/);
+  assert.match(report.text, /Движок: Gecko/);
+  assert.match(report.text, /История браузера \(новые версии сверху\)/);
   assert.doesNotMatch(report.text, /private contents/);
   assert.equal(failure.cause.name, "QuotaExceededError");
 });

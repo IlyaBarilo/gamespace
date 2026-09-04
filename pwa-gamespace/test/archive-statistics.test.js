@@ -63,7 +63,7 @@ test("operation phases persist separately from errors and survive storage failur
   clock = 25;
   operation.observe({ type: "archive-statistics", statistics: { format: "ZIP", files: 0, durationMs: 15, timings: {}, details: {} } });
   clock = 30;
-  const report = operation.finish("ошибка");
+  const report = operation.finish("ошибка", { browser: "Firefox 142.0 · Gecko", engine: "Gecko" });
   assert.equal(report.durationMs, 30);
   assert.equal(Object.values(report.phases).reduce((sum, ms) => sum + ms, 0), 30);
   const values = new Map([["gamespace:last-error:v1", "previous error"]]);
@@ -76,5 +76,7 @@ test("operation phases persist separately from errors and survive storage failur
   assert.equal(blocked.load().report, report);
   const text = formatArchiveStatistics(report);
   assert.match(text, /Результат: ошибка/);
+  assert.match(text, /Среда запуска: Firefox 142\.0 · Gecko/);
+  assert.match(text, /Движок: Gecko/);
   assert.match(text, /могут перекрываться/);
 });

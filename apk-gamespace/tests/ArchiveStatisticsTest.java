@@ -42,8 +42,9 @@ public final class ArchiveStatisticsTest {
         check(stats.values[ArchiveStatistics.Metric.READ.ordinal()][2] == 11, "actual repeated reads counted");
         check(stats.values[ArchiveStatistics.Metric.SEEK.ordinal()][1] == 2, "seeks counted");
         stats.phase("проверка результата");
-        String report = stats.report("test", "JVM", "fixture.7z", 4, "7z", "полная установка", "ошибка", "test");
+        String report = stats.report("test", "JVM", "Android System WebView 143", "fixture.7z", 4, "7z", "полная установка", "ошибка", "test");
         check(report.contains("Результат: ошибка") && report.contains("вложенное чтение"), "report includes outcome and timing semantics");
+        check(report.contains("Среда запуска: Android System WebView 143"), "report includes runtime environment");
         int phases = stats.phases.size();
         stats.finish();
         check(stats.phases.size() == phases, "finish is idempotent");

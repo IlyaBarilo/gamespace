@@ -134,6 +134,7 @@ public class MainActivity extends Activity {
     private volatile String lastErrorReport;
     // Process-scoped: Activity recreation must not masquerade as a terminated operation.
     private static DiagnosticJournal diagnosticJournal;
+    private RuntimeEnvironmentHistory runtimeEnvironmentHistory;
     private int runtimeIssueCount;
     private boolean rendererRecoveryScheduled;
     private volatile String diagnosticPage = "оболочка";
@@ -212,6 +213,7 @@ public class MainActivity extends Activity {
         buildUi();
         configureWebView(homeWebView, true);
         configureWebView(webView, false);
+        initializeRuntimeEnvironmentHistory();
         loadInstalledSiteOrPrompt();
     }
 
@@ -219,6 +221,7 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение открыто", false);
+        if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
         if (visibleWebView != null) {
             visibleWebView.onResume();
@@ -237,6 +240,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение скрыто", true);
+        if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
         if (visibleWebView != null) {
             if (visibleWebView == homeWebView && !contentLoadPending) {
@@ -1056,9 +1060,10 @@ public class MainActivity extends Activity {
 
     private void showAppMenu() {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
+        final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"} : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1082,6 +1087,8 @@ public class MainActivity extends Activity {
                         reloadSite();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
+                    } else if (runtimeEnvironmentItem.equals(item)) {
+                        showRuntimeEnvironmentDialog();
                     } else if ("Статистика архива".equals(item)) {
                         showArchiveStatistics();
                     } else if ("Последняя ошибка".equals(item)) {
@@ -2143,11 +2150,62 @@ public class MainActivity extends Activity {
     private void appendRuntimeEnvironment(StringBuilder details) {
         appendDiagnosticLine(details, "Страница", diagnosticPage);
         appendDiagnosticLine(details, "Операция выполняется", String.valueOf(busy));
-        try {
-            PackageInfo webViewPackage = Build.VERSION.SDK_INT >= 26 ? WebView.getCurrentWebViewPackage() : null;
-            appendDiagnosticLine(details, "WebView", webViewPackage == null ? "версия недоступна" : webViewPackage.packageName + " " + webViewPackage.versionName);
-        } catch (RuntimeException unavailable) { appendDiagnosticLine(details, "WebView", "сведения недоступны"); }
+        appendDiagnosticLine(details, "Среда запуска", getWebViewEnvironmentText(true));
+        if (runtimeEnvironmentHistory != null) {
+            details.append("\nИстория среды запуска (новые версии сверху):\n")
+                .append(runtimeEnvironmentHistory.format()).append('\n');
+        }
         if (diagnosticJournal != null) details.append('\n').append(diagnosticJournal.snapshot());
+    }
+
+    private void initializeRuntimeEnvironmentHistory() {
+        final SharedPreferences prefs = getApplicationContext().getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE);
+        runtimeEnvironmentHistory = new RuntimeEnvironmentHistory(new RuntimeEnvironmentHistory.Store() {
+            public String load() { return prefs.getString("runtime_environment_history_v1", ""); }
+            public void save(String value) {
+                if (!prefs.edit().putString("runtime_environment_history_v1", value).commit()) {
+                    throw new IllegalStateException("Runtime environment history write failed");
+                }
+            }
+        }, new RuntimeEnvironmentHistory.Clock() {
+            public long now() { return System.currentTimeMillis(); }
+        });
+        runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
+    }
+
+    private String getWebViewEnvironmentText(boolean includePackage) {
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                PackageInfo webViewPackage = WebView.getCurrentWebViewPackage();
+                if (webViewPackage != null) {
+                    String packageName = webViewPackage.packageName == null ? "" : webViewPackage.packageName;
+                    String displayName = packageName.contains("chrome") ? "Google Chrome WebView"
+                        : packageName.contains("webview") ? "Android System WebView" : "Android WebView";
+                    String version = webViewPackage.versionName == null || webViewPackage.versionName.length() == 0
+                        ? "версия недоступна" : webViewPackage.versionName;
+                    return displayName + " " + version + (includePackage && packageName.length() > 0 ? " (" + packageName + ")" : "");
+                }
+            }
+            String version = getWebViewVersionFromUserAgent();
+            return "Android WebView " + (version.length() == 0 ? "— версия недоступна" : version);
+        } catch (RuntimeException unavailable) {
+            return "Android WebView — сведения недоступны";
+        }
+    }
+
+    private String getWebViewVersionFromUserAgent() {
+        try {
+            String userAgent = webView == null ? WebSettings.getDefaultUserAgent(this) : webView.getSettings().getUserAgentString();
+            if (userAgent == null) return "";
+            String marker = "Chrome/";
+            int start = userAgent.indexOf(marker);
+            if (start < 0) return "";
+            start += marker.length();
+            int end = userAgent.indexOf(' ', start);
+            return userAgent.substring(start, end < 0 ? userAgent.length() : end);
+        } catch (RuntimeException unavailable) {
+            return "";
+        }
     }
 
     private String buildRuntimeReport(String code, Throwable error, String context) {
@@ -2186,6 +2244,7 @@ public class MainActivity extends Activity {
     private void saveArchiveStatistics(InstallContext context) {
         String report = context.statistics.report(getAppVersionName(),
             Build.MANUFACTURER + " " + Build.MODEL + "; Android " + Build.VERSION.RELEASE,
+            getWebViewEnvironmentText(true),
             context.archiveName, context.archiveSize, context.archiveFormat, context.mode, context.outcome, context.source);
         lastArchiveStatistics = DiagnosticReport.bounded(DiagnosticReport.safeText(report));
         try {
@@ -2212,7 +2271,7 @@ public class MainActivity extends Activity {
         ScrollView scrollView = new ScrollView(this);
         TextView textView = new TextView(this);
         textView.setText("Скопируйте отчёт и пришлите разработчику вместе с описанием своих действий.\n\n"
-            + "Отчёт содержит модель устройства, названия и пути файлов. Проверьте текст перед отправкой. "
+            + "Отчёт содержит модель устройства, версии WebView, даты их использования, названия и пути файлов. Проверьте текст перед отправкой. "
             + "Содержимое файлов не включается; автоматической отправки нет.\n\n" + report);
         textView.setTextSize(14);
         textView.setTextColor(Color.rgb(30, 34, 38));
@@ -2828,7 +2887,8 @@ public class MainActivity extends Activity {
         info.append("Package: ru.local.gamespace.loader\n\n");
         info.append("Версия приложения: ").append(getAppVersionName()).append('\n');
         info.append("Дата сборки: ").append(getString(R.string.app_build_date)).append('\n');
-        info.append("Минимальная версия Android: ").append(getString(R.string.app_min_android)).append("\n\n");
+        info.append("Минимальная версия Android: ").append(getString(R.string.app_min_android)).append('\n');
+        info.append("Среда запуска: ").append(getWebViewEnvironmentText(true)).append("\n\n");
 
         File base = chooseStorageBaseForInstall();
         info.append("Каталог данных:\n").append(base.getAbsolutePath()).append('\n');
@@ -2890,6 +2950,28 @@ public class MainActivity extends Activity {
             .setTitle("Информация")
             .setView(scrollView)
             .setPositiveButton("OK", null)
+            .create();
+        showHeldDialog(dialog);
+    }
+
+    private void showRuntimeEnvironmentDialog() {
+        ScrollView scrollView = new ScrollView(this);
+        TextView textView = new TextView(this);
+        String history = runtimeEnvironmentHistory == null ? "История пока пуста." : runtimeEnvironmentHistory.format();
+        textView.setText(getWebViewEnvironmentText(true)
+            + "\nAndroid " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")"
+            + "\n\nИстория использования (новые версии сверху):\n\n" + history
+            + "\n\nДаты показывают первое и последнее использование версии в GameSpace. "
+            + "Точное время фонового обновления WebView определить нельзя.");
+        textView.setTextSize(14);
+        textView.setTextColor(Color.rgb(22, 28, 33));
+        textView.setPadding(dp(22), dp(14), dp(22), dp(18));
+        scrollView.addView(textView, new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Среда запуска")
+            .setView(scrollView)
+            .setPositiveButton("Закрыть", null)
             .create();
         showHeldDialog(dialog);
     }

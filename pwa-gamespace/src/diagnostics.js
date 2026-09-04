@@ -145,6 +145,8 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   line("Активная версия", environment.activeVersion);
   line("Service Worker", environment.runtime);
   line("Контроль Service Worker", environment.controlled);
+  line("Среда запуска", environment.browser);
+  line("Движок", environment.engine);
   line("Браузер / ОС (сообщает браузер)", environment.userAgent);
   line("Режим запуска", environment.displayMode);
   line("Онлайн по данным браузера", environment.online);
@@ -175,6 +177,7 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   }
   const trail = context.trail || environment.trail;
   if (trail?.length) lines.push("", "Последние действия:", ...trail.slice(-20).map((item) => safeDiagnosticText(item, 600)));
+  if (environment.runtimeHistory) lines.push("", "История браузера (новые версии сверху):", safeDiagnosticText(environment.runtimeHistory, 6000));
   if (context.cleanup?.length) lines.push("", "Очистка / откат:", ...context.cleanup);
   if (context.messages?.length) lines.push("", "Последние сообщения обработчика:", ...context.messages);
   lines.push("", "Технические подробности:");

@@ -1,4 +1,4 @@
-﻿param([string]$JdkBin = "")
+param([string]$JdkBin = "")
 
 $ErrorActionPreference = "Stop"
 $apkRoot = Split-Path -Parent $PSScriptRoot
@@ -27,6 +27,10 @@ if ($LASTEXITCODE -ne 0) { throw "Archive statistics tests failed." }
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic report compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticReportTest
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic report tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "RuntimeEnvironmentHistory.java") (Join-Path $PSScriptRoot "RuntimeEnvironmentHistoryTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Runtime environment history compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.RuntimeEnvironmentHistoryTest
+if ($LASTEXITCODE -ne 0) { throw "Runtime environment history tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "DiagnosticJournal.java") (Join-Path $PSScriptRoot "DiagnosticJournalTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic journal compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticJournalTest
@@ -43,6 +47,9 @@ $checks = @{
     "copy report" = 'ClipData\.newPlainText\("Диагностика GameSpace APK", report\)'
     "share text only" = 'send\.putExtra\(Intent\.EXTRA_TEXT, report\)'
     "latest error menu" = '"Последняя ошибка"\.equals\(item\)'
+    "runtime environment menu" = 'runtimeEnvironmentItem = "Среда запуска: " \+ getWebViewEnvironmentText\(false\)'
+    "runtime environment report" = 'appendDiagnosticLine\(details, "Среда запуска", getWebViewEnvironmentText\(true\)\)'
+    "runtime environment error history" = 'История среды запуска \(новые версии сверху\)'
     "archive opening stage" = 'context\.setStage\("ARCHIVE-OPEN"'
     "metadata stage" = 'context\.setStage\("ARCHIVE-METADATA"'
     "missing index stage" = 'context\.setStage\("INDEX-CHECK"'

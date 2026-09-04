@@ -158,11 +158,12 @@ final class ArchiveStatistics {
         };
     }
 
-    String report(String version, String device, String archive, long archiveBytes, String format, String mode, String outcome, String source) {
+    String report(String version, String device, String runtimeEnvironment, String archive, long archiveBytes, String format, String mode, String outcome, String source) {
         finish();
         StringBuilder text = new StringBuilder("GameSpace APK — статистика архива, формат 1\n");
         text.append("Дата: ").append(new java.util.Date()).append('\n');
-        text.append("Версия: ").append(version).append("\nУстройство / ОС: ").append(device).append('\n');
+        text.append("Версия: ").append(version).append("\nСреда запуска: ").append(runtimeEnvironment)
+            .append("\nУстройство / ОС: ").append(device).append('\n');
         text.append("Архив: ").append(archive).append("\nРазмер архива: ").append(archiveBytes).append(" байт\n");
         text.append("Формат: ").append(format).append("\nОперация: ").append(mode).append("\nРезультат: ").append(outcome).append('\n');
         text.append("Источник: ").append(source).append('\n');

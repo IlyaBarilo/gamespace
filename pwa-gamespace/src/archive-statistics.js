@@ -126,6 +126,8 @@ export function formatArchiveStatistics(report) {
   lines.push("", "Условия замера:",
     `Дата: ${new Date(report.timestamp).toISOString()}`,
     `Версия: ${safeDiagnosticText(report.environment?.version || "неизвестна")}`,
+    `Среда запуска: ${safeDiagnosticText(report.environment?.browser || "неизвестна")}`,
+    `Движок: ${safeDiagnosticText(report.environment?.engine || "неизвестен")}`,
     `Браузер / ОС: ${safeDiagnosticText(report.environment?.userAgent || "неизвестно")}`);
   lines.push("", "Как читать статистику:",
     "Время распаковщика включает вложенные операции чтения и записи. Эти строки не складываются.",

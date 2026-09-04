@@ -312,6 +312,7 @@
           <p class="section-kicker">ОБОЛОЧКА PWA</p>
           <h2>Версия приложения</h2>
           <p id="pwaCurrentVersion">Установлена версия 0.3.0.</p>
+          <p id="runtimeEnvironment" class="runtime-environment">Среда запуска: определяется…</p>
           <p id="pwaUpdateStatus">При запуске используется локальная версия. Подключение к серверу выполняется только по этой кнопке.</p>
         </div>
         <div class="pwa-version-actions">
@@ -319,6 +320,7 @@
             <span class="action-symbol">↓</span>
             <span><strong>Проверить версии PWA</strong><small>Требуется подключение к интернету</small></span>
           </button>
+          <button id="runtimeHistoryButton" class="version-secondary-button" type="button">История браузера</button>
           <button id="rollbackPwaButton" class="version-secondary-button" type="button" disabled>Вернуться к предыдущей версии</button>
           <a id="recoveryLink" class="recovery-link" href="./__gamespace_recovery__/">Открыть страницу восстановления</a>
         </div>
@@ -386,7 +388,7 @@
         <h2 id="diagnosticTitle">Отчёт об ошибке</h2>
         <button id="diagnosticClose" class="version-secondary-button" type="button">Закрыть</button>
       </div>
-      <p id="diagnosticPrivacy">Пришлите отчёт разработчику вместе с описанием своих действий. Перед отправкой проверьте текст: он содержит сведения о браузере и названия файлов. Содержимое архива не включается. Автоматической отправки нет.</p>
+      <p id="diagnosticPrivacy">Пришлите отчёт разработчику вместе с описанием своих действий. Перед отправкой проверьте текст: он содержит сведения о браузере, даты использования его версий и названия файлов. Содержимое архива не включается. Автоматической отправки нет.</p>
       <p id="diagnosticPersistence" role="status"></p>
       <label for="diagnosticText">Текст отчёта — можно выделить и скопировать вручную</label>
       <textarea id="diagnosticText" readonly spellcheck="false" autocomplete="off"></textarea>
