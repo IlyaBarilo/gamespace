@@ -11,10 +11,19 @@ test("diagnostic controls exist on both app and landing surfaces, with manual-co
   assert.match(html, /Автоматической отправки нет/);
   assert.match(html, /<details class="browser-compatibility-note">\s*<summary>Если импортированная игра стала работать иначе<\/summary>/);
   assert.doesNotMatch(html, /<details class="browser-compatibility-note" open>/);
+  assert.match(html, /На Android: откройте меню браузера и выберите «Установить приложение»/);
+  assert.doesNotMatch(html, /«Установить приложение» или «Добавить на главный экран»/);
   const ui = await readFile(new URL("../src/diagnostic-ui.js", import.meta.url), "utf8");
   assert.match(ui, /\.value = report\?\.text/);
   assert.match(ui, /setSelectionRange\(0, elements\.diagnosticText\.value\.length\)/);
   assert.doesNotMatch(ui, /innerHTML|outerHTML|fetch\(/);
+});
+
+test("install action distinguishes a browser prompt from manual installation", async () => {
+  const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(app, /Как установить GameSpace/);
+  assert.match(app, /Через меню браузера/);
+  assert.match(app, /installPrompt[\s\S]*Открыть окно установки/);
 });
 
 test("report dialog remains usable while import controls are busy", async () => {

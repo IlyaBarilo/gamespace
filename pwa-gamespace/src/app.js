@@ -86,6 +86,7 @@ void readBrowserEnvironment().then((environment) => {
   browserEnvironment = environment;
   runtimeHistoryState = runtimeHistoryStore.observe(browserEnvironment);
   renderRuntimeEnvironment();
+  refreshInstallAction();
 });
 
 const displayOverride = import.meta.env.DEV
@@ -102,6 +103,25 @@ function isRunningAsInstalledApp() {
 
 const runningAsInstalledApp = isRunningAsInstalledApp();
 elements.installButton.hidden = runningAsInstalledApp;
+
+function manualInstallStatus() {
+  return "Если окно установки не появилось, используйте меню браузера. Нажмите кнопку, чтобы увидеть инструкцию.";
+}
+
+function refreshInstallAction() {
+  if (runningAsInstalledApp) return;
+  const label = elements.installButton.querySelector("span");
+  const hint = elements.installButton.querySelector("small");
+  if (installPrompt) {
+    label.textContent = "Установить GameSpace";
+    hint.textContent = "Открыть окно установки";
+  } else {
+    label.textContent = "Как установить GameSpace";
+    hint.textContent = "Через меню браузера";
+  }
+}
+
+refreshInstallAction();
 const diagnosticUI = createDiagnosticUI(elements, () => ({
   version: APP_VERSION,
   activeVersion: runtimeState?.activeVersion,
@@ -975,7 +995,8 @@ async function initialize() {
       await initializeCapabilities();
       await refreshRuntimeState({ confirmHealth: true });
       if (!installPrompt) {
-        elements.installAvailability.textContent = "Если браузер не покажет окно автоматически, используйте инструкцию под кнопкой.";
+        refreshInstallAction();
+        elements.installAvailability.textContent = manualInstallStatus();
       }
     } catch (error) {
       elements.installAvailability.textContent = `Автономный режим пока не подготовлен: ${errorMessage(error)}`;
@@ -1172,10 +1193,12 @@ elements.installButton.addEventListener("click", async () => {
       elements.installResult.textContent = "Завершите установку в окне браузера. После подтверждения здесь появится инструкция по запуску GameSpace.";
     } else {
       elements.installHelp.hidden = false;
-      elements.installAvailability.textContent = "Установка отменена. Можно повторить или добавить приложение через меню браузера.";
+      refreshInstallAction();
+      elements.installAvailability.textContent = "Установка отменена. Для повторной установки используйте меню браузера.";
     }
   } else {
     elements.installHelp.hidden = !elements.installHelp.hidden;
+    elements.installButton.setAttribute("aria-expanded", String(!elements.installHelp.hidden));
   }
 });
 
@@ -1184,6 +1207,8 @@ window.addEventListener("beforeinstallprompt", (event) => {
   if (isRunningAsInstalledApp()) return;
   installPrompt = event;
   elements.installButton.hidden = false;
+  elements.installButton.setAttribute("aria-expanded", "false");
+  refreshInstallAction();
   elements.installAvailability.textContent = "Приложение готово к установке на это устройство.";
 });
 window.addEventListener("appinstalled", () => {
@@ -1192,20 +1217,20 @@ window.addEventListener("appinstalled", () => {
   elements.installAvailability.hidden = true;
   elements.installResult.classList.add("is-complete");
   elements.installResult.hidden = false;
-  elements.installResult.textContent = "Закройте эту вкладку браузера. Затем запустите GameSpace с нового ярлыка на рабочем столе или главном экране — только так откроется режим приложения.";
+  elements.installResult.textContent = "Закройте эту вкладку браузера. Затем запустите GameSpace с нового значка на рабочем столе или главном экране — только так откроется режим приложения.";
 });
 window.addEventListener("online", () => {
   if (!runningAsInstalledApp) {
     elements.installAvailability.textContent = installPrompt
       ? "Приложение готово к установке на это устройство."
-      : "Подключение восстановлено. Можно установить приложение.";
+      : manualInstallStatus();
     return;
   }
   setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
 });
 window.addEventListener("offline", () => {
   if (!runningAsInstalledApp) {
-    elements.installAvailability.textContent = "Автономная оболочка доступна. Для установки используйте меню браузера.";
+    elements.installAvailability.textContent = manualInstallStatus();
     return;
   }
   setStatus("Автономный режим", "good");
