@@ -1,6 +1,6 @@
 <resources>
   <string name="app_name">GameSpace</string>
   <string name="app_version_name">0.3.0</string>
-  <string name="app_build_date">2026-09-03 01:22:52 +03:00</string>
+  <string name="app_build_date">2026-09-04 19:35:08 +03:00</string>
   <string name="app_min_android">Android 6.0 (API 23, 2015)</string>
 </resources>

@@ -8,6 +8,7 @@ import {
 } from "./diagnostics.js";
 
 export function createDiagnosticUI(elements, getEnvironment) {
+  const defaultPrivacy = elements.diagnosticPrivacy?.textContent;
   const store = createLastReportStore();
   let previousFocus = null;
   let fallbackInert = [];
@@ -20,9 +21,10 @@ export function createDiagnosticUI(elements, getEnvironment) {
   summarize(store.load());
 
   function open(override = null) {
-    const { report, warning } = override?.text ? { report: override, warning: "Ручной отчёт не заменяет сохранённую последнюю ошибку. Скопируйте его перед закрытием." } : store.load();
+    const { report, warning } = override?.text ? { report: override, warning: override.persistence ?? "Ручной отчёт не заменяет сохранённую последнюю ошибку. Скопируйте его перед закрытием." } : store.load();
     if (!elements.diagnosticDialog.open) previousFocus = document.activeElement;
-    if (elements.diagnosticTitle) elements.diagnosticTitle.textContent = override?.text ? "Отчёт о проблеме" : "Отчёт об ошибке";
+    if (elements.diagnosticTitle) elements.diagnosticTitle.textContent = override?.title || (override?.text ? "Отчёт о проблеме" : "Отчёт об ошибке");
+    if (elements.diagnosticPrivacy) elements.diagnosticPrivacy.textContent = override?.privacy || defaultPrivacy;
     elements.diagnosticText.value = report?.text || warning || "Сохранённых ошибок пока нет.";
     elements.diagnosticPersistence.textContent = warning || (report ? "Хранится только последний отчёт, отдельно от установленного сайта." : "");
     elements.diagnosticCopy.disabled = !report;
@@ -76,7 +78,7 @@ export function createDiagnosticUI(elements, getEnvironment) {
   });
   elements.diagnosticShare.addEventListener("click", async () => {
     elements.diagnosticShare.disabled = true;
-    const result = await shareDiagnosticReport(elements.diagnosticText.value);
+    const result = await shareDiagnosticReport(elements.diagnosticText.value, undefined, elements.diagnosticTitle?.textContent);
     elements.diagnosticShare.disabled = false;
     const messages = {
       opened: "Отчёт передан системному меню. Завершите отправку в выбранном приложении.",

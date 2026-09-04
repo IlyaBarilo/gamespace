@@ -2,18 +2,22 @@ import { BlobReader, ZipReader } from "@zip.js/zip.js";
 import { dirname, findIndexEntry, summarizeEntries, validateEntries } from "./archive-plan.js";
 import { getFileHandleAt, getOpfsRoot } from "../opfs.js";
 import { addCleanupDiagnostic, OperationDiagnostics } from "../diagnostics.js";
+import { ArchiveMetrics } from "../archive-statistics.js";
+import { measuredBlob } from "./zip-statistics.js";
 
 const RESERVE_MINIMUM = 512 * 1024 * 1024;
 
 export async function extractZip({ file, destination, requireIndex, onEvent }) {
+  const statistics = new ArchiveMetrics("ZIP / ZIP64");
   const diagnostics = new OperationDiagnostics("распаковка ZIP", { file });
   const callback = onEvent;
   onEvent = (event) => { diagnostics.observe(event); callback?.(event); };
-  const reader = new ZipReader(new BlobReader(file), { checkAmbiguity: true });
+  const source = new BlobReader(measuredBlob(file, statistics));
+  const reader = new ZipReader(source, { checkAmbiguity: true });
   let failure = null;
   try {
     onEvent?.({ type: "phase", phase: "list", label: "Проверяю структуру ZIP/ZIP64…" });
-    const zipEntries = await reader.getEntries();
+    const zipEntries = await statistics.async("engine", () => reader.getEntries());
     const entries = validateEntries(zipEntries.map((entry) => ({
       path: entry.filename,
       directory: entry.directory,
@@ -54,8 +58,10 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
     for (const entry of entries) {
       if (entry.directory) continue;
       onEvent({ type: "file-stage", phase: "file-create", label: "Создание файла назначения OPFS", currentFile: entry.path, completedFiles });
-      const output = await getFileHandleAt(root, `${destination}/${entry.path}`, true);
-      const writable = await output.createWritable({ keepExistingData: false });
+      const writable = await statistics.async("open", async () => {
+        const output = await getFileHandleAt(root, `${destination}/${entry.path}`, true);
+        return output.createWritable({ keepExistingData: false });
+      });
       onEvent({ type: "file-stage", phase: "file-extract", label: "Чтение ZIP-записи и запись файла OPFS", currentFile: entry.path });
       let entryProgress = 0;
       const writer = writable.getWriter();
@@ -64,12 +70,12 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
       // while closing an already-errored stream. Writes still use bounded backpressure.
       const destinationStream = new WritableStream({
         async write(chunk) {
-          try { await writer.write(chunk); }
+          try { await statistics.async("write", () => writer.write(chunk), () => chunk.byteLength); }
           catch (error) { destinationError = error; throw error; }
         },
       });
       try {
-        await entry.source.getData(destinationStream, {
+        await statistics.async("engine", () => entry.source.getData(destinationStream, {
           preventClose: true,
           onprogress(index) {
             entryProgress = index;
@@ -80,10 +86,11 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
               currentFile: entry.path,
             });
           },
-        });
+        }));
         if (destinationError) throw destinationError;
         onEvent({ type: "file-stage", phase: "file-close", label: "Завершение записи файла OPFS", currentFile: entry.path });
-        await writer.close();
+        await statistics.async("close", () => writer.close());
+        statistics.files++;
       } catch (error) {
         const entryFailure = diagnostics.failure(destinationError || error);
         try { await writer.abort(); }
@@ -115,10 +122,11 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
     throw failure;
   } finally {
     if (!failure) diagnostics.stage("archive-close", "Закрытие ZIP-потока");
-    try { await reader.close(); }
+    try { await statistics.async("archiveClose", () => reader.close()); }
     catch (closeError) {
       if (failure) addCleanupDiagnostic(failure, "Закрытие ZIP-потока", closeError);
       else throw diagnostics.failure(closeError);
     }
+    finally { onEvent({ type: "archive-statistics", statistics: statistics.snapshot() }); }
   }
 }

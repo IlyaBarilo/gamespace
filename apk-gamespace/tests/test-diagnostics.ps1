@@ -15,6 +15,14 @@ $sourceDirectory = Join-Path $apkRoot "android-webview-loader\app\src\main\java\
 $outputDirectory = Join-Path $apkRoot "android-webview-loader\app\build\diagnostics-tests"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\app\libs\*')"
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ProgressEstimator.java") (Join-Path $PSScriptRoot "ProgressEstimatorTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Progress estimator compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ProgressEstimatorTest
+if ($LASTEXITCODE -ne 0) { throw "Progress estimator tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ArchiveStatistics.java") (Join-Path $PSScriptRoot "ArchiveStatisticsTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Archive statistics compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ArchiveStatisticsTest $outputDirectory
+if ($LASTEXITCODE -ne 0) { throw "Archive statistics tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "DiagnosticReport.java") (Join-Path $PSScriptRoot "DiagnosticReportTest.java") (Join-Path $PSScriptRoot "ZipFailureTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic report compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticReportTest

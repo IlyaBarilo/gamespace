@@ -12,6 +12,7 @@ import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 import { ProgressEstimator } from "./progress-estimator.js";
 import { createDiagnosticUI } from "./diagnostic-ui.js";
+import { ArchiveStatistics, createArchiveStatisticsStore, formatArchiveStatistics } from "./archive-statistics.js";
 import { DiagnosticSession, connectDiagnosticSessions } from "./diagnostic-session.js";
 import { diagnosticPagePath, observeGameWindow } from "./game-diagnostics.js";
 import {
@@ -48,6 +49,17 @@ diagnosticSession.record("Запуск оболочки", "", true);
 let detachGameDiagnostics = null;
 let gameLoadTimer = null;
 let backgroundIssueCount = 0;
+let archiveStatistics = null;
+const archiveStatisticsStore = createArchiveStatisticsStore();
+
+function refreshArchiveStatistics() {
+  const { report, warning } = archiveStatisticsStore.load();
+  elements.archiveStatisticsButton.disabled = busy || !report;
+  elements.archiveStatisticsSummary.textContent = report
+    ? `${formatDate(report.timestamp)} · ${report.archive} · ${report.outcome}${warning ? `. ${warning}` : ""}`
+    : warning || "Появится после установки или обновления из архива.";
+}
+refreshArchiveStatistics();
 
 const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
@@ -150,6 +162,7 @@ function setBusy(value) {
   elements.archiveInput.disabled = value;
   renderState();
   elements.rollbackPwaButton.disabled = value || !runtimeState?.previousVersion;
+  refreshArchiveStatistics();
 }
 
 function renderLicenseDocumentList() {
@@ -272,12 +285,8 @@ function showError(error, context = {}) {
 }
 
 function showRateEstimate(estimate, unit) {
-  if (!estimate.speedPerSecond) {
-    elements.progressSpeed.textContent = "Скорость: вычисляется";
-    elements.progressRemaining.textContent = "Осталось примерно: вычисляется";
-    return;
-  }
-  const speed = unit === "bytes"
+  if (!estimate.updated) return;
+  const speed = estimate.speedPerSecond === null ? "вычисляется" : unit === "bytes"
     ? `${formatBytes(estimate.speedPerSecond)}/с`
     : `${estimate.speedPerSecond.toLocaleString("ru-RU", { maximumFractionDigits: 1 })} файл/с`;
   const remaining = estimate.remainingMs === null
@@ -289,6 +298,7 @@ function showRateEstimate(estimate, unit) {
 
 function handleImportEvent(event) {
   if (!event) return;
+  archiveStatistics?.observe(event);
   diagnosticSession.observe(event);
   if (event.type === "cleanup-warning") {
     saveBackgroundIssue(event.error, { operation: "очистка после установки", stage: "cleanup", stageLabel: event.label });
@@ -357,6 +367,7 @@ async function importSelectedFile(file, source = "локальный архив"
   setBusy(true);
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
   let outcome = "ошибка";
+  archiveStatistics = new ArchiveStatistics(file, diagnosticContext.operation);
   try {
     diagnosticSession.begin(diagnosticContext.operation, file.name);
     state = isUpdate
@@ -365,6 +376,7 @@ async function importSelectedFile(file, source = "локальный архив"
     diagnosticSession.site(state);
     diagnosticContext.stage = "interface-refresh";
     diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
+    archiveStatistics.nextPhase(diagnosticContext.stageLabel);
     await synchronizeSiteInterface({ reloadState: true });
     scheduleSiteInterfaceRefresh();
     elements.progressPhase.textContent = "Готово";
@@ -377,6 +389,10 @@ async function importSelectedFile(file, source = "локальный архив"
     elements.progressPhase.textContent = "Операция остановлена";
     setStatus("Не удалось обработать архив", "bad");
   } finally {
+    const statistics = archiveStatistics.finish(outcome, { version: APP_VERSION, userAgent: navigator.userAgent });
+    archiveStatisticsStore.save(statistics);
+    archiveStatistics = null;
+    refreshArchiveStatistics();
     diagnosticSession.finish(outcome);
     setBusy(false);
   }
@@ -1033,6 +1049,15 @@ elements.recoveryLink.addEventListener("click", async (event) => {
     showError(error, { operation: "открытие восстановления", stage: "recovery-open", stageLabel: "Подготовка страницы восстановления" });
     setStatus("Страница восстановления пока недоступна", "bad");
   }
+});
+elements.archiveStatisticsButton.addEventListener("click", () => {
+  const { report, warning } = archiveStatisticsStore.load();
+  if (!report) return;
+  diagnosticUI.open({
+    title: "Статистика архива", text: formatArchiveStatistics(report),
+    persistence: warning || "Последняя обработка сохраняется на устройстве и заменяется следующей.",
+    privacy: "Скопируйте отчёт для анализа скорости. В нём есть имя архива и сведения о браузере, без содержимого файлов.",
+  });
 });
 elements.archiveInput.addEventListener("change", () => importSelectedFile(elements.archiveInput.files?.[0]));
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });

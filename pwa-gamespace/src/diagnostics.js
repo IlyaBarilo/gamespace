@@ -223,10 +223,10 @@ export async function copyDiagnosticReport(text, navigatorObject = globalThis.na
   } catch { return false; }
 }
 
-export async function shareDiagnosticReport(text, navigatorObject = globalThis.navigator) {
+export async function shareDiagnosticReport(text, navigatorObject = globalThis.navigator, title = "Ошибка GameSpace PWA") {
   if (!navigatorObject?.share) return "unavailable";
   try {
-    await navigatorObject.share({ title: "Ошибка GameSpace PWA", text });
+    await navigatorObject.share({ title, text });
     return "opened";
   } catch (error) {
     return error?.name === "AbortError" ? "cancelled" : "failed";

@@ -43,6 +43,10 @@ test("ZIP diagnostics do not change successful extraction", async (t) => {
   assert.equal(result.indexPath, "site/index.html");
   assert.ok(written.length > 0);
   assert.equal(events.findLast((event) => event.type === "progress").completedFiles, 1);
+  const statistics = events.find((event) => event.type === "archive-statistics").statistics;
+  assert.equal(statistics.files, 1);
+  assert.equal(statistics.timings.write.bytes, written.reduce((bytes, chunk) => bytes + chunk.byteLength, 0));
+  assert.ok(statistics.timings.read.bytes > statistics.timings.write.bytes);
 });
 
 test("ZIP with no index reports index-check instead of generic extraction", async (t) => {
@@ -94,13 +98,18 @@ test("invalid ZIP header retains the listing phase", async (t) => {
 
 test("ZIP commit error retains file-close phase and the original storage failure", async (t) => {
   mockNavigator(t, { closeError: new DOMException("disk full on commit", "QuotaExceededError") });
-  await assert.rejects(extractZip({ file: await archive(), destination: "test", requireIndex: true }), (error) => {
+  const events = [];
+  await assert.rejects(extractZip({ file: await archive(), destination: "test", requireIndex: true, onEvent: (event) => events.push(event) }), (error) => {
     assert.equal(error.diagnosticContext.stage, "file-close");
     assert.equal(error.diagnosticContext.currentFile, "site/index.html");
     assert.equal(error.cause.name, "QuotaExceededError");
     assert.equal(createDiagnosticReport(error).code, "GS-NO-SPACE");
     return true;
   });
+  const statistics = events.find((event) => event.type === "archive-statistics").statistics;
+  assert.equal(statistics.files, 0);
+  assert.equal(statistics.timings.close.failures, 1);
+  assert.ok(statistics.timings.write.bytes > 0);
 });
 
 test("full and incremental import capture IndexedDB failure before archive extraction", async (t) => {

@@ -74,6 +74,8 @@ public class MainActivity extends Activity {
     private static final String PREFS = "gamespace_loader";
     private static final String DIAGNOSTIC_PREFS = "gamespace_diagnostics";
     private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
+    private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
+    private volatile String lastArchiveStatistics;
     private static final String PREF_BASE_PATH = "base_path";
     private static final String PREF_INDEX_PATH = "index_path";
     private static final String PREF_CONTENT_ROOT_PATH = "content_root_path";
@@ -1055,8 +1057,8 @@ public class MainActivity extends Activity {
     private void showAppMenu() {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"} : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1080,6 +1082,8 @@ public class MainActivity extends Activity {
                         reloadSite();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
+                    } else if ("Статистика архива".equals(item)) {
+                        showArchiveStatistics();
                     } else if ("Последняя ошибка".equals(item)) {
                         showLastErrorReport();
                     } else if ("Создать отчёт о проблеме".equals(item)) {
@@ -1229,8 +1233,8 @@ public class MainActivity extends Activity {
                     context.setStage("ARCHIVE-OPEN", "открытие выбранного архива");
                     long extractStartedAt = System.currentTimeMillis();
                     ZipStats stats = archiveType == ARCHIVE_7Z
-                        ? extractSevenZ(uri, extractRoot, archiveName, fastUpdate)
-                        : extractZip(uri, extractRoot, archiveName, fastUpdate);
+                        ? extractSevenZ(uri, extractRoot, archiveName, fastUpdate, context.statistics)
+                        : extractZip(uri, extractRoot, archiveName, fastUpdate, context.statistics);
                     extractDurationMs = System.currentTimeMillis() - extractStartedAt;
                     extractedBytes = stats.bytes;
                     extractedFiles = stats.files;
@@ -1272,6 +1276,7 @@ public class MainActivity extends Activity {
                     final int finalOperationFiles = extractedFiles;
                     final int finalSkippedFiles = skippedFiles;
                     final boolean finalFastUpdate = fastUpdate;
+                    context.outcome = "успешно";
 
                     mainHandler.post(new Runnable() {
                         @Override
@@ -1286,6 +1291,7 @@ public class MainActivity extends Activity {
                     });
                 } catch (final Exception e) {
                     String report = buildInstallErrorDetails(e, context);
+                    context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
                     if (extractRoot != null && !fastUpdate) {
                         try {
@@ -1319,6 +1325,7 @@ public class MainActivity extends Activity {
                         }
                     });
                 } finally {
+                    saveArchiveStatistics(context);
                     finishBusy();
                 }
             }
@@ -1383,7 +1390,7 @@ public class MainActivity extends Activity {
 
                     context.setStage("ARCHIVE-OPEN", "открытие встроенного архива");
                     long extractStartedAt = System.currentTimeMillis();
-                    ZipStats stats = extractSevenZFromFile(demoArchive, extractRoot, BUILTIN_DEMO_ARCHIVE_NAME, false);
+                    ZipStats stats = extractSevenZFromFile(demoArchive, extractRoot, BUILTIN_DEMO_ARCHIVE_NAME, false, context.statistics);
                     extractDurationMs = System.currentTimeMillis() - extractStartedAt;
                     context.writtenBytes = stats.bytes;
                     context.writtenFiles = stats.files;
@@ -1416,6 +1423,7 @@ public class MainActivity extends Activity {
 
                     final File finalIndex = index;
                     final int finalFiles = installedStats.files;
+                    context.outcome = "успешно";
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -1426,6 +1434,7 @@ public class MainActivity extends Activity {
                     });
                 } catch (final Exception e) {
                     String report = buildInstallErrorDetails(e, context);
+                    context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
                     if (extractRoot != null) {
                         try {
@@ -1454,6 +1463,7 @@ public class MainActivity extends Activity {
                     if (demoArchive != null && demoArchive.isFile()) {
                         demoArchive.delete();
                     }
+                    saveArchiveStatistics(context);
                     finishBusy();
                 }
             }
@@ -1521,7 +1531,7 @@ public class MainActivity extends Activity {
         return archiveType == ARCHIVE_7Z ? "7z" : "ZIP";
     }
 
-    private ZipStats extractZip(Uri uri, File extractRoot, String archiveName, boolean fastUpdate) throws IOException {
+    private ZipStats extractZip(Uri uri, File extractRoot, String archiveName, boolean fastUpdate, ArchiveStatistics statistics) throws IOException {
         Charset[] charsets = getZipNameCharsets();
         ZipDiagnosticException firstMalformedError = null;
 
@@ -1544,7 +1554,7 @@ public class MainActivity extends Activity {
             }
 
             try {
-                return extractZipWithCharset(uri, extractRoot, archiveName, fastUpdate, charset);
+                return extractZipWithCharset(uri, extractRoot, archiveName, fastUpdate, charset, statistics);
             } catch (ZipDiagnosticException e) {
                 if (isMalformedZipNameError(getRootCause(e)) && i < charsets.length - 1) {
                     if (firstMalformedError == null) {
@@ -1562,7 +1572,8 @@ public class MainActivity extends Activity {
         throw new IOException("Не удалось выбрать кодировку имен ZIP.");
     }
 
-    private ZipStats extractZipWithCharset(Uri uri, File extractRoot, String archiveName, boolean fastUpdate, Charset charset) throws IOException {
+    private ZipStats extractZipWithCharset(Uri uri, File extractRoot, String archiveName, boolean fastUpdate, Charset charset, ArchiveStatistics statistics) throws IOException {
+        statistics.attempts++;
         ZipReadContext context = new ZipReadContext();
         context.archiveName = archiveName;
         context.archiveFormat = "ZIP";
@@ -1579,7 +1590,7 @@ public class MainActivity extends Activity {
         int skippedFiles = 0;
         int entries = 0;
         long lastUiUpdate = 0L;
-        long progressStartedAt = System.currentTimeMillis();
+        ProgressEstimator.Archive progress = new ProgressEstimator.Archive();
         byte[] buffer = new byte[BUFFER_SIZE];
 
         updateProgress((fastUpdate ? "Режим: быстрое обновление\n" : "Режим: обычное обновление\n")
@@ -1598,13 +1609,13 @@ public class MainActivity extends Activity {
             String canonicalRoot = withTrailingSeparator(extractRoot.getCanonicalPath());
 
             context.stage = "создание ZIP-потока";
-            CountingInputStream countingStream = new CountingInputStream(rawStream);
+            CountingInputStream countingStream = new CountingInputStream(statistics.input(rawStream));
             try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(countingStream, BUFFER_SIZE), charset)) {
                 ZipEntry entry;
                 while (true) {
                     context.stage = "чтение следующей записи ZIP";
                     context.readBytes = countingStream.getBytesRead();
-                    entry = zip.getNextEntry();
+                    entry = statistics.decode(new ArchiveStatistics.IOAction<ZipEntry>() { public ZipEntry run() throws IOException { return zip.getNextEntry(); } });
                     if (entry == null) {
                         break;
                     }
@@ -1618,7 +1629,7 @@ public class MainActivity extends Activity {
                     String safeName = normalizeZipEntryName(entry.getName());
                     if (safeName == null) {
                         context.stage = "пропуск служебной ZIP-записи";
-                        zip.closeEntry();
+                        statistics.decode(new ArchiveStatistics.IOAction<Void>() { public Void run() throws IOException { zip.closeEntry(); return null; } });
                         continue;
                     }
 
@@ -1633,10 +1644,8 @@ public class MainActivity extends Activity {
 
                     if (entry.isDirectory()) {
                         context.stage = "создание каталога";
-                        if (!out.exists() && !out.mkdirs()) {
-                            throw new IOException("Не удалось создать каталог: " + out.getAbsolutePath());
-                        }
-                        zip.closeEntry();
+                        statistics.ensureDirectory(out);
+                        statistics.decode(new ArchiveStatistics.IOAction<Void>() { public Void run() throws IOException { zip.closeEntry(); return null; } });
                         continue;
                     }
 
@@ -1645,30 +1654,29 @@ public class MainActivity extends Activity {
                     if (fastUpdate && existedBefore && !shouldExtractForFastUpdate(out, entry)) {
                         context.stage = "пропуск актуального файла";
                         skippedFiles += 1;
+                        statistics.skippedFiles++;
                         context.skippedFiles = skippedFiles;
-                        zip.closeEntry();
+                        statistics.decode(new ArchiveStatistics.IOAction<Void>() { public Void run() throws IOException { zip.closeEntry(); return null; } });
                         long now = System.currentTimeMillis();
                         if (now - lastUiUpdate > 500L) {
                             lastUiUpdate = now;
                             context.readBytes = countingStream.getBytesRead();
                             context.writtenBytes = extractedBytes;
                             checkpointArchive(context);
-                            updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                            updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                         }
                         continue;
                     }
 
                     context.stage = "создание родительского каталога";
                     File parent = out.getParentFile();
-                    if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                        throw new IOException("Не удалось создать каталог: " + parent.getAbsolutePath());
-                    }
+                    if (parent != null) statistics.ensureDirectory(parent);
 
                     context.stage = "открытие файла назначения";
-                    try (FileOutputStream output = new FileOutputStream(out)) {
+                    try (FileOutputStream output = statistics.output(out)) {
                         while (true) {
                             context.stage = "чтение данных ZIP-записи";
-                            int read = zip.read(buffer);
+                            int read = statistics.decode(new ArchiveStatistics.IOAction<Integer>() { public Integer run() throws IOException { return zip.read(buffer); } });
                             if (read == -1) {
                                 break;
                             }
@@ -1682,7 +1690,7 @@ public class MainActivity extends Activity {
                             if (now - lastUiUpdate > 500L) {
                                 lastUiUpdate = now;
                                 checkpointArchive(context);
-                                updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                                updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                             }
                         }
                         context.stage = "закрытие записанного файла";
@@ -1694,9 +1702,10 @@ public class MainActivity extends Activity {
                         out.setLastModified(entryTime);
                     }
                     extractedFiles += 1;
+                    statistics.completedFiles++;
                     context.extractedFiles = extractedFiles;
                     context.stage = "закрытие ZIP-записи";
-                    zip.closeEntry();
+                    statistics.decode(new ArchiveStatistics.IOAction<Void>() { public Void run() throws IOException { zip.closeEntry(); return null; } });
                 }
                 context.stage = "закрытие ZIP-потока";
             }
@@ -1717,7 +1726,7 @@ public class MainActivity extends Activity {
         return new ZipStats(extractedBytes, extractedFiles, skippedFiles);
     }
 
-    private ZipStats extractSevenZ(Uri uri, File extractRoot, String archiveName, boolean fastUpdate) throws IOException {
+    private ZipStats extractSevenZ(Uri uri, File extractRoot, String archiveName, boolean fastUpdate, ArchiveStatistics statistics) throws IOException {
         ContentResolver resolver = getContentResolver();
         ParcelFileDescriptor descriptor = null;
         FileInputStream inputStream = null;
@@ -1732,7 +1741,7 @@ public class MainActivity extends Activity {
 
             inputStream = new FileInputStream(descriptor.getFileDescriptor());
             channel = inputStream.getChannel();
-            return extractSevenZFromChannel(channel, archiveSize, extractRoot, archiveName, fastUpdate, "открытие выбранного 7z");
+            return extractSevenZFromChannel(channel, archiveSize, extractRoot, archiveName, fastUpdate, "открытие выбранного 7z", statistics);
         } finally {
             if (inputStream != null) {
                 try {
@@ -1749,11 +1758,11 @@ public class MainActivity extends Activity {
         }
     }
 
-    private ZipStats extractSevenZFromFile(File archiveFile, File extractRoot, String archiveName, boolean fastUpdate) throws IOException {
+    private ZipStats extractSevenZFromFile(File archiveFile, File extractRoot, String archiveName, boolean fastUpdate, ArchiveStatistics statistics) throws IOException {
         FileInputStream inputStream = null;
         try {
             inputStream = new FileInputStream(archiveFile);
-            return extractSevenZFromChannel(inputStream.getChannel(), archiveFile.length(), extractRoot, archiveName, fastUpdate, "открытие встроенного 7z");
+            return extractSevenZFromChannel(inputStream.getChannel(), archiveFile.length(), extractRoot, archiveName, fastUpdate, "открытие встроенного 7z", statistics);
         } finally {
             if (inputStream != null) {
                 try {
@@ -1764,7 +1773,8 @@ public class MainActivity extends Activity {
         }
     }
 
-    private ZipStats extractSevenZFromChannel(FileChannel channel, long archiveSize, File extractRoot, String archiveName, boolean fastUpdate, String openingStage) throws IOException {
+    private ZipStats extractSevenZFromChannel(FileChannel channel, long archiveSize, File extractRoot, String archiveName, boolean fastUpdate, String openingStage, ArchiveStatistics statistics) throws IOException {
+        statistics.attempts++;
         ZipReadContext context = new ZipReadContext();
         context.archiveName = archiveName;
         context.archiveFormat = "7z";
@@ -1777,7 +1787,7 @@ public class MainActivity extends Activity {
         int skippedFiles = 0;
         int entries = 0;
         long lastUiUpdate = 0L;
-        long progressStartedAt = System.currentTimeMillis();
+        ProgressEstimator.Archive progress = new ProgressEstimator.Archive();
         byte[] buffer = new byte[BUFFER_SIZE];
 
         updateProgress((fastUpdate ? "Режим: быстрое обновление\n" : "Режим: обычное обновление\n")
@@ -1790,13 +1800,13 @@ public class MainActivity extends Activity {
             String canonicalRoot = withTrailingSeparator(extractRoot.getCanonicalPath());
 
             context.stage = "чтение заголовка 7z";
-            try (SevenZFile sevenZ = new SevenZFile(channel, archiveName)) {
+            try (SevenZFile sevenZ = statistics.decode(new ArchiveStatistics.IOAction<SevenZFile>() { public SevenZFile run() throws IOException { return new SevenZFile(statistics.channel(channel), archiveName); } })) {
 
                 SevenZArchiveEntry entry;
                 while (true) {
                     context.stage = "чтение следующей записи 7z";
                     context.readBytes = safeChannelPosition(channel);
-                    entry = sevenZ.getNextEntry();
+                    entry = statistics.decode(new ArchiveStatistics.IOAction<SevenZArchiveEntry>() { public SevenZArchiveEntry run() throws IOException { return sevenZ.getNextEntry(); } });
                     if (entry == null) {
                         break;
                     }
@@ -1827,9 +1837,7 @@ public class MainActivity extends Activity {
 
                     if (entry.isDirectory()) {
                         context.stage = "создание каталога";
-                        if (!out.exists() && !out.mkdirs()) {
-                            throw new IOException("Не удалось создать каталог: " + out.getAbsolutePath());
-                        }
+                        statistics.ensureDirectory(out);
                         continue;
                     }
 
@@ -1837,6 +1845,7 @@ public class MainActivity extends Activity {
                     if (fastUpdate && existedBefore && !shouldExtractForFastUpdate(out, entry)) {
                         context.stage = "пропуск актуального файла";
                         skippedFiles += 1;
+                        statistics.skippedFiles++;
                         context.skippedFiles = skippedFiles;
                         long now = System.currentTimeMillis();
                         if (now - lastUiUpdate > 500L) {
@@ -1844,23 +1853,21 @@ public class MainActivity extends Activity {
                             context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
                             context.writtenBytes = extractedBytes;
                             checkpointArchive(context);
-                            updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                            updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                         }
                         continue;
                     }
 
                     context.stage = "создание родительского каталога";
                     File parent = out.getParentFile();
-                    if (parent != null && !parent.exists() && !parent.mkdirs()) {
-                        throw new IOException("Не удалось создать каталог: " + parent.getAbsolutePath());
-                    }
+                    if (parent != null) statistics.ensureDirectory(parent);
 
                     context.stage = "открытие файла назначения";
-                    try (FileOutputStream output = new FileOutputStream(out)) {
+                    try (FileOutputStream output = statistics.output(out)) {
                         if (entry.hasStream()) {
                             while (true) {
                                 context.stage = "чтение данных 7z-записи";
-                                int read = sevenZ.read(buffer);
+                                int read = statistics.decode(new ArchiveStatistics.IOAction<Integer>() { public Integer run() throws IOException { return sevenZ.read(buffer); } });
                                 if (read == -1) {
                                     break;
                                 }
@@ -1874,7 +1881,7 @@ public class MainActivity extends Activity {
                                 if (now - lastUiUpdate > 500L) {
                                     lastUiUpdate = now;
                                     checkpointArchive(context);
-                                    updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progressStartedAt));
+                                    updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                                 }
                             }
                         }
@@ -1886,6 +1893,7 @@ public class MainActivity extends Activity {
                         out.setLastModified(entry.getLastModifiedDate().getTime());
                     }
                     extractedFiles += 1;
+                    statistics.completedFiles++;
                     context.extractedFiles = extractedFiles;
                 }
                 context.stage = "закрытие 7z-архива";
@@ -2175,6 +2183,30 @@ public class MainActivity extends Activity {
         showErrorDialog("Отчёт о проблеме", report);
     }
 
+    private void saveArchiveStatistics(InstallContext context) {
+        String report = context.statistics.report(getAppVersionName(),
+            Build.MANUFACTURER + " " + Build.MODEL + "; Android " + Build.VERSION.RELEASE,
+            context.archiveName, context.archiveSize, context.archiveFormat, context.mode, context.outcome, context.source);
+        lastArchiveStatistics = DiagnosticReport.bounded(DiagnosticReport.safeText(report));
+        try {
+            boolean saved = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).edit()
+                .putString(PREF_ARCHIVE_STATISTICS, lastArchiveStatistics).commit();
+            if (!saved) lastArchiveStatistics += "\nСтатистика доступна только до закрытия приложения: сохранить её не удалось.";
+        } catch (RuntimeException error) {
+            lastArchiveStatistics += "\nСтатистика доступна только до закрытия приложения: сохранить её не удалось.";
+        }
+    }
+
+    private void showArchiveStatistics() {
+        String report = lastArchiveStatistics;
+        if (report == null) {
+            try { report = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).getString(PREF_ARCHIVE_STATISTICS, ""); }
+            catch (RuntimeException error) { report = "Сохранённая статистика недоступна."; }
+        }
+        if (report == null || report.length() == 0) report = "Статистика появится после установки или обновления из архива. Сохраняется последняя обработка, включая завершившуюся ошибкой.";
+        showErrorDialog("Статистика архива", report);
+    }
+
     private void showErrorDialog(String title, String details) {
         final String report = DiagnosticReport.bounded(details);
         ScrollView scrollView = new ScrollView(this);
@@ -2225,7 +2257,7 @@ public class MainActivity extends Activity {
             public void onClick(View view) {
                 Intent send = new Intent(Intent.ACTION_SEND);
                 send.setType("text/plain");
-                send.putExtra(Intent.EXTRA_SUBJECT, "Ошибка GameSpace APK");
+                send.putExtra(Intent.EXTRA_SUBJECT, title + " — GameSpace APK");
                 send.putExtra(Intent.EXTRA_TEXT, report);
                 try {
                     startActivity(Intent.createChooser(send, "Отправить отчёт разработчику"));
@@ -2312,7 +2344,7 @@ public class MainActivity extends Activity {
         builder.append(label).append(": ").append(safe.length() > 2048 ? safe.substring(0, 2048) + "…" : safe).append('\n');
     }
 
-    private String buildProgressText(String archiveName, long archiveSize, long readBytes, long extractedBytes, int files, int skippedFiles, int entries, File extractRoot, boolean fastUpdate, long progressStartedAt) {
+    private String buildProgressText(String archiveName, long archiveSize, long readBytes, long extractedBytes, int files, int skippedFiles, int entries, File extractRoot, boolean fastUpdate, ProgressEstimator.Archive progress) {
         StringBuilder text = new StringBuilder();
         text.append("Режим: ").append(fastUpdate ? "быстрое обновление" : "обычное обновление").append('\n');
         text.append("Архив: ").append(archiveName).append('\n');
@@ -2322,31 +2354,30 @@ public class MainActivity extends Activity {
             text.append("Прочитано архива: ").append(formatBytes(readBytes)).append('\n');
         }
         text.append("Записано: ").append(formatBytes(extractedBytes)).append('\n');
-        appendProgressEstimate(text, archiveSize, readBytes, extractedBytes, progressStartedAt);
+        appendProgressEstimate(text, archiveSize, readBytes, extractedBytes, progress);
         text.append("Изменено файлов: ").append(files).append(", пропущено: ").append(skippedFiles).append('\n');
         text.append("Записей архива: ").append(entries).append('\n');
         text.append("Свободно: ").append(formatBytes(extractRoot.getUsableSpace()));
         return text.toString();
     }
 
-    private void appendProgressEstimate(StringBuilder text, long archiveSize, long readBytes, long extractedBytes, long progressStartedAt) {
-        long elapsedMs = Math.max(0L, System.currentTimeMillis() - progressStartedAt);
-        if (elapsedMs < 500L || extractedBytes <= 0L) {
+    private void appendProgressEstimate(StringBuilder text, long archiveSize, long readBytes, long extractedBytes, ProgressEstimator.Archive progress) {
+        long now = ProgressEstimator.now();
+        ProgressEstimator.Estimate speed = progress.written.update(extractedBytes, 0L, now);
+        long boundedRead = archiveSize > 0L ? Math.min(archiveSize, Math.max(0L, readBytes)) : Math.max(0L, readBytes);
+        ProgressEstimator.Estimate remaining = progress.read.update(boundedRead, archiveSize, now);
+        if (speed.speedPerSecond < 0.0) {
             text.append("Скорость: вычисляется\n");
         } else {
-            long bytesPerSecond = Math.max(1L, (long) (extractedBytes * 1000.0 / elapsedMs));
+            long bytesPerSecond = speed.speedPerSecond > 0.0 ? Math.max(1L, (long) speed.speedPerSecond) : 0L;
             text.append("Скорость: ").append(formatBytes(bytesPerSecond)).append("/с\n");
         }
 
-        if (archiveSize <= 0L || readBytes <= 0L || elapsedMs < 500L) {
+        if (remaining.remainingMs < 0L) {
             text.append("Осталось примерно: вычисляется\n");
             return;
         }
-
-        long boundedRead = Math.min(archiveSize, readBytes);
-        double remainingMs = elapsedMs * (archiveSize - boundedRead) / (double) boundedRead;
-        long safeRemainingMs = remainingMs >= Long.MAX_VALUE ? Long.MAX_VALUE : Math.max(0L, (long) Math.ceil(remainingMs));
-        text.append("Осталось примерно: ").append(formatDuration(safeRemainingMs)).append('\n');
+        text.append("Осталось примерно: ").append(formatDuration(remaining.remainingMs)).append('\n');
     }
 
     private String normalizeZipEntryName(String name) throws IOException {
@@ -3439,6 +3470,8 @@ public class MainActivity extends Activity {
     }
 
     private static class InstallContext {
+        final ArchiveStatistics statistics = new ArchiveStatistics();
+        String outcome = "ошибка";
         final long startedAt;
         final String mode;
         String stageCode = "PREPARE";
@@ -3460,6 +3493,7 @@ public class MainActivity extends Activity {
         }
 
         void setStage(String code, String description) {
+            statistics.phase(description);
             stageCode = code;
             stage = description;
             if (diagnosticJournal != null) diagnosticJournal.checkpoint(code + ": " + description, null);

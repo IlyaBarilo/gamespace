@@ -36,6 +36,8 @@ public final class ZipFailureTest {
             + "import org.apache.commons.compress.archivers.sevenz.*;\n"
             + "public final class ZipHarness {\n"
             + "private static final int BUFFER_SIZE=262144; private InputStream input;\n"
+            + "private static ArchiveStatistics lastStatistics;\n"
+            + "public static long[] statistics() { return new long[]{lastStatistics.values[ArchiveStatistics.Metric.READ.ordinal()][2],lastStatistics.values[ArchiveStatistics.Metric.WRITE.ordinal()][2],lastStatistics.completedFiles}; }\n"
             + "private static class Uri {}\n"
             + "private class ContentResolver { InputStream openInputStream(Uri uri) { return input; } }\n"
             + "private ContentResolver getContentResolver() { return new ContentResolver(); }\n"
@@ -45,7 +47,7 @@ public final class ZipFailureTest {
             + "private String withTrailingSeparator(String path) { return path + File.separator; }\n"
             + "private boolean shouldExtractForFastUpdate(File file, ZipEntry entry) { return true; }\n"
             + "private boolean shouldExtractForFastUpdate(File file, SevenZArchiveEntry entry) { return true; }\n"
-            + "private String buildProgressText(String a,long b,long c,long d,int e,int f,int g,File h,boolean i,long j) { return \"\"; }\n"
+            + "private String buildProgressText(String a,long b,long c,long d,int e,int f,int g,File h,boolean i,ProgressEstimator.Archive j) { return \"\"; }\n"
             + "private ZipDiagnosticException buildZipDiagnosticException(Exception error,ZipReadContext context) { return new ZipDiagnosticException(DiagnosticReport.technicalDetails(error),error,context.stage); }\n"
             + member(source, "    private ZipStats extractZipWithCharset(", "    private ZipStats extractSevenZ(")
             + member(source, "    private ZipStats extractSevenZFromChannel(", "    private boolean shouldExtractForFastUpdate(")
@@ -55,11 +57,13 @@ public final class ZipFailureTest {
             + source.substring(source.indexOf("    private static class CountingInputStream extends FilterInputStream {"), source.lastIndexOf("\n}"))
             + "public static String run(InputStream input,File directory) throws Exception {\n"
             + "ZipHarness instance=new ZipHarness(); instance.input=input;\n"
-            + "try { ZipStats stats=instance.extractZipWithCharset(new Uri(),directory,\"fixture.zip\",false,StandardCharsets.UTF_8); return \"OK:\"+stats.files+\":\"+stats.bytes; }\n"
+            + "lastStatistics=new ArchiveStatistics();\n"
+            + "try { ZipStats stats=instance.extractZipWithCharset(new Uri(),directory,\"fixture.zip\",false,StandardCharsets.UTF_8,lastStatistics); return \"OK:\"+stats.files+\":\"+stats.bytes; }\n"
             + "catch (ZipDiagnosticException error) { return error.stage+\"\\n\"+error.getMessage(); } }\n"
             + "public static String run7z(File archive,File directory) throws Exception {\n"
             + "try (FileInputStream input=new FileInputStream(archive)) {\n"
-            + "try { ZipStats stats=new ZipHarness().extractSevenZFromChannel(input.getChannel(),archive.length(),directory,\"fixture.7z\",false,\"open\"); return \"OK:\"+stats.files+\":\"+stats.bytes; }\n"
+            + "lastStatistics=new ArchiveStatistics();\n"
+            + "try { ZipStats stats=new ZipHarness().extractSevenZFromChannel(input.getChannel(),archive.length(),directory,\"fixture.7z\",false,\"open\",lastStatistics); return \"OK:\"+stats.files+\":\"+stats.bytes; }\n"
             + "catch (ZipDiagnosticException error) { return error.stage+\"\\n\"+error.getMessage(); } } } }";
 
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -79,6 +83,9 @@ public final class ZipFailureTest {
             String result = invoke(run, new ByteArrayInputStream(archive), fixtures.resolve("valid"));
             check(result.equals("OK:1:8192"), "Valid ZIP must still unpack: " + result);
             check(Files.size(fixtures.resolve("valid/index.html")) == 8192, "All valid data must be written");
+            Method counters = loader.loadClass("ru.local.gamespace.loader.ZipHarness").getMethod("statistics");
+            long[] zipCounters = (long[]) counters.invoke(null);
+            check(zipCounters[0] > 8192 && zipCounters[1] == 8192 && zipCounters[2] == 1, "ZIP statistics count actual source and destination bytes");
 
             byte[] corrupt = archive.clone();
             corrupt[45] ^= 1;
@@ -115,6 +122,8 @@ public final class ZipFailureTest {
             result = (String) run7z.invoke(null, sevenZip.toFile(), destination.toFile());
             check(result.equals("OK:1:8192"), "Valid 7z must still unpack: " + result);
             check(Files.size(destination.resolve("index.html")) == 8192, "All 7z data must be written");
+            long[] sevenCounters = (long[]) counters.invoke(null);
+            check(sevenCounters[0] > 0 && sevenCounters[1] == 8192 && sevenCounters[2] == 1, "7z statistics count actual source and destination bytes");
             Path badHeader = fixtures.resolve("invalid.7z");
             Files.write(badHeader, new byte[64]);
             result = (String) run7z.invoke(null, badHeader.toFile(), Files.createDirectories(fixtures.resolve("seven-invalid")).toFile());
