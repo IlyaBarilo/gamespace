@@ -1039,6 +1039,28 @@ a:focus-visible {
   line-height: 1.45;
 }
 
+.browser-compatibility-note {
+  max-width: 620px;
+  margin-top: 12px;
+  padding: 10px 13px;
+  border: 1px solid rgba(118, 212, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(0, 116, 184, 0.09);
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.browser-compatibility-note summary {
+  color: var(--blue-bright);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.browser-compatibility-note p {
+  margin: 9px 0 0;
+}
+
 .pwa-update-button {
   margin: 0;
 }

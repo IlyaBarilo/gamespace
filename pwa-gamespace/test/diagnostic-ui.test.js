@@ -9,6 +9,8 @@ test("diagnostic controls exist on both app and landing surfaces, with manual-co
   }
   assert.match(html, /<textarea id="diagnosticText" readonly/);
   assert.match(html, /Автоматической отправки нет/);
+  assert.match(html, /<details class="browser-compatibility-note">\s*<summary>Если импортированная игра стала работать иначе<\/summary>/);
+  assert.doesNotMatch(html, /<details class="browser-compatibility-note" open>/);
   const ui = await readFile(new URL("../src/diagnostic-ui.js", import.meta.url), "utf8");
   assert.match(ui, /\.value = report\?\.text/);
   assert.match(ui, /setSelectionRange\(0, elements\.diagnosticText\.value\.length\)/);
