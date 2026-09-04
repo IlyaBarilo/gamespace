@@ -7,7 +7,7 @@ import { instrumentSevenZip } from "./sevenzip-statistics.js";
 const INPUT_DIRECTORY = "/input";
 const ARCHIVE_PATH = `${INPUT_DIRECTORY}/archive.7z`;
 const OUTPUT_MOUNT = "/opfs-out";
-const READ_AHEAD_BYTES = 1024 * 1024;
+const READ_AHEAD_BYTES = 4 * 1024 * 1024;
 const PROGRESS_INTERVAL_MS = 250;
 
 class LazyFileContents {
