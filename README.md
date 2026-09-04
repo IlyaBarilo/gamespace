@@ -1,5 +1,15 @@
 # GameSpace
 
+<p align="center">
+  <a href="https://ilyabarilo.github.io/gamespace/"><img src="https://img.shields.io/badge/PWA-%D1%83%D1%81%D1%82%D0%B0%D0%BD%D0%BE%D0%B2%D0%B8%D1%82%D1%8C-2ea44f?style=for-the-badge" alt="Установить GameSpace PWA"></a>
+  <a href="https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk"><img src="https://img.shields.io/badge/APK-%D1%81%D0%BA%D0%B0%D1%87%D0%B0%D1%82%D1%8C-2ea44f?style=for-the-badge" alt="Скачать GameSpace APK"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/IlyaBarilo/gamespace/releases/latest"><img src="https://img.shields.io/github/v/release/IlyaBarilo/gamespace?display_name=tag&amp;label=%D1%80%D0%B5%D0%BB%D0%B8%D0%B7&amp;color=blue&amp;style=for-the-badge" alt="Последний релиз GameSpace"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="Лицензия MIT"></a>
+  <a href="https://github.com/IlyaBarilo/gamespace/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/IlyaBarilo/gamespace/ci.yml?style=for-the-badge&amp;label=%D0%BF%D1%80%D0%BE%D0%B2%D0%B5%D1%80%D0%BA%D0%B8" alt="Статус проверок"></a>
+</p>
+
 [Установить PWA](https://ilyabarilo.github.io/gamespace/) ·
 [Установить APK](https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk) ·
 [Кейс разработки](docs/CASE_STUDY_RU.md) ·
