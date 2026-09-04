@@ -10,7 +10,8 @@ Copyright (c) 2026 Ilya Barilo (Илья Барило). Все права защ
 программный код GameSpace. К таким файлам относятся:
 
 - `apk-gamespace/icon-source/gamespace-icon-1024.png`;
-- `apk-gamespace/android-webview-loader/app/src/main/res/mipmap-*/ic_launcher.png`;
+- `apk-gamespace/icon-source/gamespace-icon-adaptive-1024.png`;
+- `apk-gamespace/android-webview-loader/app/src/main/res/mipmap-*/ic_launcher*.png`;
 - `pwa-gamespace/public/icons/gamespace-*.png`.
 
 Разрешается воспроизводить охраняемые графические материалы только как
