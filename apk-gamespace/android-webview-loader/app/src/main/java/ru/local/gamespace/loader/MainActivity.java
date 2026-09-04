@@ -54,6 +54,7 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.text.SimpleDateFormat;
@@ -93,6 +94,7 @@ public class MainActivity extends Activity {
     private static final String STORAGE_DIR_NAME = "gamespace-loader";
     private static final String EXTRACT_DIR_NAME = "site-files";
     private static final int BUFFER_SIZE = 1024 * 256;
+    private static final int SEVEN_Z_READ_AHEAD_SIZE = 4 * 1024 * 1024;
     private static final int TOP_BAR_AUTO_HIDE_MS = 5000;
     private static final int TOP_BAR_COUNTDOWN_STEP_MS = 50;
     private static final int PAGE_LOADING_SPINNER_DELAY_MS = 500;
@@ -1796,6 +1798,7 @@ public class MainActivity extends Activity {
         long lastUiUpdate = 0L;
         ProgressEstimator.Archive progress = new ProgressEstimator.Archive();
         byte[] buffer = new byte[BUFFER_SIZE];
+        statistics.readAheadBytes = SEVEN_Z_READ_AHEAD_SIZE;
 
         updateProgress((fastUpdate ? "Режим: быстрое обновление\n" : "Режим: обычное обновление\n")
             + "Формат: 7z\n"
@@ -1807,12 +1810,15 @@ public class MainActivity extends Activity {
             String canonicalRoot = withTrailingSeparator(extractRoot.getCanonicalPath());
 
             context.stage = "чтение заголовка 7z";
-            try (SevenZFile sevenZ = statistics.decode(new ArchiveStatistics.IOAction<SevenZFile>() { public SevenZFile run() throws IOException { return new SevenZFile(statistics.channel(channel), archiveName); } })) {
+            final SeekableByteChannel readAheadChannel =
+                new ReadAheadSeekableByteChannel(statistics.sourceChannel(channel), SEVEN_Z_READ_AHEAD_SIZE);
+            final SeekableByteChannel decoderChannel = statistics.decoderChannel(readAheadChannel);
+            try (SevenZFile sevenZ = statistics.decode(new ArchiveStatistics.IOAction<SevenZFile>() { public SevenZFile run() throws IOException { return new SevenZFile(decoderChannel, archiveName); } })) {
 
                 SevenZArchiveEntry entry;
                 while (true) {
                     context.stage = "чтение следующей записи 7z";
-                    context.readBytes = safeChannelPosition(channel);
+                    context.readBytes = safeChannelPosition(readAheadChannel);
                     entry = statistics.decode(new ArchiveStatistics.IOAction<SevenZArchiveEntry>() { public SevenZArchiveEntry run() throws IOException { return sevenZ.getNextEntry(); } });
                     if (entry == null) {
                         break;
@@ -1857,7 +1863,7 @@ public class MainActivity extends Activity {
                         long now = System.currentTimeMillis();
                         if (now - lastUiUpdate > 500L) {
                             lastUiUpdate = now;
-                            context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
+                            context.readBytes = Math.max(context.readBytes, safeChannelPosition(readAheadChannel));
                             context.writtenBytes = extractedBytes;
                             checkpointArchive(context);
                             updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
@@ -1882,7 +1888,7 @@ public class MainActivity extends Activity {
                                 output.write(buffer, 0, read);
                                 extractedBytes += read;
                                 context.currentFileBytes += read;
-                                context.readBytes = Math.max(context.readBytes, safeChannelPosition(channel));
+                                context.readBytes = Math.max(context.readBytes, safeChannelPosition(readAheadChannel));
                                 context.writtenBytes = extractedBytes;
                                 long now = System.currentTimeMillis();
                                 if (now - lastUiUpdate > 500L) {
@@ -1946,7 +1952,7 @@ public class MainActivity extends Activity {
         }
     }
 
-    private long safeChannelPosition(FileChannel channel) {
+    private long safeChannelPosition(SeekableByteChannel channel) {
         if (channel == null) {
             return -1L;
         }

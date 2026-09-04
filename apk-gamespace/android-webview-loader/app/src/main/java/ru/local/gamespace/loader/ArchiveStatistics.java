@@ -15,7 +15,8 @@ import java.util.Map;
 final class ArchiveStatistics {
     enum Metric {
         DECODE("Работа распаковщика, включая чтение"),
-        READ("Чтение исходного архива"),
+        DECODER_READ("Запросы распаковщика к кэшу чтения"),
+        READ("Фактическое чтение исходного архива"),
         SEEK("Позиционирование и размер источника"),
         DIRECTORY("Проверка и создание каталогов"),
         OPEN("Открытие файлов назначения"),
@@ -35,6 +36,7 @@ final class ArchiveStatistics {
     int completedFiles;
     int skippedFiles;
     int attempts;
+    int readAheadBytes;
 
     void record(Metric metric, long at, long bytes, boolean failed) {
         long[] value = values[metric.ordinal()];
@@ -126,14 +128,22 @@ final class ArchiveStatistics {
         };
     }
 
-    SeekableByteChannel channel(final SeekableByteChannel channel) {
+    SeekableByteChannel sourceChannel(final SeekableByteChannel channel) {
+        return measuredChannel(channel, Metric.READ, false);
+    }
+
+    SeekableByteChannel decoderChannel(final SeekableByteChannel channel) {
+        return measuredChannel(channel, Metric.DECODER_READ, true);
+    }
+
+    private SeekableByteChannel measuredChannel(final SeekableByteChannel channel, final Metric readMetric, final boolean measureSeek) {
         return new SeekableByteChannel() {
             @Override public int read(ByteBuffer buffer) throws IOException {
                 long at = System.nanoTime();
                 int count = 0;
                 boolean failed = true;
                 try { count = channel.read(buffer); failed = false; return count; }
-                finally { record(Metric.READ, at, count, failed); }
+                finally { record(readMetric, at, count, failed); }
             }
             private long seek(IOAction<Long> action) throws IOException {
                 long at = System.nanoTime();
@@ -142,13 +152,14 @@ final class ArchiveStatistics {
                 finally { record(Metric.SEEK, at, 0L, failed); }
             }
             @Override public long position() throws IOException {
-                return seek(new IOAction<Long>() { public Long run() throws IOException { return channel.position(); } });
+                return measureSeek ? seek(new IOAction<Long>() { public Long run() throws IOException { return channel.position(); } }) : channel.position();
             }
             @Override public long size() throws IOException {
-                return seek(new IOAction<Long>() { public Long run() throws IOException { return channel.size(); } });
+                return measureSeek ? seek(new IOAction<Long>() { public Long run() throws IOException { return channel.size(); } }) : channel.size();
             }
             @Override public SeekableByteChannel position(long value) throws IOException {
-                seek(new IOAction<Long>() { public Long run() throws IOException { channel.position(value); return value; } });
+                if (measureSeek) seek(new IOAction<Long>() { public Long run() throws IOException { channel.position(value); return value; } });
+                else channel.position(value);
                 return this;
             }
             @Override public int write(ByteBuffer buffer) throws IOException { return channel.write(buffer); }
@@ -168,7 +179,9 @@ final class ArchiveStatistics {
         text.append("Формат: ").append(format).append("\nОперация: ").append(mode).append("\nРезультат: ").append(outcome).append('\n');
         text.append("Источник: ").append(source).append('\n');
         text.append("Общее время операции: ").append(seconds(finished - started)).append('\n');
-        text.append("Буфер распаковки: 262144 байт\nПопыток чтения архива: ").append(attempts).append('\n');
+        text.append("Буфер распаковки: 262144 байт\n");
+        if (readAheadBytes > 0) text.append("Кэш чтения архива: ").append(readAheadBytes).append(" байт\n");
+        text.append("Попыток чтения архива: ").append(attempts).append('\n');
         text.append("Полностью записано файлов: ").append(completedFiles).append("\nПропущено актуальных файлов: ").append(skippedFiles).append('\n');
         long written = values[Metric.WRITE.ordinal()][2];
         text.append("Записано данных: ").append(written).append(" байт\n");
@@ -180,6 +193,7 @@ final class ArchiveStatistics {
         }
         text.append("\nЗамеры вызовов (время; количество; переданные байты; ошибки):\n");
         for (Metric metric : Metric.values()) {
+            if (metric == Metric.DECODER_READ && readAheadBytes <= 0) continue;
             long[] value = values[metric.ordinal()];
             text.append(metric.label).append(": ").append(seconds(value[0])).append("; ")
                 .append(value[1]).append("; ").append(value[2]).append("; ").append(value[3]).append('\n');
@@ -188,6 +202,7 @@ final class ArchiveStatistics {
         text.append("\nЭтапы всей операции (последовательно):\n");
         for (Map.Entry<String, Long> entry : phases.entrySet()) text.append(entry.getKey()).append(": ").append(seconds(entry.getValue())).append('\n');
         text.append("\nКак читать статистику:\nВремя распаковщика включает вложенное чтение и позиционирование. Эти строки не складываются.\n")
+            .append(readAheadBytes > 0 ? "Запросы распаковщика могут обслуживаться из кэша; фактическое чтение показывает обращения к выбранному источнику.\n" : "")
             .append("Чтение учитывает вызовы файлового провайдера и повторные чтения; это не физический счётчик USB.\n")
             .append("Скорость рассчитана по записанным данным и времени обработки архива, включая чтение заголовков.\n")
             .append("Счётчики включают повторные попытки ZIP и выполненную часть работы при ошибке.\n")
