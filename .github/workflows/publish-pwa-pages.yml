@@ -1,33 +1,75 @@
 name: Publish GameSpace release
 
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Canonical draft release tag, for example v0.4
+        required: true
+        type: string
 
 concurrency:
-  group: gamespace-pwa-pages
+  group: gamespace-release-${{ inputs.tag }}
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  build:
-    name: Verify release and assemble Pages
-    if: ${{ !github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v') }}
+  validate:
+    name: Validate draft release
     runs-on: ubuntu-latest
-    env:
-      LANG: C.UTF-8
-      LC_ALL: C.UTF-8
     permissions:
-      contents: write
+      contents: read
     outputs:
       version: ${{ steps.release_version.outputs.version }}
+      release_date: ${{ steps.release_date.outputs.date }}
+    steps:
+      - name: Check out the release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Require an unpublished stable draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          release="$(gh release view "$RELEASE_TAG" --json tagName,isDraft,isPrerelease)"
+          test "$(jq -r .tagName <<<"$release")" = "$RELEASE_TAG"
+          test "$(jq -r .isDraft <<<"$release")" = "true"
+          test "$(jq -r .isPrerelease <<<"$release")" = "false"
+
+      - name: Read GameSpace version from release tag
+        id: release_version
+        working-directory: pwa-gamespace
+        run: node scripts/read-release-version.mjs "${{ inputs.tag }}" --github-output
+
+      - name: Use the tagged commit date
+        id: release_date
+        run: echo "date=$(git show -s --format=%cs HEAD)" >> "$GITHUB_OUTPUT"
+
+  pwa:
+    name: Verify and package PWA
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: pwa-gamespace
     steps:
-      - name: Check out the published release
+      - name: Check out the release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.tag }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -36,102 +78,94 @@ jobs:
           cache: npm
           cache-dependency-path: pwa-gamespace/package-lock.json
 
-      - name: Read GameSpace version from release tag
-        id: release_version
-        run: node scripts/read-release-version.mjs "${{ github.event.release.tag_name }}" --github-output
-
-      - name: Apply version from the release tag
-        shell: bash
-        run: |
-          published_at='${{ github.event.release.published_at }}'
-          release_date="${published_at%%T*}"
-          npm run version:apply -- "${{ steps.release_version.outputs.version }}" "$release_date"
+      - name: Apply the shared release version
+        run: npm run version:apply -- "${{ needs.validate.outputs.version }}" "${{ needs.validate.outputs.release_date }}"
 
       - name: Install exact dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Run unit tests
         run: npm test
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: npm run test:e2e
 
       - name: Build current source
         run: npm run build
 
-      - name: Verify immutable runtime
-        run: npm run verify:runtime
-
-      - name: Restore or prepare immutable PWA releases
+      - name: Restore published immutable PWA releases and prepare the draft package
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          CURRENT_TAG: ${{ github.event.release.tag_name }}
-          CURRENT_VERSION: ${{ steps.release_version.outputs.version }}
-          GAMESPACE_RELEASE_DESCRIPTION: ${{ github.event.release.body }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
           mkdir -p release-packages
-          current_asset="gamespace-pwa-${CURRENT_VERSION}.tar.gz"
-          current_asset_exists=false
-
           while IFS= read -r tag; do
             [[ "$tag" == v* ]] || continue
             if ! version="$(node scripts/read-release-version.mjs "$tag" 2>/dev/null)"; then
               continue
             fi
             asset="gamespace-pwa-${version}.tar.gz"
-            if gh release view "$tag" --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
-              download_dir="${RUNNER_TEMP}/gamespace-${version}"
-              mkdir -p "$download_dir" "release-packages/${version}"
-              gh release download "$tag" --pattern "$asset" --dir "$download_dir"
-              tar -xzf "${download_dir}/${asset}" -C "release-packages/${version}"
-              if [[ "$tag" == "$CURRENT_TAG" ]]; then
-                current_asset_exists=true
-              fi
-            elif [[ "$tag" != "$CURRENT_TAG" ]]; then
-              echo "Published PWA release $tag has no immutable asset $asset." >&2
-              exit 1
-            fi
+            download_dir="${RUNNER_TEMP}/gamespace-${version}"
+            mkdir -p "$download_dir" "release-packages/${version}"
+            gh release download "$tag" --pattern "$asset" --dir "$download_dir"
+            tar -xzf "${download_dir}/${asset}" -C "release-packages/${version}"
           done < <(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')
 
-          if [[ ! -f "release-packages/${CURRENT_VERSION}/release.json" ]]; then
-            node scripts/prepare-release.mjs "$CURRENT_VERSION"
-          fi
-
+          export GAMESPACE_RELEASE_DESCRIPTION="$(gh release view "$RELEASE_TAG" --json body --jq .body)"
+          node scripts/prepare-release.mjs "$RELEASE_VERSION"
           node scripts/verify-runtime.mjs
           node scripts/verify-releases.mjs
-          node scripts/verify-release-source.mjs "$CURRENT_VERSION"
+          node scripts/verify-release-source.mjs "$RELEASE_VERSION"
 
-          if [[ "$current_asset_exists" != true ]]; then
-            asset_path="${RUNNER_TEMP}/${current_asset}"
-            tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
-              -czf "$asset_path" -C "release-packages/${CURRENT_VERSION}" .
-            gh release upload "$CURRENT_TAG" "$asset_path#GameSpace PWA ${CURRENT_VERSION} immutable release"
-          fi
+          asset="gamespace-pwa-${RELEASE_VERSION}.tar.gz"
+          tar --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 --numeric-owner \
+            -czf "${RUNNER_TEMP}/${asset}" -C "release-packages/${RELEASE_VERSION}" .
+          cp "${RUNNER_TEMP}/${asset}" .
 
       - name: Assemble release-only Pages artifact
-        run: npm run pages:assemble -- "${{ steps.release_version.outputs.version }}"
+        run: npm run pages:assemble -- "${{ needs.validate.outputs.version }}"
+
+      - name: Upload immutable PWA package for publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwa-release-asset
+          path: pwa-gamespace/gamespace-pwa-${{ needs.validate.outputs.version }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: pwa-gamespace/pages-output/${{ steps.release_version.outputs.version }}
+          path: pwa-gamespace/pages-output/${{ needs.validate.outputs.version }}
 
   apk:
-    name: Build and attach signed APK
-    needs: build
+    name: Verify and package signed APK
+    needs: validate
     runs-on: windows-latest
+    timeout-minutes: 35
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: Check out the published release
+      - name: Check out the release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ inputs.tag }}
 
       - name: Set up Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Run APK diagnostics
+        shell: pwsh
+        run: .\apk-gamespace\tests\test-diagnostics.ps1
 
       - name: Ensure required Android SDK packages
         shell: pwsh
@@ -166,7 +200,7 @@ jobs:
           [IO.File]::WriteAllBytes($keystorePath, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
           "GAMESPACE_KEYSTORE_PATH=$keystorePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build signed APK with the release version
+      - name: Build signed APK with the shared release version
         shell: pwsh
         env:
           KEYSTORE_ALIAS: ${{ secrets.GAMESPACE_APK_KEY_ALIAS }}
@@ -174,48 +208,62 @@ jobs:
           KEY_PASSWORD: ${{ secrets.GAMESPACE_APK_KEY_PASSWORD }}
         run: |
           & .\apk-gamespace\build-apk.ps1 `
-            -VersionName "${{ needs.build.outputs.version }}" `
+            -VersionName "${{ needs.validate.outputs.version }}" `
             -KeystorePath $env:GAMESPACE_KEYSTORE_PATH `
             -KeystorePassword $env:KEYSTORE_PASSWORD `
             -KeyAlias $env:KEYSTORE_ALIAS `
             -KeyPassword $env:KEY_PASSWORD `
             -RequireExistingKeystore
 
-      - name: Attach versioned and latest-alias APKs to the GitHub Release
-        shell: pwsh
+          $assetDirectory = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\gamespace-apk-assets" -Force
+          Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination (Join-Path $assetDirectory "GameSpace-${{ needs.validate.outputs.version }}.apk")
+          Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination (Join-Path $assetDirectory "GameSpace-latest.apk")
+
+      - name: Upload APKs for publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-release-assets
+          path: ${{ runner.temp }}/gamespace-apk-assets/*.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Attach assets and publish the draft
+    needs: [validate, pwa, apk]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download prepared release assets
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '*-release-asset*'
+          merge-multiple: true
+          path: release-assets
+
+      - name: Publish only after every asset is ready
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          $sourceApk = ".\apk-gamespace\release\GameSpace.apk"
-          $assets = @(
-            [pscustomobject]@{
-              Name = "GameSpace-$env:RELEASE_VERSION.apk"
-              Label = "GameSpace APK $env:RELEASE_VERSION"
-            }
-            [pscustomobject]@{
-              Name = "GameSpace-latest.apk"
-              Label = "GameSpace APK $env:RELEASE_VERSION (latest stable)"
-            }
-          )
-          $publishedAssets = @(gh release view $env:RELEASE_TAG --json assets --jq ".assets[].name")
-          foreach ($asset in $assets) {
-            if ($publishedAssets -contains $asset.Name) {
-              Write-Host "APK asset $($asset.Name) already exists and will not be overwritten."
-              continue
-            }
-            $assetPath = Join-Path $env:RUNNER_TEMP $asset.Name
-            Copy-Item -LiteralPath $sourceApk -Destination $assetPath
-            gh release upload $env:RELEASE_TAG "$assetPath#$($asset.Label)"
-            if ($LASTEXITCODE -ne 0) {
-              throw "Uploading APK asset $($asset.Name) failed."
-            }
-          }
+          set -euo pipefail
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = "true"
+          test -s "release-assets/gamespace-pwa-${RELEASE_VERSION}.tar.gz"
+          test -s "release-assets/GameSpace-${RELEASE_VERSION}.apk"
+          test -s "release-assets/GameSpace-latest.apk"
+          cmp "release-assets/GameSpace-${RELEASE_VERSION}.apk" "release-assets/GameSpace-latest.apk"
+          tar -tzf "release-assets/gamespace-pwa-${RELEASE_VERSION}.tar.gz" >/dev/null
+          gh release upload "$RELEASE_TAG" \
+            "release-assets/gamespace-pwa-${RELEASE_VERSION}.tar.gz#GameSpace PWA ${RELEASE_VERSION} immutable release" \
+            "release-assets/GameSpace-${RELEASE_VERSION}.apk#GameSpace APK ${RELEASE_VERSION}" \
+            "release-assets/GameSpace-latest.apk#GameSpace APK ${RELEASE_VERSION} (latest stable)" \
+            --clobber
+          gh release edit "$RELEASE_TAG" --draft=false --latest
 
   deploy:
-    name: Deploy published PWA release
-    needs: [build, apk]
+    name: Deploy the published PWA release
+    needs: [publish, pwa]
     runs-on: ubuntu-latest
     permissions:
       actions: read

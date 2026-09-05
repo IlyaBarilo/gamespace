@@ -131,13 +131,17 @@ public class MainActivity extends Activity {
     private Button menuButton;
     private Button chooseButton;
     private Button demoButton;
+    private Button cancelOperationButton;
 
     private volatile boolean busy;
+    private volatile boolean operationCancelable;
+    private volatile boolean operationCancellationRequested;
     private volatile String lastErrorReport;
     // Process-scoped: Activity recreation must not masquerade as a terminated operation.
     private static DiagnosticJournal diagnosticJournal;
     private RuntimeEnvironmentHistory runtimeEnvironmentHistory;
     private SiteTransactionManager siteTransactionManager;
+    private final LocalSiteRequestHandler localSiteRequestHandler = new LocalSiteRequestHandler();
     private int runtimeIssueCount;
     private boolean rendererRecoveryScheduled;
     private volatile String diagnosticPage = "оболочка";
@@ -527,6 +531,23 @@ public class MainActivity extends Activity {
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
 
+        cancelOperationButton = new Button(this);
+        cancelOperationButton.setText("Отменить операцию");
+        cancelOperationButton.setAllCaps(false);
+        cancelOperationButton.setVisibility(View.GONE);
+        cancelOperationButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                requestOperationCancellation();
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            dp(48)
+        );
+        cancelParams.setMargins(0, dp(18), 0, 0);
+        outer.addView(cancelOperationButton, cancelParams);
+
         return outer;
     }
 
@@ -835,8 +856,8 @@ public class MainActivity extends Activity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setAllowContentAccess(true);
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
@@ -845,8 +866,8 @@ public class MainActivity extends Activity {
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            settings.setAllowFileAccessFromFileURLs(true);
-            settings.setAllowUniversalAccessFromFileURLs(true);
+            settings.setAllowFileAccessFromFileURLs(false);
+            settings.setAllowUniversalAccessFromFileURLs(false);
         }
 
         view.setWebChromeClient(new WebChromeClient() {
@@ -874,6 +895,7 @@ public class MainActivity extends Activity {
 
         currentIndexFile = null;
         currentContentRoot = null;
+        localSiteRequestHandler.setContentRoot(null);
         hideSiteWebViews();
         progressPanel.setVisibility(View.GONE);
         emptyPanel.setVisibility(View.VISIBLE);
@@ -925,6 +947,7 @@ public class MainActivity extends Activity {
     private void loadSite(File indexFile) {
         currentIndexFile = indexFile;
         currentContentRoot = indexFile.getParentFile();
+        localSiteRequestHandler.setContentRoot(currentContentRoot);
         emptyPanel.setVisibility(View.GONE);
         progressPanel.setVisibility(View.GONE);
         String indexUrl = buildIndexUrl(indexFile);
@@ -943,12 +966,16 @@ public class MainActivity extends Activity {
     }
 
     private String buildIndexUrl(File indexFile) {
-        return Uri.fromFile(indexFile)
+        try {
+            return Uri.parse(localSiteRequestHandler.urlForFile(indexFile))
             .buildUpon()
             .appendQueryParameter("app", null)
             .appendQueryParameter("gamespaceIndexSession", indexStateSession)
             .build()
             .toString();
+        } catch (IOException error) {
+            throw new IllegalStateException("Не удалось построить безопасный адрес сайта.", error);
+        }
     }
 
     private static String createIndexStateSession() {
@@ -1069,6 +1096,8 @@ public class MainActivity extends Activity {
                 progressPanel.setVisibility(View.VISIBLE);
                 progressTitle.setText(title);
                 progressDetails.setText(details);
+                cancelOperationButton.setVisibility(operationCancelable ? View.VISIBLE : View.GONE);
+                cancelOperationButton.setEnabled(operationCancelable && !operationCancellationRequested);
                 backButton.setEnabled(false);
                 homeButton.setEnabled(false);
                 menuButton.setEnabled(true);
@@ -1091,9 +1120,44 @@ public class MainActivity extends Activity {
         });
     }
 
+    private synchronized void requestOperationCancellation() {
+        if (!busy || !operationCancelable || operationCancellationRequested) return;
+        operationCancellationRequested = true;
+        if (cancelOperationButton != null) cancelOperationButton.setEnabled(false);
+        if (progressDetails != null) progressDetails.setText("Отменяю операцию и восстанавливаю прежнее состояние…");
+        if (diagnosticJournal != null) diagnosticJournal.checkpoint("CANCEL", "Пользователь запросил отмену операции");
+    }
+
+    private void ensureOperationNotCancelled() throws OperationCancelledException {
+        if (operationCancellationRequested) throw new OperationCancelledException();
+    }
+
+    private synchronized void beginNonCancellableCommit() throws OperationCancelledException {
+        ensureOperationNotCancelled();
+        operationCancelable = false;
+        hideCancellationButton();
+    }
+
+    private synchronized void completeCancelablePhase() {
+        operationCancelable = false;
+        operationCancellationRequested = false;
+        hideCancellationButton();
+    }
+
+    private void hideCancellationButton() {
+        mainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                if (cancelOperationButton != null) cancelOperationButton.setVisibility(View.GONE);
+            }
+        });
+    }
+
     private void finishBusy() {
         if (diagnosticJournal != null) diagnosticJournal.finish();
         busy = false;
+        operationCancelable = false;
+        operationCancellationRequested = false;
         mainHandler.post(new Runnable() {
             @Override
             public void run() {
@@ -1104,6 +1168,9 @@ public class MainActivity extends Activity {
                 chooseButton.setEnabled(true);
                 if (demoButton != null) {
                     demoButton.setEnabled(true);
+                }
+                if (cancelOperationButton != null) {
+                    cancelOperationButton.setVisibility(View.GONE);
                 }
                 if (shouldAutoHideTopBar()) {
                     startTopBarCountdown();
@@ -1234,6 +1301,8 @@ public class MainActivity extends Activity {
         }
 
         busy = true;
+        operationCancelable = true;
+        operationCancellationRequested = false;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         final File previousIndexFile = currentIndexFile;
@@ -1332,7 +1401,13 @@ public class MainActivity extends Activity {
                                     + "\nРазмер архива: " + formatBytes(progressArchiveSize)
                                     + "\nСвободно: " + formatBytes(progressRoot.getUsableSpace()));
                             }
+                        }, new SiteTransactionManager.CancellationSignal() {
+                            @Override
+                            public void throwIfCancelled() throws IOException {
+                                ensureOperationNotCancelled();
+                            }
                         });
+                        completeCancelablePhase();
                         filesystemCommitted = true;
                         context.extractRoot = activeRoot;
                         index = findIndexInExtractedContent(activeRoot);
@@ -1354,6 +1429,7 @@ public class MainActivity extends Activity {
                                 + extractedFiles + " файлов (" + extractedBytes + " байт).");
                         }
                         context.setStage("SITE-SWAP", "атомарное переключение подготовленной ревизии");
+                        beginNonCancellableCommit();
                         activeRoot = siteTransactionManager.commitFullStaging(base);
                         filesystemCommitted = true;
                         context.extractRoot = activeRoot;
@@ -1424,11 +1500,21 @@ public class MainActivity extends Activity {
                                 + DiagnosticReport.technicalDetails(cleanupError);
                         }
                     }
-                    final String finalDiagnosticMessage = saveLastErrorReport(report);
+                    final boolean cancelled = operationCancellationRequested || e instanceof OperationCancelledException;
+                    if (cancelled) context.outcome = "отменено";
+                    final String finalDiagnosticMessage = cancelled ? "" : saveLastErrorReport(report);
 
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
+                            if (cancelled) {
+                                Toast.makeText(MainActivity.this, previousIndexFile != null && previousIndexFile.isFile()
+                                    ? "Операция отменена, предыдущий сайт сохранён."
+                                    : "Установка отменена, неполные данные удалены.", Toast.LENGTH_LONG).show();
+                                if (previousIndexFile != null && previousIndexFile.isFile()) loadSite(previousIndexFile);
+                                else loadInstalledSiteOrPrompt();
+                                return;
+                            }
                             if (previousIndexFile != null && previousIndexFile.isFile()) {
                                 Toast.makeText(MainActivity.this, fastUpdate
                                     ? "Быстрое обновление отменено, предыдущий сайт восстановлен."
@@ -1462,6 +1548,8 @@ public class MainActivity extends Activity {
         }
 
         busy = true;
+        operationCancelable = true;
+        operationCancellationRequested = false;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         showProgress("Загрузка встроенного демо-сайта", "Подготавливаю встроенный архив demo.7z...");
 
@@ -1533,6 +1621,7 @@ public class MainActivity extends Activity {
                             + stats.files + " файлов (" + stats.bytes + " байт).");
                     }
                     context.setStage("SITE-SWAP", "атомарное переключение демо-сайта");
+                    beginNonCancellableCommit();
                     activeRoot = siteTransactionManager.commitFullStaging(base);
                     filesystemCommitted = true;
                     context.extractRoot = activeRoot;
@@ -1594,11 +1683,21 @@ public class MainActivity extends Activity {
                                 + DiagnosticReport.technicalDetails(cleanupError);
                         }
                     }
-                    final String finalDiagnosticMessage = saveLastErrorReport(report);
+                    final boolean cancelled = operationCancellationRequested || e instanceof OperationCancelledException;
+                    if (cancelled) context.outcome = "отменено";
+                    final String finalDiagnosticMessage = cancelled ? "" : saveLastErrorReport(report);
 
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
+                            if (cancelled) {
+                                Toast.makeText(MainActivity.this, previousIndexFile != null && previousIndexFile.isFile()
+                                    ? "Операция отменена, предыдущий сайт сохранён."
+                                    : "Установка демо-сайта отменена.", Toast.LENGTH_LONG).show();
+                                if (previousIndexFile != null && previousIndexFile.isFile()) loadSite(previousIndexFile);
+                                else loadInstalledSiteOrPrompt();
+                                return;
+                            }
                             if (previousIndexFile != null && previousIndexFile.isFile()) {
                                 Toast.makeText(MainActivity.this, "Демо-сайт не установлен, предыдущий сайт сохранён.", Toast.LENGTH_LONG).show();
                                 loadSite(previousIndexFile);
@@ -1634,6 +1733,7 @@ public class MainActivity extends Activity {
             byte[] buffer = new byte[BUFFER_SIZE];
             int read;
             while ((read = input.read(buffer)) != -1) {
+                ensureOperationNotCancelled();
                 output.write(buffer, 0, read);
             }
         }
@@ -1768,6 +1868,7 @@ public class MainActivity extends Activity {
             try (ZipInputStream zip = new ZipInputStream(new BufferedInputStream(countingStream, BUFFER_SIZE), charset)) {
                 ZipEntry entry;
                 while (true) {
+                    ensureOperationNotCancelled();
                     context.stage = "чтение следующей записи ZIP";
                     context.readBytes = countingStream.getBytesRead();
                     entry = statistics.decode(new ArchiveStatistics.IOAction<ZipEntry>() { public ZipEntry run() throws IOException { return zip.getNextEntry(); } });
@@ -1831,6 +1932,7 @@ public class MainActivity extends Activity {
                     context.stage = "открытие файла назначения";
                     try (FileOutputStream output = statistics.output(out)) {
                         while (true) {
+                            ensureOperationNotCancelled();
                             context.stage = "чтение данных ZIP-записи";
                             int read = statistics.decode(new ArchiveStatistics.IOAction<Integer>() { public Integer run() throws IOException { return zip.read(buffer); } });
                             if (read == -1) {
@@ -1965,6 +2067,7 @@ public class MainActivity extends Activity {
 
                 SevenZArchiveEntry entry;
                 while (true) {
+                    ensureOperationNotCancelled();
                     context.stage = "чтение следующей записи 7z";
                     context.readBytes = safeChannelPosition(readAheadChannel);
                     entry = statistics.decode(new ArchiveStatistics.IOAction<SevenZArchiveEntry>() { public SevenZArchiveEntry run() throws IOException { return sevenZ.getNextEntry(); } });
@@ -2028,6 +2131,7 @@ public class MainActivity extends Activity {
                     try (FileOutputStream output = statistics.output(out)) {
                         if (entry.hasStream()) {
                             while (true) {
+                                ensureOperationNotCancelled();
                                 context.stage = "чтение данных 7z-записи";
                                 int read = statistics.decode(new ArchiveStatistics.IOAction<Integer>() { public Integer run() throws IOException { return sevenZ.read(buffer); } });
                                 if (read == -1) {
@@ -2918,6 +3022,7 @@ public class MainActivity extends Activity {
     }
 
     private void summarizeInstalledPath(File file, SiteStats stats) throws IOException {
+        ensureOperationNotCancelled();
         if (file.isFile()) {
             long size = file.length();
             if (Long.MAX_VALUE - stats.bytes < size) {
@@ -3402,7 +3507,7 @@ public class MainActivity extends Activity {
     @Override
     public void onBackPressed() {
         if (progressPanel.getVisibility() == View.VISIBLE) {
-            Toast.makeText(this, "Дождитесь завершения операции.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, operationCancelable ? "Используйте кнопку «Отменить операцию»." : "Дождитесь завершения операции.", Toast.LENGTH_SHORT).show();
             return;
         }
 
@@ -3483,29 +3588,21 @@ public class MainActivity extends Activity {
         return true;
     }
 
-    private boolean isFileUrl(String url) {
-        return url != null && url.startsWith("file:");
-    }
-
     private boolean isInternalLocalUrl(String url) {
         return url != null
-            && (url.startsWith("file:")
+            && (localSiteRequestHandler.isInternalUrl(url)
                 || url.startsWith("about:")
                 || url.startsWith("javascript:"));
     }
 
     private boolean isCurrentIndexUrl(String url) {
-        if (url == null || currentIndexFile == null || !isFileUrl(url)) {
+        if (url == null || currentIndexFile == null || !localSiteRequestHandler.isInternalUrl(url)) {
             return false;
         }
 
         try {
-            Uri uri = Uri.parse(url);
-            String path = uri.getPath();
-            if (path == null || path.length() == 0) {
-                return false;
-            }
-            return isSameFile(new File(path), currentIndexFile);
+            File file = localSiteRequestHandler.fileForUrl(url);
+            return file != null && isSameFile(file, currentIndexFile);
         } catch (Exception e) {
             return false;
         }
@@ -3513,6 +3610,19 @@ public class MainActivity extends Activity {
 
     private class DiagnosticSiteClient extends WebViewClient {
         private Runnable loadTimeout;
+
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            WebResourceResponse response = localSiteRequestHandler.intercept(request);
+            return response == null ? super.shouldInterceptRequest(view, request) : response;
+        }
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+            WebResourceResponse response = localSiteRequestHandler.intercept(url);
+            return response == null ? super.shouldInterceptRequest(view, url) : response;
+        }
 
         @Override
         public void onPageStarted(final WebView view, final String url, android.graphics.Bitmap favicon) {
@@ -3530,7 +3640,7 @@ public class MainActivity extends Activity {
         @Override
         public void onPageFinished(WebView view, String url) {
             if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
-            if (url == null || !url.startsWith("file:")) return;
+            if (url == null || !localSiteRequestHandler.isInternalUrl(url)) return;
             if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
             // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
             view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
@@ -3615,7 +3725,7 @@ public class MainActivity extends Activity {
                 return false;
             }
 
-            if (isFileUrl(url)) {
+            if (localSiteRequestHandler.isInternalUrl(url)) {
                 if (isCurrentIndexUrl(url)) {
                     return false;
                 }
@@ -3739,6 +3849,12 @@ public class MainActivity extends Activity {
         ZipDiagnosticException(String message, Throwable cause, String stage) {
             super(message, cause);
             this.stage = stage;
+        }
+    }
+
+    private static final class OperationCancelledException extends IOException {
+        OperationCancelledException() {
+            super("Операция отменена пользователем.");
         }
     }
 

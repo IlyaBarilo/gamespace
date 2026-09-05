@@ -32,6 +32,7 @@ import {
 } from "./runtime-environment.js";
 import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-history.js";
 import { isAllowedExternalUrl } from "./navigation-policy.js";
+import { isAbortError } from "./abort.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -58,6 +59,7 @@ let detachGameDiagnostics = null;
 let gameLoadTimer = null;
 let backgroundIssueCount = 0;
 let archiveStatistics = null;
+let activeImportController = null;
 const archiveStatisticsStore = createArchiveStatisticsStore();
 const runtimeHistoryStore = createRuntimeHistoryStore();
 let runtimeHistoryState = runtimeHistoryStore.load();
@@ -200,10 +202,12 @@ function setBusy(value) {
   busy = value;
   document.body.classList.toggle("is-busy", value);
   for (const button of document.querySelectorAll("button")) {
+    if (button === elements.progressCancelButton) continue;
     if (button.closest("#viewer, #diagnosticDialog") || button.classList.contains("diagnostic-trigger")) continue;
     button.disabled = value || button.dataset.fixedDisabled === "true";
   }
   elements.archiveInput.disabled = value;
+  elements.progressCancelButton.disabled = !activeImportController || activeImportController.signal.aborted;
   renderState();
   elements.rollbackPwaButton.disabled = value || !runtimeState?.previousVersion;
   refreshArchiveStatistics();
@@ -309,12 +313,15 @@ function showProgress(title) {
   elements.progressSpeed.textContent = "Скорость: вычисляется";
   elements.progressRemaining.textContent = "Осталось примерно: вычисляется";
   elements.errorPanel.hidden = true;
+  elements.progressCancelButton.hidden = !activeImportController;
+  elements.progressCancelButton.disabled = !activeImportController;
   progressEstimator.reset();
   progressUnit = null;
 }
 
 function hideProgress() {
   elements.progressPanel.hidden = true;
+  elements.progressCancelButton.hidden = true;
 }
 
 function showError(error, context = {}) {
@@ -411,14 +418,15 @@ async function importSelectedFile(file, source = "локальный архив"
 
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
+  activeImportController = new AbortController();
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
   let outcome = "ошибка";
   archiveStatistics = new ArchiveStatistics(file, diagnosticContext.operation);
   try {
     diagnosticSession.begin(diagnosticContext.operation, file.name);
     state = isUpdate
-      ? await applyUpdateArchive(file, handleImportEvent)
-      : await installFullArchive(file, handleImportEvent);
+      ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal })
+      : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal });
     diagnosticSession.site(state);
     diagnosticContext.stage = "interface-refresh";
     diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
@@ -431,9 +439,17 @@ async function importSelectedFile(file, source = "локальный архив"
     setTimeout(hideProgress, 1600);
     outcome = "успешно";
   } catch (error) {
-    showError(error, diagnosticContext);
-    elements.progressPhase.textContent = "Операция остановлена";
-    setStatus("Не удалось обработать архив", "bad");
+    if (isAbortError(error)) {
+      outcome = "отменено";
+      elements.progressPhase.textContent = "Операция отменена";
+      elements.progressFile.textContent = state ? "Предыдущий сайт сохранён." : "Неполные данные удалены.";
+      setStatus(state ? "Операция отменена, предыдущий сайт сохранён" : "Установка отменена", "neutral");
+      setTimeout(hideProgress, 1600);
+    } else {
+      showError(error, diagnosticContext);
+      elements.progressPhase.textContent = "Операция остановлена";
+      setStatus("Не удалось обработать архив", "bad");
+    }
   } finally {
     const statistics = archiveStatistics.finish(outcome, {
       version: APP_VERSION,
@@ -445,6 +461,7 @@ async function importSelectedFile(file, source = "локальный архив"
     archiveStatistics = null;
     refreshArchiveStatistics();
     diagnosticSession.finish(outcome);
+    activeImportController = null;
     setBusy(false);
   }
 }
@@ -1154,6 +1171,12 @@ elements.viewerBack.addEventListener("click", () => {
   diagnosticSession.record("Назад в просмотре");
   elements.siteFrame.contentWindow?.history.back();
   showViewerToolbar();
+});
+elements.progressCancelButton.addEventListener("click", () => {
+  if (!activeImportController || activeImportController.signal.aborted) return;
+  elements.progressCancelButton.disabled = true;
+  elements.progressPhase.textContent = "Отменяю операцию и восстанавливаю прежнее состояние…";
+  activeImportController.abort(new DOMException("Операция отменена пользователем.", "AbortError"));
 });
 elements.siteFrame.addEventListener("load", attachFrameGuards);
 window.addEventListener("pagehide", () => {

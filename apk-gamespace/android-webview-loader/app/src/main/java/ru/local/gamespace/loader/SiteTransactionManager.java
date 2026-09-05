@@ -41,6 +41,10 @@ final class SiteTransactionManager {
         void onProgress(int current, int total, String path);
     }
 
+    interface CancellationSignal {
+        void throwIfCancelled() throws IOException;
+    }
+
     static final class UpdateStoragePlan {
         final int files;
         final int replacedFiles;
@@ -128,6 +132,10 @@ final class SiteTransactionManager {
     }
 
     int applyPreparedUpdate(File base, ProgressListener listener) throws IOException {
+        return applyPreparedUpdate(base, listener, null);
+    }
+
+    int applyPreparedUpdate(File base, ProgressListener listener, CancellationSignal cancellation) throws IOException {
         File staging = child(base, UPDATE_STAGING_DIRECTORY_NAME);
         File active = child(base, ACTIVE_DIRECTORY_NAME);
         File backup = child(base, UPDATE_BACKUP_DIRECTORY_NAME);
@@ -139,23 +147,26 @@ final class SiteTransactionManager {
         List<File> sourceFiles = new ArrayList<File>();
         collectFiles(staging, sourceFiles);
         for (File source : sourceFiles) {
+            if (cancellation != null) cancellation.throwIfCancelled();
             String relative = relativePath(staging, source);
             validateUpdateTarget(active, safeChild(active, relative), relative);
         }
         beginTransaction(TYPE_UPDATE, base, PHASE_PREPARED);
         try {
             for (int index = 0; index < sourceFiles.size(); index++) {
+                if (cancellation != null) cancellation.throwIfCancelled();
                 File source = sourceFiles.get(index);
                 String relative = relativePath(staging, source);
                 File target = safeChild(active, relative);
                 if (target.isFile()) {
                     File backupFile = safeChild(backup, relative);
-                    copyFileDurable(target, backupFile);
+                    copyFileDurable(target, backupFile, cancellation);
                 } else {
                     File marker = safeChild(created, relative);
                     createDurableMarker(marker);
                 }
                 movePreparedFile(source, target);
+                if (cancellation != null) cancellation.throwIfCancelled();
                 if (listener != null) {
                     listener.onProgress(index + 1, sourceFiles.size(), relative);
                 }
@@ -397,6 +408,10 @@ final class SiteTransactionManager {
     }
 
     private static void copyFileDurable(File source, File target) throws IOException {
+        copyFileDurable(source, target, null);
+    }
+
+    private static void copyFileDurable(File source, File target, CancellationSignal cancellation) throws IOException {
         File parent = target.getParentFile();
         if (parent != null) {
             ensureDirectory(parent);
@@ -406,6 +421,7 @@ final class SiteTransactionManager {
              FileOutputStream output = new FileOutputStream(target, false)) {
             int read;
             while ((read = input.read(buffer)) != -1) {
+                if (cancellation != null) cancellation.throwIfCancelled();
                 output.write(buffer, 0, read);
             }
             output.flush();

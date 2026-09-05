@@ -43,6 +43,19 @@ test("7z client reports unreadable Worker response and terminates it", async (t)
   assert.equal(instances[0].terminated, true);
 });
 
+test("7z client terminates Worker and reports cancellation when the signal aborts", async (t) => {
+  const instances = mockWorker(t, () => {});
+  const controller = new AbortController();
+  const extraction = extractSevenZip({
+    file: new File([], "site.7z"),
+    destination: "test",
+    signal: controller.signal,
+  });
+  controller.abort();
+  await assert.rejects(extraction, { name: "AbortError" });
+  assert.equal(instances[0].terminated, true);
+});
+
 test("7z probe reports a structured Worker failure without waiting for a timeout", async (t) => {
   const instances = mockWorker(t, (worker) => queueMicrotask(() => worker.onmessage({ data: {
     type: "error", error: { name: "SecurityError", message: "OPFS blocked" },

@@ -21,9 +21,13 @@ test("diagnostic controls exist on both app and landing surfaces, with manual-co
 
 test("install action distinguishes a browser prompt from manual installation", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(app, /Как установить GameSpace/);
   assert.match(app, /Через меню браузера/);
   assert.match(app, /installPrompt[\s\S]*Открыть окно установки/);
+  assert.match(html, /ДОВЕРЕННЫЙ РЕЖИМ/);
+  assert.match(html, /JavaScript и localStorage/);
+  assert.doesNotMatch(html, /СОВМЕСТИМЫЙ РЕЖИМ/);
 });
 
 test("report dialog remains usable while import controls are busy", async () => {

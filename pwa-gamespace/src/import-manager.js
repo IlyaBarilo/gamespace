@@ -21,6 +21,7 @@ import {
   summarizeDirectory,
   summarizeMergeStorage,
 } from "./opfs.js";
+import { throwIfAborted } from "./abort.js";
 
 const APP_ROOT = "gamespace";
 const REVISIONS_ROOT = `${APP_ROOT}/revisions`;
@@ -40,8 +41,10 @@ function jobId() {
   return `${Date.now().toString(36)}-${random[0].toString(36)}${random[1].toString(36)}`;
 }
 
-async function detectArchiveType(file) {
+async function detectArchiveType(file, signal) {
+  throwIfAborted(signal);
   const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  throwIfAborted(signal);
   const sevenZip = [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
   if (sevenZip.every((value, index) => signature[index] === value)) return "7z";
   if (signature[0] === 0x50 && signature[1] === 0x4b) return "zip";
@@ -58,12 +61,13 @@ function emitServiceWorkerStateChanged() {
     .catch(() => {});
 }
 
-async function extractArchive({ file, destination, requireIndex, onEvent }) {
+async function extractArchive({ file, destination, requireIndex, onEvent, signal }) {
+  throwIfAborted(signal);
   onEvent?.({ type: "phase", phase: "archive-read", label: "Читаю сигнатуру выбранного архива…" });
-  const type = await detectArchiveType(file);
+  const type = await detectArchiveType(file, signal);
   onEvent?.({ type: "archive-format", format: type });
   const extract = type === "7z" ? extractSevenZip : extractZip;
-  const result = await extract({ file, destination, requireIndex, onEvent });
+  const result = await extract({ file, destination, requireIndex, onEvent, signal });
   return { ...result, type };
 }
 
@@ -94,7 +98,7 @@ export async function requestPersistentStorage() {
   }
 }
 
-export async function installFullArchive(file, onEvent) {
+export async function installFullArchive(file, onEvent, { signal } = {}) {
   const diagnostics = new OperationDiagnostics("полная установка", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let revisionPath = null;
@@ -102,6 +106,7 @@ export async function installFullArchive(file, onEvent) {
   const startedAt = Date.now();
 
   try {
+    throwIfAborted(signal);
     onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
@@ -110,7 +115,8 @@ export async function installFullArchive(file, onEvent) {
     const previousState = await readState();
     const revision = jobId();
     revisionPath = `${REVISIONS_ROOT}/${revision}`;
-    const result = await extractArchive({ file, destination: revisionPath, requireIndex: true, onEvent });
+    const result = await extractArchive({ file, destination: revisionPath, requireIndex: true, onEvent, signal });
+    throwIfAborted(signal);
     onEvent({ type: "phase", phase: "index-check", label: "Проверяю сохранённый index.html…" });
     const indexStoragePath = `${revisionPath}/${result.indexPath}`;
     const root = await getOpfsRoot();
@@ -164,7 +170,7 @@ export async function installFullArchive(file, onEvent) {
   }
 }
 
-export async function applyUpdateArchive(file, onEvent) {
+export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
   const diagnostics = new OperationDiagnostics("быстрое обновление", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let state;
@@ -176,6 +182,7 @@ export async function applyUpdateArchive(file, onEvent) {
   let ownsJournal = false;
 
   try {
+    throwIfAborted(signal);
     onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
@@ -188,7 +195,8 @@ export async function applyUpdateArchive(file, onEvent) {
     rollbackPath = `${ROLLBACK_ROOT}/${updateId}`;
     onEvent({ type: "phase", phase: "storage-open", label: "Открытие OPFS" });
     root = await getOpfsRoot();
-    const result = await extractArchive({ file, destination: updatePath, requireIndex: false, onEvent });
+    const result = await extractArchive({ file, destination: updatePath, requireIndex: false, onEvent, signal });
+    throwIfAborted(signal);
     onEvent({ type: "phase", phase: "update-quota-check", label: "Точно рассчитываю место для применения обновления…" });
     const mergeStorage = await summarizeMergeStorage({ sourcePath: updatePath, targetPath: state.revisionPath });
     const storage = await navigator.storage.estimate();
@@ -229,6 +237,7 @@ export async function applyUpdateArchive(file, onEvent) {
       async onJournal(paths) {
         await writeOperationJournal({ ...baseJournal, ...paths });
       },
+      signal,
     });
     mergeJournal = merge;
 

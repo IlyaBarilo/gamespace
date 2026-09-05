@@ -832,6 +832,12 @@ a:focus-visible {
   text-align: left;
 }
 
+.progress-cancel-button {
+  margin-top: 18px;
+  align-self: center;
+}
+
+
 .progress-meta span:last-child {
   overflow: hidden;
   text-overflow: ellipsis;

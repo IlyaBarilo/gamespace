@@ -227,9 +227,9 @@
       <section id="installedState" class="primary-card installed-card" hidden>
         <div class="launch-orbit" aria-hidden="true"><span>▶</span></div>
         <div>
-          <p class="section-kicker">САЙТ УСТАНОВЛЕН</p>
+          <p class="section-kicker">ДОВЕРЕННЫЙ РЕЖИМ</p>
           <h2>Готов к запуску</h2>
-          <p>Все файлы находятся только на этом устройстве. Интернет и локальная сеть не нужны.</p>
+          <p>Игра получает JavaScript и localStorage этого сайта. Открывайте только проверенные архивы; файлы остаются на этом устройстве.</p>
         </div>
         <button id="openSiteButton" class="primary-button launch-button" type="button">Открыть GameSpace</button>
       </section>
@@ -252,6 +252,7 @@
           <span id="progressNumbers">0 файлов</span>
           <span id="progressFile">—</span>
         </div>
+        <button id="progressCancelButton" class="version-secondary-button progress-cancel-button" type="button">Отменить операцию</button>
       </section>
 
       <section id="errorPanel" class="error-card" role="alert" hidden>
@@ -305,6 +306,7 @@
             </button>
           </div>
         </article>
+
       </section>
 
       <section class="panel pwa-update-panel">

@@ -129,6 +129,42 @@ function Find-LatestBuildTools($SdkDir) {
         Select-Object -First 1
 }
 
+function New-AndroidRuntimeJar($SourceJar, $DestinationJar) {
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $excludedPrefixes = @(
+        "org/apache/commons/compress/compressors/pack200/",
+        "org/apache/commons/compress/harmony/pack200/",
+        "org/apache/commons/compress/harmony/unpack200/"
+    )
+    $source = [System.IO.Compression.ZipFile]::OpenRead($SourceJar)
+    $destination = [System.IO.Compression.ZipFile]::Open($DestinationJar, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        foreach ($entry in $source.Entries) {
+            $excluded = $false
+            foreach ($prefix in $excludedPrefixes) {
+                if ($entry.FullName.StartsWith($prefix, [StringComparison]::Ordinal)) {
+                    $excluded = $true
+                    break
+                }
+            }
+            if ($excluded) { continue }
+            $copy = $destination.CreateEntry($entry.FullName, [System.IO.Compression.CompressionLevel]::Optimal)
+            if ($entry.FullName.EndsWith("/", [StringComparison]::Ordinal)) { continue }
+            $input = $entry.Open()
+            $output = $copy.Open()
+            try { $input.CopyTo($output) }
+            finally {
+                $output.Dispose()
+                $input.Dispose()
+            }
+        }
+    } finally {
+        $destination.Dispose()
+        $source.Dispose()
+    }
+}
+
 function Find-ExeCandidate($Names, $ExtraPaths) {
     foreach ($path in $ExtraPaths) {
         foreach ($name in $Names) {
@@ -517,7 +553,17 @@ function Invoke-DirectSdkBuild($ProjectDir, $SdkDir) {
     $compiledClassesJar = Join-Path $buildDir "compiled-classes.jar"
     & $jarTool cf $compiledClassesJar -C $classesDir "."
     if ($LASTEXITCODE -ne 0) { throw "Packing compiled classes failed with exit code $LASTEXITCODE" }
-    $d8Inputs = @($compiledClassesJar) + $libraryJars
+    $runtimeLibraryJars = @()
+    foreach ($libraryJar in $libraryJars) {
+        if ([IO.Path]::GetFileName($libraryJar) -eq "commons-compress-1.28.0.jar") {
+            $filteredJar = Join-Path $buildDir "commons-compress-android.jar"
+            New-AndroidRuntimeJar $libraryJar $filteredJar
+            $runtimeLibraryJars += $filteredJar
+        } else {
+            $runtimeLibraryJars += $libraryJar
+        }
+    }
+    $d8Inputs = @($compiledClassesJar) + $runtimeLibraryJars
     & $d8 --lib $androidJar --output $dexDir $d8Inputs
     if ($LASTEXITCODE -ne 0) { throw "d8 failed with exit code $LASTEXITCODE" }
 

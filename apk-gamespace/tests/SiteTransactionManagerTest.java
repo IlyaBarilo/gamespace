@@ -168,6 +168,34 @@ public final class SiteTransactionManagerTest {
         check("keep".equals(read(active, "folder/keep.txt")), "directory conflict preserves active content");
     }
 
+    private static void testCancelledUpdateRollsBack(File root) throws Exception {
+        MemoryStore store = new MemoryStore();
+        SiteTransactionManager manager = new SiteTransactionManager(store);
+        File active = child(root, SiteTransactionManager.ACTIVE_DIRECTORY_NAME);
+        write(active, "index.html", "old-index");
+        File staging = manager.prepareUpdateStaging(root);
+        write(staging, "index.html", "new-index");
+        write(staging, "new/file.txt", "new-file");
+        final int[] checksBeforeCancellation = {0};
+        try {
+            manager.applyPreparedUpdate(root, null, new SiteTransactionManager.CancellationSignal() {
+                @Override
+                public void throwIfCancelled() throws java.io.IOException {
+                    checksBeforeCancellation[0] += 1;
+                    if (checksBeforeCancellation[0] >= 5) {
+                        throw new java.io.IOException("cancelled by test");
+                    }
+                }
+            });
+            throw new AssertionError("cancelled update must fail");
+        } catch (java.io.IOException error) {
+            check(error.getMessage().contains("cancelled by test"), "cancellation cause is retained");
+        }
+        check("old-index".equals(read(active, "index.html")), "cancelled update restores replaced file");
+        check(!child(active, "new/file.txt").exists(), "cancelled update removes newly created file");
+        check(!manager.hasPendingTransaction(), "cancelled update clears transaction marker after rollback");
+    }
+
     public static void main(String[] args) throws Exception {
         File parent = args.length == 0 ? new File(".") : new File(args[0]);
         File suite = Files.createTempDirectory(parent.toPath(), "site-transaction-").toFile();
@@ -178,6 +206,7 @@ public final class SiteTransactionManagerTest {
             testUpdateCommit(child(suite, "update-commit"));
             testInterruptedUpdateRecovery(child(suite, "update-recovery"));
             testUpdateRejectsDirectoryConflictBeforeTransaction(child(suite, "update-directory-conflict"));
+            testCancelledUpdateRollsBack(child(suite, "update-cancellation"));
             System.out.println("Site transactions: " + checks + " checks passed.");
         } finally {
             delete(suite);

@@ -1,4 +1,5 @@
 import { restoreDiagnosticError } from "../diagnostics.js";
+import { createAbortError, throwIfAborted } from "../abort.js";
 
 export function createSevenZipWorker() {
   return new Worker(new URL("./7z-worker.js", import.meta.url), { type: "module", name: "gamespace-7z" });
@@ -31,33 +32,41 @@ export function probeSevenZipSupport() {
   });
 }
 
-export function extractSevenZip({ file, destination, requireIndex, onEvent }) {
+export function extractSevenZip({ file, destination, requireIndex, onEvent, signal }) {
   return new Promise((resolve, reject) => {
+    try { throwIfAborted(signal); }
+    catch (error) { reject(error); return; }
     onEvent?.({ type: "phase", phase: "worker-start", label: "Запускаю отдельный обработчик 7z…" });
     const worker = createSevenZipWorker();
+    let settled = false;
+    const finish = (callback, value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
+      callback(value);
+    };
+    const abort = () => finish(reject, signal?.reason instanceof Error ? signal.reason : createAbortError());
+    signal?.addEventListener("abort", abort, { once: true });
     worker.onmessage = (event) => {
       const message = event.data;
       onEvent?.(message);
       if (message?.type === "done") {
-        worker.terminate();
-        resolve(message.result);
+        finish(resolve, message.result);
       } else if (message?.type === "error") {
-        worker.terminate();
         const cause = restoreDiagnosticError(message.error || { message: message.message, stack: message.stack });
         const error = new Error(cause.message, { cause });
         if (message.diagnosticContext) error.diagnosticContext = message.diagnosticContext;
-        reject(error);
+        finish(reject, error);
       }
     };
     worker.onerror = (event) => {
-      worker.terminate();
-      reject(event.error || new Error(event.message || "7z Worker аварийно завершился."));
+      finish(reject, event.error || new Error(event.message || "7z Worker аварийно завершился."));
     };
     worker.onmessageerror = () => {
-      worker.terminate();
-      reject(new Error("Не удалось прочитать ответ 7z Worker."));
+      finish(reject, new Error("Не удалось прочитать ответ 7z Worker."));
     };
     try { worker.postMessage({ type: "extract", file, destination, requireIndex }); }
-    catch (error) { worker.terminate(); reject(error); }
+    catch (error) { finish(reject, error); }
   });
 }

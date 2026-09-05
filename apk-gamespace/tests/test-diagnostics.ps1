@@ -62,6 +62,9 @@ $checks = @{
     "process-scoped journal" = 'private static DiagnosticJournal diagnosticJournal;'
     "previous process marker" = 'diagnosticJournal\.takePending\(\)'
     "WebView errors" = 'class DiagnosticSiteClient extends WebViewClient'
+    "virtual HTTPS content origin" = 'LocalSiteRequestHandler localSiteRequestHandler = new LocalSiteRequestHandler\(\)'
+    "direct file access disabled" = 'settings\.setAllowFileAccess\(false\)'
+    "operation cancellation" = 'ensureOperationNotCancelled\(\)'
     "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
     "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'
 }

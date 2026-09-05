@@ -53,10 +53,10 @@ export async function removePath(root, path) {
   }
 }
 
-export async function copyFile(sourceFileHandle, targetFileHandle) {
+export async function copyFile(sourceFileHandle, targetFileHandle, signal) {
   const source = await sourceFileHandle.getFile();
   const writable = await targetFileHandle.createWritable({ keepExistingData: false });
-  await source.stream().pipeTo(writable);
+  await source.stream().pipeTo(writable, { signal });
 }
 
 export async function collectFiles(directory, prefix = "") {
@@ -120,7 +120,7 @@ export async function summarizeMergeStorage({ sourcePath, targetPath }) {
   return summary;
 }
 
-export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal, onDiagnostic }) {
+export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal, onDiagnostic, signal }) {
   onDiagnostic?.({ type: "phase", phase: "update-list", label: "Читаю файлы подготовленного обновления…" });
   const root = await getOpfsRoot();
   const sourceDirectory = await getDirectoryAt(root, sourcePath, false);
@@ -130,6 +130,7 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
 
   try {
     for (let index = 0; index < sourceFiles.length; index += 1) {
+      signal?.throwIfAborted?.();
       const item = sourceFiles[index];
       const targetFilePath = `${targetPath}/${item.path}`;
       const rollbackFilePath = `${rollbackPath}/${item.path}`;
@@ -137,7 +138,7 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
       const existing = await getUpdateTargetFile(root, targetFilePath);
       if (existing) {
         const backup = await getFileHandleAt(root, rollbackFilePath, true);
-        await copyFile(existing, backup);
+        await copyFile(existing, backup, signal);
         restoredPaths.push(item.path);
       } else {
         createdPaths.push(item.path);
@@ -148,7 +149,7 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
 
       onDiagnostic?.({ type: "file-stage", phase: "update-write", label: "Запись обновлённого файла в OPFS", path: item.path });
       const target = await getFileHandleAt(root, targetFilePath, true);
-      await copyFile(item.handle, target);
+      await copyFile(item.handle, target, signal);
       onProgress?.({ current: index + 1, total: sourceFiles.length, path: item.path });
     }
   } catch (error) {

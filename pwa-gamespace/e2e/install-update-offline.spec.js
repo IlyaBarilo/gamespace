@@ -24,4 +24,13 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#viewer")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("#siteFrame")).toBeVisible();
   await expect(page.locator("#viewerLoading")).toBeHidden();
+
+  const gameFrame = page.frames().find((frame) => frame.url().includes("/__gamespace_content__/"));
+  expect(gameFrame).toBeTruthy();
+  await gameFrame.evaluate(() => localStorage.setItem("gamespace-e2e-save", "saved"));
+  await Promise.all([
+    gameFrame.waitForNavigation(),
+    gameFrame.evaluate(() => location.reload()),
+  ]);
+  expect(await gameFrame.evaluate(() => localStorage.getItem("gamespace-e2e-save"))).toBe("saved");
 });

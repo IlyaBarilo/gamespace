@@ -4,10 +4,11 @@ import { getFileHandleAt, getOpfsRoot } from "../opfs.js";
 import { addCleanupDiagnostic, OperationDiagnostics } from "../diagnostics.js";
 import { ArchiveMetrics } from "../archive-statistics.js";
 import { measuredBlob } from "./zip-statistics.js";
+import { throwIfAborted } from "../abort.js";
 
 const RESERVE_MINIMUM = 512 * 1024 * 1024;
 
-export async function extractZip({ file, destination, requireIndex, onEvent }) {
+export async function extractZip({ file, destination, requireIndex, onEvent, signal }) {
   const statistics = new ArchiveMetrics("ZIP / ZIP64");
   const diagnostics = new OperationDiagnostics("распаковка ZIP", { file });
   const callback = onEvent;
@@ -16,8 +17,10 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
   const reader = new ZipReader(source, { checkAmbiguity: true });
   let failure = null;
   try {
+    throwIfAborted(signal);
     onEvent?.({ type: "phase", phase: "list", label: "Проверяю структуру ZIP/ZIP64…" });
     const zipEntries = await statistics.async("engine", () => reader.getEntries());
+    throwIfAborted(signal);
     const entries = validateEntries(zipEntries.map((entry) => ({
       path: entry.filename,
       directory: entry.directory,
@@ -57,6 +60,7 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
     let completedFiles = 0;
     for (const entry of entries) {
       if (entry.directory) continue;
+      throwIfAborted(signal);
       onEvent({ type: "file-stage", phase: "file-create", label: "Создание файла назначения OPFS", currentFile: entry.path, completedFiles });
       const writable = await statistics.async("open", async () => {
         const output = await getFileHandleAt(root, `${destination}/${entry.path}`, true);
@@ -77,6 +81,7 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
       try {
         await statistics.async("engine", () => entry.source.getData(destinationStream, {
           preventClose: true,
+          signal,
           onprogress(index) {
             entryProgress = index;
             onEvent?.({
@@ -87,6 +92,7 @@ export async function extractZip({ file, destination, requireIndex, onEvent }) {
             });
           },
         }));
+        throwIfAborted(signal);
         if (destinationError) throw destinationError;
         onEvent({ type: "file-stage", phase: "file-close", label: "Завершение записи файла OPFS", currentFile: entry.path });
         await statistics.async("close", () => writer.close());
