@@ -1,7 +1,7 @@
 const STORAGE_KEY = "gamespace:last-error:v1";
 export const MAX_REPORT_CHARS = 24_000;
 const MAX_MESSAGES = 20;
-const NUMBER_FIELDS = ["archiveBytes", "uncompressedBytes", "availableBytes", "requiredBytes", "reserveBytes", "files", "processedBytes", "totalBytes", "completedFiles", "current", "total"];
+const NUMBER_FIELDS = ["archiveBytes", "uncompressedBytes", "availableBytes", "requiredBytes", "reserveBytes", "sourceBytes", "backupBytes", "replacedFiles", "newFiles", "files", "processedBytes", "totalBytes", "completedFiles", "current", "total"];
 
 export function safeDiagnosticText(value, limit = 1500) {
   const text = String(value ?? "").replace(/\r\n/g, "\n")
@@ -73,7 +73,7 @@ export class OperationDiagnostics {
       this.data.stage = safeDiagnosticText(event.phase, 80);
       this.data.stageLabel = safeDiagnosticText(event.label);
     }
-    if (["archive-info", "progress", "apply-progress", "file-stage"].includes(event.type)) {
+    if (["archive-info", "update-storage-info", "progress", "apply-progress", "file-stage"].includes(event.type)) {
       for (const name of NUMBER_FIELDS) {
         if (finite(event[name]) !== null) this.data[name] = event[name];
       }
@@ -161,8 +161,10 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
   line("Последний файл в архиве", context.currentFile);
   for (const [key, label] of Object.entries({
     uncompressedBytes: "Размер после распаковки, байт", availableBytes: "Доступная квота при проверке архива, байт",
-    requiredBytes: "Требуется с резервом, байт", processedBytes: "Обработано данных, байт", totalBytes: "Всего данных, байт",
+    requiredBytes: "Требуется с резервом, байт", sourceBytes: "Файлы update-архива, байт", backupBytes: "Резервная копия заменяемых файлов, байт",
+    processedBytes: "Обработано данных, байт", totalBytes: "Всего данных, байт",
     files: "Файлов в архиве", completedFiles: "Файлов записано", current: "Применено файлов обновления", total: "Всего файлов обновления",
+    replacedFiles: "Заменяемых файлов", newFiles: "Новых файлов",
   })) line(label, finite(context[key]));
   line("Последняя оценка квоты браузера, байт", finite(environment.storage?.quota));
   line("Последняя оценка использования, байт", finite(environment.storage?.usage));

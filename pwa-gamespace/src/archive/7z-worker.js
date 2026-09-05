@@ -126,7 +126,7 @@ async function extractArchive({ file, destination, requireIndex }, emit, diagnos
   const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
   const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
   const reserveBytes = Math.max(512 * 1024 * 1024, Math.ceil(summary.uncompressedBytes * 0.1));
-  const requiredBytes = summary.uncompressedBytes * (requireIndex ? 1 : 2) + reserveBytes;
+  const requiredBytes = summary.uncompressedBytes + reserveBytes;
   emit({
     type: "archive-info",
     archiveBytes: file.size,

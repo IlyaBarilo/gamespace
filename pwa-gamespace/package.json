@@ -23,13 +23,15 @@
     "verify:release-source": "node scripts/verify-release-source.mjs",
     "pages:assemble": "node scripts/assemble-pages.mjs",
     "preview": "vite preview --host 0.0.0.0",
-    "test": "node --test"
+    "test": "node --test",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.8.15",
     "un7z-opfs": "^1.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "vite": "^7.1.3"
   },
   "engines": {

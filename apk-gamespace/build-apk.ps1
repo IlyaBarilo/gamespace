@@ -652,48 +652,48 @@ Write-Step "Checking Android project"
 Test-RequiredProjectFiles $ProjectDir
 Test-ApkLicenseAssets $WorkspaceDir $LicenseAssetsDirectory
 
-Write-Step "Updating app metadata"
-[xml]$stringsXml = Get-Content -LiteralPath $StringsPath -Raw
-Set-StringResource $stringsXml "app_name" $AppName
-Set-StringResource $stringsXml "app_version_name" $VersionName
-Set-StringResource $stringsXml "app_build_date" (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
-Set-StringResource $stringsXml "app_min_android" (Get-AndroidVersionLabel $MinSdkVersion)
-$stringsXml.Save($StringsPath)
+$originalStringsBytes = [IO.File]::ReadAllBytes($StringsPath)
+try {
+    Write-Step "Updating app metadata"
+    [xml]$stringsXml = Get-Content -LiteralPath $StringsPath -Raw
+    Set-StringResource $stringsXml "app_name" $AppName
+    Set-StringResource $stringsXml "app_version_name" $VersionName
+    Set-StringResource $stringsXml "app_build_date" (Get-Date -Format "yyyy-MM-dd HH:mm:ss zzz")
+    Set-StringResource $stringsXml "app_min_android" (Get-AndroidVersionLabel $MinSdkVersion)
+    $stringsXml.Save($StringsPath)
 
-Update-BuiltinDemoArchive $DemoSourceDirectory $DemoBuilderScript $AssetsDemoArchivePath
+    Update-BuiltinDemoArchive $DemoSourceDirectory $DemoBuilderScript $AssetsDemoArchivePath
 
-$sdkDir = Find-AndroidSdk
-if ($sdkDir) {
-    $localProperties = Join-Path $ProjectDir "local.properties"
-    $normalizedSdkDir = $sdkDir.Replace("\", "/")
-    Set-Content -LiteralPath $localProperties -Value "sdk.dir=$normalizedSdkDir" -Encoding ASCII
-}
+    $sdkDir = Find-AndroidSdk
+    if ($sdkDir) {
+        $localProperties = Join-Path $ProjectDir "local.properties"
+        $normalizedSdkDir = $sdkDir.Replace("\", "/")
+        Set-Content -LiteralPath $localProperties -Value "sdk.dir=$normalizedSdkDir" -Encoding ASCII
+    }
 
-Write-Step "Checking build tools"
-$javaMajor = Get-JavaMajorVersion
-if ($javaMajor -and $javaMajor -lt 17) {
-    Write-Host "PATH Java is version $javaMajor." -ForegroundColor Yellow
-    Write-Host "Direct SDK build will try Android Studio's bundled JDK." -ForegroundColor Yellow
-}
+    Write-Step "Checking build tools"
+    $javaMajor = Get-JavaMajorVersion
+    if ($javaMajor -and $javaMajor -lt 17) {
+        Write-Host "PATH Java is version $javaMajor." -ForegroundColor Yellow
+        Write-Host "Direct SDK build will try Android Studio's bundled JDK." -ForegroundColor Yellow
+    }
 
-if (-not $sdkDir) {
-    Write-Host "Android SDK was not found." -ForegroundColor Yellow
-    Write-Host "Run install-android-sdk.bat or open Android Studio once, then run build-apk.bat again." -ForegroundColor Yellow
-    exit 2
-}
+    if (-not $sdkDir) {
+        throw "Android SDK was not found. Run install-android-sdk.bat or open Android Studio once, then run build-apk.bat again."
+    }
 
-$builtApkPath = Invoke-DirectSdkBuild $ProjectDir $sdkDir
-if (Test-Path -LiteralPath $builtApkPath) {
-    $releaseApkPath = Copy-ApkToRelease $builtApkPath $ReleaseDir $AppName
-    Write-Host ""
-    Write-Host "APK is ready:" -ForegroundColor Green
-    Write-Host $releaseApkPath
-    Write-Host ""
-    Write-Host "Internal build copy:" -ForegroundColor DarkGray
-    Write-Host $builtApkPath -ForegroundColor DarkGray
-} else {
-    Write-Host ""
-    Write-Host "Build finished, but APK was not found at the expected path:" -ForegroundColor Yellow
-    Write-Host $builtApkPath
-    exit 3
+    $builtApkPath = Invoke-DirectSdkBuild $ProjectDir $sdkDir
+    if (Test-Path -LiteralPath $builtApkPath) {
+        $releaseApkPath = Copy-ApkToRelease $builtApkPath $ReleaseDir $AppName
+        Write-Host ""
+        Write-Host "APK is ready:" -ForegroundColor Green
+        Write-Host $releaseApkPath
+        Write-Host ""
+        Write-Host "Internal build copy:" -ForegroundColor DarkGray
+        Write-Host $builtApkPath -ForegroundColor DarkGray
+    } else {
+        throw "Build finished, but APK was not found at the expected path: $builtApkPath"
+    }
+} finally {
+    [IO.File]::WriteAllBytes($StringsPath, $originalStringsBytes)
 }

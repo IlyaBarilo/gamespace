@@ -43,6 +43,12 @@ jobs:
       - name: Выполнить автоматические тесты
         run: npm test
 
+      - name: Установить Chromium для браузерного smoke-теста
+        run: npx playwright install --with-deps chromium
+
+      - name: Проверить установку, update-архив и автономный запуск в браузере
+        run: npm run test:e2e
+
       - name: Собрать PWA и неизменяемый пакет
         run: npm run release:prepare
 

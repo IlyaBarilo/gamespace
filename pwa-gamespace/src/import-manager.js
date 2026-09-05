@@ -19,12 +19,21 @@ import {
   removePath,
   rollbackMergedDirectory,
   summarizeDirectory,
+  summarizeMergeStorage,
 } from "./opfs.js";
 
 const APP_ROOT = "gamespace";
 const REVISIONS_ROOT = `${APP_ROOT}/revisions`;
 const UPDATES_ROOT = `${APP_ROOT}/updates`;
 const ROLLBACK_ROOT = `${APP_ROOT}/rollback`;
+const STORAGE_RESERVE_MINIMUM = 512 * 1024 * 1024;
+
+export function calculateUpdateStorageRequirement({ sourceBytes, backupBytes }) {
+  const safeSourceBytes = Number.isFinite(sourceBytes) && sourceBytes > 0 ? sourceBytes : 0;
+  const safeBackupBytes = Number.isFinite(backupBytes) && backupBytes > 0 ? backupBytes : 0;
+  const reserveBytes = Math.max(STORAGE_RESERVE_MINIMUM, Math.ceil(safeSourceBytes * 0.1));
+  return { reserveBytes, requiredBytes: safeSourceBytes + safeBackupBytes + reserveBytes };
+}
 
 function jobId() {
   const random = crypto.getRandomValues(new Uint32Array(2));
@@ -180,6 +189,21 @@ export async function applyUpdateArchive(file, onEvent) {
     onEvent({ type: "phase", phase: "storage-open", label: "Открытие OPFS" });
     root = await getOpfsRoot();
     const result = await extractArchive({ file, destination: updatePath, requireIndex: false, onEvent });
+    onEvent({ type: "phase", phase: "update-quota-check", label: "Точно рассчитываю место для применения обновления…" });
+    const mergeStorage = await summarizeMergeStorage({ sourcePath: updatePath, targetPath: state.revisionPath });
+    const storage = await navigator.storage.estimate();
+    const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
+    const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
+    const requirement = calculateUpdateStorageRequirement(mergeStorage);
+    onEvent({
+      type: "update-storage-info",
+      ...mergeStorage,
+      ...requirement,
+      availableBytes,
+    });
+    if (quotaKnown && requirement.requiredBytes > availableBytes) {
+      throw new Error("Недостаточно доступной квоты для безопасного применения update-архива с резервной копией заменяемых файлов.");
+    }
     onEvent?.({ type: "phase", phase: "apply", label: "Применяю обновление с возможностью отката…" });
     const baseJournal = {
       schema: 1,

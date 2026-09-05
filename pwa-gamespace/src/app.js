@@ -31,6 +31,7 @@ import {
   readBrowserEnvironment,
 } from "./runtime-environment.js";
 import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-history.js";
+import { isAllowedExternalUrl } from "./navigation-policy.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -357,6 +358,8 @@ function handleImportEvent(event) {
     }
   } else if (event.type === "archive-info") {
     elements.progressNumbers.textContent = `После распаковки: ${formatBytes(event.uncompressedBytes)} · нужно с резервом: ${formatBytes(event.requiredBytes)} · доступно: ${formatBytes(event.availableBytes)} · файлов: ${Number(event.files).toLocaleString("ru-RU")}`;
+  } else if (event.type === "update-storage-info") {
+    elements.progressNumbers.textContent = `Обновление: ${formatBytes(event.sourceBytes)} · резерв заменяемых файлов: ${formatBytes(event.backupBytes)} · нужно с запасом: ${formatBytes(event.requiredBytes)} · доступно: ${formatBytes(event.availableBytes)}`;
   } else if (event.type === "progress") {
     const total = Math.max(0, event.totalBytes || 0);
     const processed = Math.max(0, event.processedBytes || 0);
@@ -394,10 +397,10 @@ async function importSelectedFile(file, source = "локальный архив"
   if (!file || busy) return;
   const isUpdate = pendingMode === "fast";
   const confirmed = window.confirm(isUpdate
-    ? `Применить локальное обновление «${file.name}»? Изменённые файлы будут защищены журналом отката.`
+    ? `Применить локальное обновление «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Изменённые файлы будут защищены журналом отката.`
     : state
-      ? `Полностью заменить установленный сайт архивом «${file.name}»? Новая версия станет активной только после успешной проверки.`
-      : `Установить сайт из архива «${file.name}»? Архив не будет отправлен в сеть.`);
+      ? `Полностью заменить установленный сайт архивом «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Новая версия станет активной только после успешной проверки.`
+      : `Установить сайт из архива «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Сам GameSpace не отправляет архив в сеть.`);
   if (!confirmed) return;
   const diagnosticContext = {
     operation: isUpdate ? "быстрое обновление" : source === "демо" ? "встроенное демо" : "полная установка",
@@ -532,7 +535,13 @@ function attachFrameGuards() {
       const target = new URL(link.href, frameDocument.baseURI);
       if (target.origin !== location.origin) {
         event.preventDefault();
-        window.open(target.href, "_blank", "noopener,noreferrer");
+        if (isAllowedExternalUrl(target.href, frameDocument.baseURI)) {
+          window.open(target.href, "_blank", "noopener,noreferrer");
+        } else {
+          saveBackgroundIssue(new Error(`Ссылка с протоколом ${target.protocol || "без протокола"} заблокирована.`), {
+            operation: "просмотр игры", stage: "external-navigation", stageLabel: "Проверка внешней ссылки",
+          });
+        }
       } else if (target.pathname !== frameWindow.location.pathname && !link.hasAttribute("download") && (!link.target || link.target === "_self")) {
         beginGameLoad(target.href);
       }

@@ -48,6 +48,7 @@ public final class ZipFailureTest {
             + "private boolean shouldExtractForFastUpdate(File file, ZipEntry entry) { return true; }\n"
             + "private boolean shouldExtractForFastUpdate(File file, SevenZArchiveEntry entry) { return true; }\n"
             + "private String buildProgressText(String a,long b,long c,long d,int e,int f,int g,File h,boolean i,ProgressEstimator.Archive j) { return \"\"; }\n"
+            + "private void ensureExtractionReserve(File root) throws IOException {}\n"
             + "private ZipDiagnosticException buildZipDiagnosticException(Exception error,ZipReadContext context) { return new ZipDiagnosticException(DiagnosticReport.technicalDetails(error),error,context.stage); }\n"
             + member(source, "    private ZipStats extractZipWithCharset(", "    private ZipStats extractSevenZ(")
             + member(source, "    private ZipStats extractSevenZFromChannel(", "    private boolean shouldExtractForFastUpdate(")

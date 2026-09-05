@@ -88,6 +88,38 @@ export async function summarizeDirectory(directory) {
   return summary;
 }
 
+async function getUpdateTargetFile(root, path) {
+  try {
+    return await getFileHandleAt(root, path, false);
+  } catch (error) {
+    if (error?.name === "NotFoundError") return null;
+    if (error?.name === "TypeMismatchError") {
+      throw new Error(`Update-архив конфликтует с существующим каталогом или файлом в пути: ${path}`, { cause: error });
+    }
+    throw error;
+  }
+}
+
+export async function summarizeMergeStorage({ sourcePath, targetPath }) {
+  const root = await getOpfsRoot();
+  const sourceDirectory = await getDirectoryAt(root, sourcePath, false);
+  const sourceFiles = await collectFiles(sourceDirectory);
+  const summary = { files: sourceFiles.length, sourceBytes: 0, backupBytes: 0, replacedFiles: 0, newFiles: 0 };
+  for (const item of sourceFiles) {
+    const source = await item.handle.getFile();
+    summary.sourceBytes += source.size;
+    const targetFilePath = `${targetPath}/${item.path}`;
+    const target = await getUpdateTargetFile(root, targetFilePath);
+    if (target) {
+      summary.backupBytes += (await target.getFile()).size;
+      summary.replacedFiles += 1;
+    } else {
+      summary.newFiles += 1;
+    }
+  }
+  return summary;
+}
+
 export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollbackPath, onProgress, onJournal, onDiagnostic }) {
   onDiagnostic?.({ type: "phase", phase: "update-list", label: "Читаю файлы подготовленного обновления…" });
   const root = await getOpfsRoot();
@@ -102,9 +134,8 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
       const targetFilePath = `${targetPath}/${item.path}`;
       const rollbackFilePath = `${rollbackPath}/${item.path}`;
       onDiagnostic?.({ type: "file-stage", phase: "update-backup", label: "Проверка и резервное копирование заменяемого файла", path: item.path });
-      const targetExisted = await fileExists(root, targetFilePath);
-      if (targetExisted) {
-        const existing = await getFileHandleAt(root, targetFilePath, false);
+      const existing = await getUpdateTargetFile(root, targetFilePath);
+      if (existing) {
         const backup = await getFileHandleAt(root, rollbackFilePath, true);
         await copyFile(existing, backup);
         restoredPaths.push(item.path);

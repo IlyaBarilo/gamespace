@@ -35,6 +35,10 @@ if ($LASTEXITCODE -ne 0) { throw "Runtime environment history tests failed." }
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic journal compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DiagnosticJournalTest
 if ($LASTEXITCODE -ne 0) { throw "Diagnostic journal tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "SiteTransactionManager.java") (Join-Path $PSScriptRoot "SiteTransactionManagerTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Site transaction manager compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.SiteTransactionManagerTest $outputDirectory
+if ($LASTEXITCODE -ne 0) { throw "Site transaction manager tests failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ZipFailureTest (Join-Path $sourceDirectory "MainActivity.java") $outputDirectory
 if ($LASTEXITCODE -ne 0) { throw "ZIP extraction diagnostic tests failed." }
 

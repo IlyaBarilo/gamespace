@@ -92,7 +92,7 @@ public class MainActivity extends Activity {
     private static final String PREF_LAST_OPERATION_WRITTEN_BYTES = "last_operation_written_bytes";
     private static final String PREF_LAST_OPERATION_WRITTEN_FILES = "last_operation_written_files";
     private static final String STORAGE_DIR_NAME = "gamespace-loader";
-    private static final String EXTRACT_DIR_NAME = "site-files";
+    private static final String EXTRACT_DIR_NAME = SiteTransactionManager.ACTIVE_DIRECTORY_NAME;
     private static final int BUFFER_SIZE = 1024 * 256;
     private static final int SEVEN_Z_READ_AHEAD_SIZE = 4 * 1024 * 1024;
     private static final int TOP_BAR_AUTO_HIDE_MS = 5000;
@@ -137,6 +137,7 @@ public class MainActivity extends Activity {
     // Process-scoped: Activity recreation must not masquerade as a terminated operation.
     private static DiagnosticJournal diagnosticJournal;
     private RuntimeEnvironmentHistory runtimeEnvironmentHistory;
+    private SiteTransactionManager siteTransactionManager;
     private int runtimeIssueCount;
     private boolean rendererRecoveryScheduled;
     private volatile String diagnosticPage = "оболочка";
@@ -216,7 +217,58 @@ public class MainActivity extends Activity {
         configureWebView(homeWebView, true);
         configureWebView(webView, false);
         initializeRuntimeEnvironmentHistory();
-        loadInstalledSiteOrPrompt();
+        siteTransactionManager = new SiteTransactionManager(new SharedPreferencesTransactionStore(getPrefs()));
+        if (!startPendingSiteRecovery()) {
+            loadInstalledSiteOrPrompt();
+        }
+    }
+
+    private boolean startPendingSiteRecovery() {
+        if (siteTransactionManager == null || !siteTransactionManager.hasPendingTransaction()) {
+            return false;
+        }
+
+        busy = true;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        showProgress("Восстановление сайта", "Завершаю откат прерванной файловой операции…");
+        if (diagnosticJournal != null) diagnosticJournal.begin("восстановление сайта");
+        Thread worker = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String pendingBasePath = siteTransactionManager.getPendingBasePath();
+                    if (pendingBasePath.length() == 0 || !isAppStorageBase(new File(pendingBasePath))) {
+                        throw new IOException("Журнал восстановления указывает на неожиданный каталог данных.");
+                    }
+                    siteTransactionManager.recoverPendingTransaction();
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(MainActivity.this, "Прерванная операция отменена, предыдущий сайт восстановлен.", Toast.LENGTH_LONG).show();
+                            loadInstalledSiteOrPrompt();
+                        }
+                    });
+                } catch (final Exception error) {
+                    final String report = saveLastErrorReport(buildRuntimeReport("SITE-RECOVERY", error,
+                        "Автоматическое восстановление файловой операции не завершено. Журнал и резервные файлы сохранены."));
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            hideSiteWebViews();
+                            progressPanel.setVisibility(View.GONE);
+                            emptyPanel.setVisibility(View.VISIBLE);
+                            emptyTitle.setText("Требуется восстановление сайта");
+                            emptyDetails.setText("Автоматический откат не завершён. Не запускайте новую установку до устранения ошибки.");
+                            showErrorDialog("Ошибка восстановления сайта", report);
+                        }
+                    });
+                } finally {
+                    finishBusy();
+                }
+            }
+        }, "site-transaction-recovery");
+        worker.start();
+        return true;
     }
 
     @Override
@@ -1160,8 +1212,8 @@ public class MainActivity extends Activity {
             AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(fastUpdate ? "Быстро обновить сайт?" : "Полностью обновить сайт?")
                 .setMessage(fastUpdate
-                    ? "Старые файлы не удаляются. Из архива будут записаны только новые файлы и файлы с более свежей датой. Файлы, которых нет в архиве, останутся на телефоне."
-                    : "Старые файлы сайта будут удалены, затем выбранный архив будет распакован заново.")
+                    ? "Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Каждый файл из архива заменит одноимённый файл сайта. Файлы, которых нет в архиве, останутся на телефоне. Обновление сначала подготавливается отдельно; при ошибке предыдущая версия будет восстановлена."
+                    : "Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Новая версия сначала будет полностью распакована и проверена отдельно. Предыдущий сайт заменится только после успешной подготовки архива.")
                 .setNegativeButton("Отмена", null)
                 .setPositiveButton(fastUpdate ? "Быстро обновить" : "Полное обновление", new DialogInterface.OnClickListener() {
                     @Override
@@ -1192,7 +1244,9 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 File base = null;
-                File extractRoot = null;
+                File workingRoot = null;
+                File activeRoot = null;
+                boolean filesystemCommitted = false;
                 long extractedBytes = 0L;
                 int extractedFiles = 0;
                 int skippedFiles = 0;
@@ -1222,46 +1276,96 @@ public class MainActivity extends Activity {
                         throw new IOException("Не удалось создать каталог: " + base.getAbsolutePath());
                     }
 
-                    extractRoot = new File(base, EXTRACT_DIR_NAME);
-                    context.extractRoot = extractRoot;
+                    activeRoot = new File(base, EXTRACT_DIR_NAME);
                     context.freeBefore = base.getUsableSpace();
                     if (fastUpdate) {
-                        updateProgress("Быстрое обновление.\nСтарые файлы не удаляются.\nБудут записаны только новые и более свежие файлы.");
+                        context.setStage("UPDATE-STAGING", "подготовка временного каталога обновления");
+                        workingRoot = siteTransactionManager.prepareUpdateStaging(base);
+                        updateProgress("Быстрое обновление.\nСначала архив будет полностью подготовлен отдельно.\nКаждый файл update-архива заменит соответствующий файл сайта.");
                     } else {
-                        context.setStage("OLD-SITE-DELETE", "удаление предыдущего сайта");
-                        long deleteStartedAt = System.currentTimeMillis();
-                        DeleteStats deleted = clearExtractedSite(extractRoot, "Удаляю предыдущую версию сайта");
-                        deleteDurationMs = System.currentTimeMillis() - deleteStartedAt;
-                        updateProgress("Подготовка завершена.\nУдалено файлов: " + deleted.files + ", каталогов: " + deleted.directories + "\nНачинаю распаковку...");
+                        context.setStage("FULL-STAGING", "подготовка отдельной ревизии сайта");
+                        workingRoot = siteTransactionManager.prepareFullStaging(base);
+                        updateProgress("Предыдущий сайт остаётся активным.\nРаспаковываю новую версию в отдельный каталог…");
                     }
+                    context.extractRoot = workingRoot;
                     context.setStage("SITE-DIR-CREATE", "создание каталога распаковки");
-                    if (!extractRoot.exists() && !extractRoot.mkdirs()) {
-                        throw new IOException("Не удалось создать каталог сайта: " + extractRoot.getAbsolutePath());
+                    if (!workingRoot.exists() && !workingRoot.mkdirs()) {
+                        throw new IOException("Не удалось создать каталог сайта: " + workingRoot.getAbsolutePath());
                     }
 
                     context.setStage("ARCHIVE-OPEN", "открытие выбранного архива");
                     long extractStartedAt = System.currentTimeMillis();
                     ZipStats stats = archiveType == ARCHIVE_7Z
-                        ? extractSevenZ(uri, extractRoot, archiveName, fastUpdate, context.statistics)
-                        : extractZip(uri, extractRoot, archiveName, fastUpdate, context.statistics);
+                        ? extractSevenZ(uri, workingRoot, archiveName, false, context.statistics)
+                        : extractZip(uri, workingRoot, archiveName, false, context.statistics);
                     extractDurationMs = System.currentTimeMillis() - extractStartedAt;
                     extractedBytes = stats.bytes;
                     extractedFiles = stats.files;
-                    skippedFiles = stats.skippedFiles;
+                    skippedFiles = 0;
                     context.writtenBytes = stats.bytes;
                     context.writtenFiles = stats.files;
 
-                    context.setStage("INDEX-CHECK", "поиск стартового index.html");
-                    File index = findIndexInExtractedContent(extractRoot);
-                    if (index == null && fastUpdate && previousIndexFile.isFile()) {
-                        index = previousIndexFile;
-                    }
-                    if (index == null) {
-                        throw new IOException("В архиве не найден index.html. Поддерживается index.html в корне, site/index.html или один верхний каталог с index.html.");
+                    File index;
+                    if (fastUpdate) {
+                        context.setStage("UPDATE-APPLY", "применение подготовленного обновления с откатом");
+                        SiteTransactionManager.UpdateStoragePlan storagePlan = siteTransactionManager.summarizePreparedUpdate(base);
+                        long availableForUpdate = base.getUsableSpace();
+                        long requiredForUpdate = storagePlan.requiredFreeBytes();
+                        updateProgress("Проверяю место для безопасного обновления…\nФайлов: " + storagePlan.files
+                            + " (замена: " + storagePlan.replacedFiles + ", новые: " + storagePlan.newFiles + ")"
+                            + "\nUpdate-архив: " + formatBytes(storagePlan.sourceBytes)
+                            + "\nРезерв заменяемых файлов: " + formatBytes(storagePlan.backupBytes)
+                            + "\nТребуется свободно с запасом: " + formatBytes(requiredForUpdate)
+                            + "\nДоступно: " + formatBytes(availableForUpdate));
+                        if (base.getTotalSpace() > 0L && availableForUpdate < requiredForUpdate) {
+                            throw new IOException("Недостаточно свободного места для безопасного обновления с резервной копией заменяемых файлов.");
+                        }
+                        final File progressRoot = activeRoot;
+                        final String progressArchiveName = archiveName;
+                        final long progressArchiveSize = context.archiveSize;
+                        siteTransactionManager.applyPreparedUpdate(base, new SiteTransactionManager.ProgressListener() {
+                            @Override
+                            public void onProgress(int current, int total, String path) {
+                                updateProgress("Применяю обновление с возможностью отката…\nАрхив: " + progressArchiveName
+                                    + "\nФайлов: " + current + " / " + total
+                                    + "\nТекущий файл: " + path
+                                    + "\nРазмер архива: " + formatBytes(progressArchiveSize)
+                                    + "\nСвободно: " + formatBytes(progressRoot.getUsableSpace()));
+                            }
+                        });
+                        filesystemCommitted = true;
+                        context.extractRoot = activeRoot;
+                        index = findIndexInExtractedContent(activeRoot);
+                        if (index == null && previousIndexFile != null && previousIndexFile.isFile()) {
+                            index = previousIndexFile;
+                        }
+                    } else {
+                        context.setStage("INDEX-CHECK", "поиск стартового index.html в подготовленной ревизии");
+                        File stagedIndex = findIndexInExtractedContent(workingRoot);
+                        if (stagedIndex == null) {
+                            throw new IOException("В архиве не найден index.html. Поддерживается index.html в корне, site/index.html или один верхний каталог с index.html.");
+                        }
+                        String relativeIndexPath = relativePathWithinRoot(workingRoot, stagedIndex);
+                        context.setStage("SITE-VERIFY", "проверка подготовленной ревизии сайта");
+                        SiteStats stagedStats = summarizeInstalledSite(workingRoot);
+                        if (stagedStats.files != extractedFiles || stagedStats.bytes != extractedBytes) {
+                            throw new IOException("Проверка подготовленной ревизии не пройдена: сохранено "
+                                + stagedStats.files + " файлов (" + stagedStats.bytes + " байт), распаковщик сообщил "
+                                + extractedFiles + " файлов (" + extractedBytes + " байт).");
+                        }
+                        context.setStage("SITE-SWAP", "атомарное переключение подготовленной ревизии");
+                        activeRoot = siteTransactionManager.commitFullStaging(base);
+                        filesystemCommitted = true;
+                        context.extractRoot = activeRoot;
+                        index = new File(activeRoot, relativeIndexPath);
                     }
 
-                    context.setStage("SITE-VERIFY", "проверка распакованного сайта и подсчёт файлов");
-                    SiteStats installedStats = summarizeInstalledSite(extractRoot);
+                    context.setStage("INDEX-CHECK", "проверка стартового index.html активного сайта");
+                    if (index == null || !index.isFile()) {
+                        throw new IOException("После обновления не найден активный index.html.");
+                    }
+                    context.setStage("SITE-VERIFY", "проверка активного сайта и подсчёт файлов");
+                    SiteStats installedStats = summarizeInstalledSite(activeRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
                     context.setStage("STATE-SAVE", "сохранение сведений об установленном сайте");
                     saveInstalledSite(
@@ -1302,26 +1406,35 @@ public class MainActivity extends Activity {
                     String report = buildInstallErrorDetails(e, context);
                     context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
-                    if (extractRoot != null && !fastUpdate) {
+                    if (!filesystemCommitted && siteTransactionManager != null && siteTransactionManager.hasPendingTransaction()) {
                         try {
-                            clearExtractedSite(extractRoot, "Удаляю неполную распаковку");
-                            report += "\nОчистка неполной установки: завершена.\n";
+                            siteTransactionManager.recoverPendingTransaction();
+                            report += "\nОткат файловой операции: предыдущий сайт восстановлен.\n";
+                        } catch (Exception recoveryError) {
+                            report += "\nОткат файловой операции: не завершён; журнал и резервные файлы сохранены.\n"
+                                + DiagnosticReport.technicalDetails(recoveryError);
+                        }
+                    }
+                    if (!filesystemCommitted && workingRoot != null && workingRoot.exists() && !siteTransactionManager.hasPendingTransaction()) {
+                        try {
+                            siteTransactionManager.cleanupKnownWorkDirectories(base);
+                            report += "\nОчистка подготовленных временных файлов: завершена.\n";
                         } catch (Exception cleanupError) {
-                            report += "\nОчистка неполной установки: не завершена; часть файлов могла остаться.\n"
+                            report += "\nОчистка подготовленных временных файлов: не завершена.\n"
                                 + DiagnosticReport.technicalDetails(cleanupError);
                         }
-                    } else if (fastUpdate) {
-                        report += "\nБыстрое обновление: ранее записанные изменения не отменены.\n";
                     }
                     final String finalDiagnosticMessage = saveLastErrorReport(report);
 
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (fastUpdate && previousIndexFile != null && previousIndexFile.isFile()) {
-                                Toast.makeText(MainActivity.this, "Быстрое обновление не завершено.", Toast.LENGTH_LONG).show();
+                            if (previousIndexFile != null && previousIndexFile.isFile()) {
+                                Toast.makeText(MainActivity.this, fastUpdate
+                                    ? "Быстрое обновление отменено, предыдущий сайт восстановлен."
+                                    : "Новая версия не установлена, предыдущий сайт сохранён.", Toast.LENGTH_LONG).show();
                                 loadSite(previousIndexFile);
-                                showErrorDialog("Ошибка быстрого обновления", finalDiagnosticMessage);
+                                showErrorDialog(fastUpdate ? "Ошибка быстрого обновления" : "Ошибка полной установки", finalDiagnosticMessage);
                                 return;
                             }
                             hideSiteWebViews();
@@ -1356,8 +1469,11 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 File base = null;
-                File extractRoot = null;
+                File stagingRoot = null;
+                File activeRoot = null;
                 File demoArchive = null;
+                boolean filesystemCommitted = false;
+                final File previousIndexFile = currentIndexFile;
                 long totalStartedAt = System.currentTimeMillis();
                 long deleteDurationMs = 0L;
                 long extractDurationMs = 0L;
@@ -1383,35 +1499,50 @@ public class MainActivity extends Activity {
                         throw new IOException("Не удалось создать каталог: " + base.getAbsolutePath());
                     }
 
-                    extractRoot = new File(base, EXTRACT_DIR_NAME);
-                    context.extractRoot = extractRoot;
+                    activeRoot = new File(base, EXTRACT_DIR_NAME);
                     context.freeBefore = base.getUsableSpace();
-                    context.setStage("OLD-SITE-DELETE", "удаление предыдущего сайта");
-                    long deleteStartedAt = System.currentTimeMillis();
-                    DeleteStats deleted = clearExtractedSite(extractRoot, "Удаляю предыдущую версию сайта");
-                    deleteDurationMs = System.currentTimeMillis() - deleteStartedAt;
-                    updateProgress("Подготовка завершена.\nУдалено файлов: " + deleted.files + ", каталогов: " + deleted.directories + "\nРаспаковываю встроенный демо-сайт...");
+                    context.setStage("FULL-STAGING", "подготовка отдельной ревизии демо-сайта");
+                    stagingRoot = siteTransactionManager.prepareFullStaging(base);
+                    context.extractRoot = stagingRoot;
+                    updateProgress("Предыдущий сайт остаётся активным.\nРаспаковываю встроенный демо-сайт в отдельный каталог…");
 
                     context.setStage("SITE-DIR-CREATE", "создание каталога распаковки");
-                    if (!extractRoot.exists() && !extractRoot.mkdirs()) {
-                        throw new IOException("Не удалось создать каталог сайта: " + extractRoot.getAbsolutePath());
+                    if (!stagingRoot.exists() && !stagingRoot.mkdirs()) {
+                        throw new IOException("Не удалось создать каталог сайта: " + stagingRoot.getAbsolutePath());
                     }
 
                     context.setStage("ARCHIVE-OPEN", "открытие встроенного архива");
                     long extractStartedAt = System.currentTimeMillis();
-                    ZipStats stats = extractSevenZFromFile(demoArchive, extractRoot, BUILTIN_DEMO_ARCHIVE_NAME, false, context.statistics);
+                    ZipStats stats = extractSevenZFromFile(demoArchive, stagingRoot, BUILTIN_DEMO_ARCHIVE_NAME, false, context.statistics);
                     extractDurationMs = System.currentTimeMillis() - extractStartedAt;
                     context.writtenBytes = stats.bytes;
                     context.writtenFiles = stats.files;
 
-                    context.setStage("INDEX-CHECK", "поиск стартового index.html");
-                    File index = findIndexInExtractedContent(extractRoot);
-                    if (index == null) {
+                    context.setStage("INDEX-CHECK", "поиск стартового index.html в подготовленной ревизии");
+                    File stagedIndex = findIndexInExtractedContent(stagingRoot);
+                    if (stagedIndex == null) {
                         throw new IOException("Во встроенном демо-сайте не найден index.html.");
                     }
+                    String relativeIndexPath = relativePathWithinRoot(stagingRoot, stagedIndex);
 
-                    context.setStage("SITE-VERIFY", "проверка распакованного сайта и подсчёт файлов");
-                    SiteStats installedStats = summarizeInstalledSite(extractRoot);
+                    context.setStage("SITE-VERIFY", "проверка подготовленного демо-сайта");
+                    SiteStats stagedStats = summarizeInstalledSite(stagingRoot);
+                    if (stagedStats.files != stats.files || stagedStats.bytes != stats.bytes) {
+                        throw new IOException("Проверка подготовленного демо-сайта не пройдена: сохранено "
+                            + stagedStats.files + " файлов (" + stagedStats.bytes + " байт), распаковщик сообщил "
+                            + stats.files + " файлов (" + stats.bytes + " байт).");
+                    }
+                    context.setStage("SITE-SWAP", "атомарное переключение демо-сайта");
+                    activeRoot = siteTransactionManager.commitFullStaging(base);
+                    filesystemCommitted = true;
+                    context.extractRoot = activeRoot;
+                    File index = new File(activeRoot, relativeIndexPath);
+                    if (!index.isFile()) {
+                        throw new IOException("После переключения демо-сайта не найден активный index.html.");
+                    }
+
+                    context.setStage("SITE-VERIFY", "подсчёт файлов активного демо-сайта");
+                    SiteStats installedStats = summarizeInstalledSite(activeRoot);
                     long totalDurationMs = System.currentTimeMillis() - totalStartedAt;
                     context.setStage("STATE-SAVE", "сохранение сведений об установленном сайте");
                     saveInstalledSite(
@@ -1445,12 +1576,21 @@ public class MainActivity extends Activity {
                     String report = buildInstallErrorDetails(e, context);
                     context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
-                    if (extractRoot != null) {
+                    if (!filesystemCommitted && siteTransactionManager != null && siteTransactionManager.hasPendingTransaction()) {
                         try {
-                            clearExtractedSite(extractRoot, "Удаляю неполную распаковку демо-сайта");
-                            report += "\nОчистка неполной установки: завершена.\n";
+                            siteTransactionManager.recoverPendingTransaction();
+                            report += "\nОткат файловой операции: предыдущий сайт восстановлен.\n";
+                        } catch (Exception recoveryError) {
+                            report += "\nОткат файловой операции: не завершён; журнал и резервные файлы сохранены.\n"
+                                + DiagnosticReport.technicalDetails(recoveryError);
+                        }
+                    }
+                    if (!filesystemCommitted && stagingRoot != null && stagingRoot.exists() && !siteTransactionManager.hasPendingTransaction()) {
+                        try {
+                            siteTransactionManager.cleanupKnownWorkDirectories(base);
+                            report += "\nОчистка подготовленных временных файлов: завершена.\n";
                         } catch (Exception cleanupError) {
-                            report += "\nОчистка неполной установки: не завершена; часть файлов могла остаться.\n"
+                            report += "\nОчистка подготовленных временных файлов: не завершена.\n"
                                 + DiagnosticReport.technicalDetails(cleanupError);
                         }
                     }
@@ -1459,6 +1599,12 @@ public class MainActivity extends Activity {
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
+                            if (previousIndexFile != null && previousIndexFile.isFile()) {
+                                Toast.makeText(MainActivity.this, "Демо-сайт не установлен, предыдущий сайт сохранён.", Toast.LENGTH_LONG).show();
+                                loadSite(previousIndexFile);
+                                showErrorDialog("Ошибка загрузки демо-сайта", finalDiagnosticMessage);
+                                return;
+                            }
                             hideSiteWebViews();
                             progressPanel.setVisibility(View.GONE);
                             emptyPanel.setVisibility(View.VISIBLE);
@@ -1667,9 +1813,10 @@ public class MainActivity extends Activity {
                         context.skippedFiles = skippedFiles;
                         statistics.decode(new ArchiveStatistics.IOAction<Void>() { public Void run() throws IOException { zip.closeEntry(); return null; } });
                         long now = System.currentTimeMillis();
-                        if (now - lastUiUpdate > 500L) {
-                            lastUiUpdate = now;
-                            context.readBytes = countingStream.getBytesRead();
+                            if (now - lastUiUpdate > 500L) {
+                                lastUiUpdate = now;
+                                ensureExtractionReserve(extractRoot);
+                                context.readBytes = countingStream.getBytesRead();
                             context.writtenBytes = extractedBytes;
                             checkpointArchive(context);
                             updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
@@ -1698,6 +1845,7 @@ public class MainActivity extends Activity {
                             long now = System.currentTimeMillis();
                             if (now - lastUiUpdate > 500L) {
                                 lastUiUpdate = now;
+                                ensureExtractionReserve(extractRoot);
                                 checkpointArchive(context);
                                 updateProgress(buildProgressText(archiveName, archiveSize, countingStream.getBytesRead(), extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                             }
@@ -1863,6 +2011,7 @@ public class MainActivity extends Activity {
                         long now = System.currentTimeMillis();
                         if (now - lastUiUpdate > 500L) {
                             lastUiUpdate = now;
+                            ensureExtractionReserve(extractRoot);
                             context.readBytes = Math.max(context.readBytes, safeChannelPosition(readAheadChannel));
                             context.writtenBytes = extractedBytes;
                             checkpointArchive(context);
@@ -1893,6 +2042,7 @@ public class MainActivity extends Activity {
                                 long now = System.currentTimeMillis();
                                 if (now - lastUiUpdate > 500L) {
                                     lastUiUpdate = now;
+                                    ensureExtractionReserve(extractRoot);
                                     checkpointArchive(context);
                                     updateProgress(buildProgressText(archiveName, archiveSize, context.readBytes, extractedBytes, extractedFiles, skippedFiles, entries, extractRoot, fastUpdate, progress));
                                 }
@@ -2426,6 +2576,17 @@ public class MainActivity extends Activity {
         return text.toString();
     }
 
+    private void ensureExtractionReserve(File extractRoot) throws IOException {
+        if (extractRoot == null || extractRoot.getTotalSpace() <= 0L) {
+            return;
+        }
+        long available = extractRoot.getUsableSpace();
+        if (available < SiteTransactionManager.MINIMUM_FREE_SPACE_BYTES) {
+            throw new IOException("Недостаточно свободного места: для безопасной распаковки требуется сохранить резерв не менее "
+                + formatBytes(SiteTransactionManager.MINIMUM_FREE_SPACE_BYTES) + ", доступно " + formatBytes(available) + ".");
+        }
+    }
+
     private void appendProgressEstimate(StringBuilder text, long archiveSize, long readBytes, long extractedBytes, ProgressEstimator.Archive progress) {
         long now = ProgressEstimator.now();
         ProgressEstimator.Estimate speed = progress.written.update(extractedBytes, 0L, now);
@@ -2479,6 +2640,15 @@ public class MainActivity extends Activity {
         }
 
         return normalized;
+    }
+
+    private String relativePathWithinRoot(File root, File file) throws IOException {
+        String canonicalRoot = withTrailingSeparator(root.getCanonicalPath());
+        String canonicalFile = file.getCanonicalPath();
+        if (!canonicalFile.startsWith(canonicalRoot)) {
+            throw new IOException("Файл находится за пределами подготовленного сайта: " + canonicalFile);
+        }
+        return canonicalFile.substring(canonicalRoot.length()).replace(File.separatorChar, '/');
     }
 
     private File findIndexInExtractedContent(File extractRoot) {
@@ -3289,8 +3459,23 @@ public class MainActivity extends Activity {
     }
 
     private boolean openExternalUrl(String url) {
+        Uri target = Uri.parse(url);
+        String scheme = target.getScheme();
+        String normalizedScheme = scheme == null ? "" : scheme.toLowerCase(Locale.US);
+        if (!("http".equals(normalizedScheme)
+            || "https".equals(normalizedScheme)
+            || "mailto".equals(normalizedScheme)
+            || "tel".equals(normalizedScheme))) {
+            if (diagnosticJournal != null) {
+                diagnosticJournal.record("Заблокирована внешняя ссылка с протоколом: "
+                    + (normalizedScheme.length() == 0 ? "не указан" : normalizedScheme), false);
+            }
+            Toast.makeText(this, "Ссылка с неподдерживаемым протоколом заблокирована.", Toast.LENGTH_LONG).show();
+            return true;
+        }
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            Intent intent = new Intent(Intent.ACTION_VIEW, target);
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
             startActivity(intent);
         } catch (ActivityNotFoundException ignored) {
             return true;
