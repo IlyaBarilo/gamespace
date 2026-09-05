@@ -141,6 +141,7 @@ public class MainActivity extends Activity {
     private static DiagnosticJournal diagnosticJournal;
     private RuntimeEnvironmentHistory runtimeEnvironmentHistory;
     private SiteTransactionManager siteTransactionManager;
+    private Api33BackNavigationHandler api33BackNavigationHandler;
     private final LocalSiteRequestHandler localSiteRequestHandler = new LocalSiteRequestHandler();
     private int runtimeIssueCount;
     private boolean rendererRecoveryScheduled;
@@ -218,6 +219,9 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         initializeDiagnosticJournal();
         buildUi();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            api33BackNavigationHandler = new Api33BackNavigationHandler(this);
+        }
         configureWebView(homeWebView, true);
         configureWebView(webView, false);
         initializeRuntimeEnvironmentHistory();
@@ -684,6 +688,7 @@ public class MainActivity extends Activity {
             homeWebView.onResume();
             resumeHomePageMedia();
         }
+        updateSystemBackCallbackRegistration();
     }
 
     private void showContentWebView() {
@@ -702,6 +707,7 @@ public class MainActivity extends Activity {
             webView.setVisibility(View.VISIBLE);
             webView.onResume();
         }
+        updateSystemBackCallbackRegistration();
     }
 
     private void hideSiteWebViews() {
@@ -721,6 +727,7 @@ public class MainActivity extends Activity {
             webView.onPause();
             webView.setVisibility(View.GONE);
         }
+        updateSystemBackCallbackRegistration();
     }
 
     private void beginPendingContentLoad(String url) {
@@ -739,6 +746,7 @@ public class MainActivity extends Activity {
             webView.onResume();
         }
         startPageLoadingOverlay();
+        updateSystemBackCallbackRegistration();
     }
 
     private void cancelPendingContentLoadState() {
@@ -747,6 +755,7 @@ public class MainActivity extends Activity {
         contentVisualCallbackPending = false;
         pendingContentUrl = "";
         hidePageLoadingOverlay();
+        updateSystemBackCallbackRegistration();
     }
 
     private void startPageLoadingOverlay() {
@@ -908,6 +917,7 @@ public class MainActivity extends Activity {
             homeButton.setEnabled(false);
         }
         showTopBarPersistent();
+        updateSystemBackCallbackRegistration();
     }
 
     private File findInstalledIndex() {
@@ -1012,6 +1022,7 @@ public class MainActivity extends Activity {
         webView.loadUrl("about:blank");
         webView.clearHistory();
         webView.setVisibility(View.GONE);
+        updateSystemBackCallbackRegistration();
     }
 
     private void pauseHomePageMedia() {
@@ -1040,14 +1051,10 @@ public class MainActivity extends Activity {
         }
     }
 
-    private void navigateBackInSite() {
-        if (busy) {
-            return;
-        }
-
+    private boolean navigateBackWithinSite() {
         if (contentLoadPending) {
             showHomeWebView();
-            return;
+            return true;
         }
 
         if (webView != null && webView.getVisibility() == View.VISIBLE) {
@@ -1056,15 +1063,25 @@ public class MainActivity extends Activity {
             } else {
                 showHomeWebView();
             }
-            return;
+            return true;
         }
 
         if (homeWebView != null && homeWebView.getVisibility() == View.VISIBLE && homeWebView.canGoBack()) {
             homeWebView.goBack();
+            return true;
+        }
+
+        return false;
+    }
+
+    private void navigateBackInSite() {
+        if (busy) {
             return;
         }
 
-        Toast.makeText(this, "Нет предыдущей страницы.", Toast.LENGTH_SHORT).show();
+        if (!navigateBackWithinSite()) {
+            Toast.makeText(this, "Нет предыдущей страницы.", Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void openSiteHome() {
@@ -1106,6 +1123,7 @@ public class MainActivity extends Activity {
                     demoButton.setEnabled(false);
                 }
                 showTopBarPersistent();
+                updateSystemBackCallbackRegistration();
             }
         });
     }
@@ -1175,6 +1193,7 @@ public class MainActivity extends Activity {
                 if (shouldAutoHideTopBar()) {
                     startTopBarCountdown();
                 }
+                updateSystemBackCallbackRegistration();
             }
         });
     }
@@ -3504,39 +3523,59 @@ public class MainActivity extends Activity {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
     }
 
-    @Override
-    public void onBackPressed() {
+    private boolean handleSystemBackNavigation() {
         if (progressPanel.getVisibility() == View.VISIBLE) {
             Toast.makeText(this, operationCancelable ? "Используйте кнопку «Отменить операцию»." : "Дождитесь завершения операции.", Toast.LENGTH_SHORT).show();
-            return;
+            return true;
         }
 
+        return navigateBackWithinSite();
+    }
+
+    private boolean shouldInterceptSystemBack() {
+        if (progressPanel != null && progressPanel.getVisibility() == View.VISIBLE) {
+            return true;
+        }
         if (contentLoadPending) {
-            showHomeWebView();
-            return;
+            return true;
         }
-
         if (webView != null && webView.getVisibility() == View.VISIBLE) {
-            if (webView.canGoBack()) {
-                webView.goBack();
-            } else {
-                showHomeWebView();
-            }
-            return;
+            return true;
         }
+        return homeWebView != null
+            && homeWebView.getVisibility() == View.VISIBLE
+            && homeWebView.canGoBack();
+    }
 
-        if (homeWebView != null && homeWebView.getVisibility() == View.VISIBLE && homeWebView.canGoBack()) {
-            homeWebView.goBack();
-            return;
+    private void updateSystemBackCallbackRegistration() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && api33BackNavigationHandler != null) {
+            api33BackNavigationHandler.setEnabled(shouldInterceptSystemBack());
         }
+    }
 
-        super.onBackPressed();
+    private void handleApi33SystemBack() {
+        if (!handleSystemBackNavigation()) {
+            updateSystemBackCallbackRegistration();
+            moveTaskToBack(true);
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void onBackPressed() {
+        if (!handleSystemBackNavigation()) {
+            super.onBackPressed();
+        }
     }
 
     @Override
     protected void onDestroy() {
         mainHandler.removeCallbacks(topBarCountdownRunnable);
         cancelPendingContentLoadState();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && api33BackNavigationHandler != null) {
+            api33BackNavigationHandler.destroy();
+            api33BackNavigationHandler = null;
+        }
         if (homeWebView != null) {
             homeWebView.destroy();
             homeWebView = null;
@@ -3644,6 +3683,7 @@ public class MainActivity extends Activity {
             if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
             // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
             view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
+            updateSystemBackCallbackRegistration();
         }
 
         @Override
@@ -3693,9 +3733,49 @@ public class MainActivity extends Activity {
                     webView.setVisibility(View.GONE);
                     emptyPanel.setVisibility(View.VISIBLE);
                     showTopBarPersistent();
+                    updateSystemBackCallbackRegistration();
                 } });
             }
             return true;
+        }
+    }
+
+    @android.annotation.TargetApi(Build.VERSION_CODES.TIRAMISU)
+    private static final class Api33BackNavigationHandler {
+        private final MainActivity activity;
+        private final android.window.OnBackInvokedCallback callback;
+        private boolean registered;
+
+        Api33BackNavigationHandler(final MainActivity activity) {
+            this.activity = activity;
+            this.callback = new android.window.OnBackInvokedCallback() {
+                @Override
+                public void onBackInvoked() {
+                    activity.handleApi33SystemBack();
+                }
+            };
+        }
+
+        void setEnabled(boolean enabled) {
+            if (enabled == registered) {
+                return;
+            }
+            if (enabled) {
+                activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+                    callback
+                );
+            } else {
+                activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+            }
+            registered = enabled;
+        }
+
+        void destroy() {
+            if (registered) {
+                activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+                registered = false;
+            }
         }
     }
 

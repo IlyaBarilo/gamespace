@@ -67,6 +67,9 @@ $checks = @{
     "operation cancellation" = 'ensureOperationNotCancelled\(\)'
     "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
     "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'
+    "API 33 back callback" = 'new android\.window\.OnBackInvokedCallback\(\)'
+    "API 33 guarded registration" = 'Build\.VERSION\.SDK_INT >= Build\.VERSION_CODES\.TIRAMISU'
+    "legacy back fallback" = 'public void onBackPressed\(\)'
 }
 foreach ($entry in $checks.GetEnumerator()) {
     if ($activity -notmatch $entry.Value) { throw "Missing diagnostic wiring: $($entry.Key)" }
@@ -77,4 +80,12 @@ if ($activity -match 'finally\s*\{\s*context\.stage\s*=') {
 if ($activity -match 'Build\.SERIAL|Build\.getSerial|ANDROID_ID') {
     throw "Diagnostic reports must not collect unique device identifiers."
 }
-Write-Host "Diagnostic wiring: $($checks.Count + 2) checks passed. Android UI still requires a device test."
+$manifest = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loader\app\src\main\AndroidManifest.xml") -Raw -Encoding UTF8
+if ($manifest -notmatch 'android:enableOnBackInvokedCallback="true"') {
+    throw "Predictive back must be enabled in AndroidManifest.xml."
+}
+$appGradle = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loader\app\build.gradle") -Raw -Encoding UTF8
+if ($appGradle -notmatch 'minSdk\s+23') {
+    throw "Back navigation changes must preserve Android 6 / minSdk 23."
+}
+Write-Host "Diagnostic wiring: $($checks.Count + 4) checks passed. Android UI still requires a device test."
