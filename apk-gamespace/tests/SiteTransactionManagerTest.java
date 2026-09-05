@@ -196,6 +196,49 @@ public final class SiteTransactionManagerTest {
         check(!manager.hasPendingTransaction(), "cancelled update clears transaction marker after rollback");
     }
 
+    private static void testInterruptedBackupPreservesOriginal(File root) throws Exception {
+        for (final int cancelAt : new int[] {3, 4}) {
+            File base = child(root, "cancel-" + cancelAt);
+            MemoryStore store = new MemoryStore();
+            SiteTransactionManager manager = new SiteTransactionManager(store);
+            File active = child(base, SiteTransactionManager.ACTIVE_DIRECTORY_NAME);
+            byte[] original = new byte[600000];
+            java.util.Arrays.fill(original, (byte) 65);
+            active.mkdirs();
+            Files.write(child(active, "index.html").toPath(), original);
+            write(manager.prepareUpdateStaging(base), "index.html", "new");
+            final int[] calls = {0};
+            try {
+                manager.applyPreparedUpdate(base, null, new SiteTransactionManager.CancellationSignal() {
+                    @Override public void throwIfCancelled() throws java.io.IOException {
+                        if (++calls[0] == cancelAt) throw new java.io.IOException("cancelled during backup");
+                    }
+                });
+                throw new AssertionError("backup cancellation must fail");
+            } catch (java.io.IOException expected) {
+                check(expected.getMessage().contains("cancelled during backup"), "backup cancellation cause retained");
+            }
+            check(java.util.Arrays.equals(original, Files.readAllBytes(child(active, "index.html").toPath())), "incomplete backup never replaces original");
+            check(!manager.hasPendingTransaction(), "safe cancellation clears journal");
+            check(!child(base, SiteTransactionManager.UPDATE_BACKUP_TEMP_NAME).exists(), "incomplete backup is cleaned");
+        }
+    }
+
+    private static void testProcessDeathDuringBackup(File root) throws Exception {
+        MemoryStore store = new MemoryStore();
+        SiteTransactionManager manager = new SiteTransactionManager(store);
+        File active = child(root, SiteTransactionManager.ACTIVE_DIRECTORY_NAME);
+        write(active, "index.html", "already-updated");
+        write(active, "large.bin", "original-large-file");
+        write(child(root, SiteTransactionManager.UPDATE_BACKUP_DIRECTORY_NAME), "index.html", "old-index");
+        write(root, SiteTransactionManager.UPDATE_BACKUP_TEMP_NAME, "partial-backup");
+        store.begin(SiteTransactionManager.TYPE_UPDATE, root.getCanonicalPath(), SiteTransactionManager.PHASE_PREPARED);
+        new SiteTransactionManager(store).recoverPendingTransaction();
+        check("old-index".equals(read(active, "index.html")), "completed backup restores earlier replacement");
+        check("original-large-file".equals(read(active, "large.bin")), "process death leaves file with incomplete backup intact");
+        check(!child(root, SiteTransactionManager.UPDATE_BACKUP_TEMP_NAME).exists(), "recovery discards unpublished backup");
+    }
+
     public static void main(String[] args) throws Exception {
         File parent = args.length == 0 ? new File(".") : new File(args[0]);
         File suite = Files.createTempDirectory(parent.toPath(), "site-transaction-").toFile();
@@ -207,6 +250,8 @@ public final class SiteTransactionManagerTest {
             testInterruptedUpdateRecovery(child(suite, "update-recovery"));
             testUpdateRejectsDirectoryConflictBeforeTransaction(child(suite, "update-directory-conflict"));
             testCancelledUpdateRollsBack(child(suite, "update-cancellation"));
+            testInterruptedBackupPreservesOriginal(child(suite, "backup-cancellation"));
+            testProcessDeathDuringBackup(child(suite, "backup-process-death"));
             System.out.println("Site transactions: " + checks + " checks passed.");
         } finally {
             delete(suite);

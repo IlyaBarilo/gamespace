@@ -20,6 +20,7 @@ final class SiteTransactionManager {
     static final String UPDATE_STAGING_DIRECTORY_NAME = ".gamespace-update-staging";
     static final String UPDATE_BACKUP_DIRECTORY_NAME = ".gamespace-update-backup";
     static final String UPDATE_CREATED_DIRECTORY_NAME = ".gamespace-update-created";
+    static final String UPDATE_BACKUP_TEMP_NAME = ".gamespace-update-backup.tmp";
     static final long MINIMUM_FREE_SPACE_BYTES = 512L * 1024L * 1024L;
 
     static final String TYPE_FULL = "full-swap";
@@ -160,7 +161,7 @@ final class SiteTransactionManager {
                 File target = safeChild(active, relative);
                 if (target.isFile()) {
                     File backupFile = safeChild(backup, relative);
-                    copyFileDurable(target, backupFile, cancellation);
+                    prepareBackup(base, target, backupFile, cancellation);
                 } else {
                     File marker = safeChild(created, relative);
                     createDurableMarker(marker);
@@ -330,6 +331,21 @@ final class SiteTransactionManager {
         deleteRecursively(child(base, UPDATE_STAGING_DIRECTORY_NAME));
         deleteRecursively(child(base, UPDATE_BACKUP_DIRECTORY_NAME));
         deleteRecursively(child(base, UPDATE_CREATED_DIRECTORY_NAME));
+        deleteRecursively(child(base, UPDATE_BACKUP_TEMP_NAME));
+    }
+
+    private static void prepareBackup(File base, File source, File backup, CancellationSignal cancellation) throws IOException {
+        // Recovery enumerates only completed backups. Keep a partially copied file
+        // outside that tree, including after process death or a failed close/sync.
+        File temporary = child(base, UPDATE_BACKUP_TEMP_NAME);
+        copyFileDurable(source, temporary, cancellation);
+        if (temporary.length() != source.length()) {
+            throw new IOException("Размер резервной копии не совпадает с исходным файлом.");
+        }
+        ensureDirectory(backup.getParentFile());
+        if (!temporary.renameTo(backup)) {
+            throw new IOException("Не удалось завершить подготовку резервной копии.");
+        }
     }
 
     private void beginTransaction(String type, File base, String phase) throws IOException {

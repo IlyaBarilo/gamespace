@@ -35,13 +35,13 @@ export function isIgnoredArchivePath(path) {
   return path === "__MACOSX" || path.startsWith("__MACOSX/") || path.endsWith("/.DS_Store");
 }
 
-export function validateEntries(entries) {
+export function validateEntries(entries, { includeIgnored = false } = {}) {
   const seen = new Set();
   const result = [];
 
   for (const entry of entries) {
     const path = normalizeArchivePath(entry.path);
-    if (!path || isIgnoredArchivePath(path)) {
+    if (!path || (!includeIgnored && isIgnoredArchivePath(path))) {
       continue;
     }
     if (seen.has(path)) {
@@ -101,7 +101,7 @@ export function dirname(path) {
   return separator === -1 ? "" : path.slice(0, separator);
 }
 
-export function parse7zSlt(lines) {
+export function parse7zSlt(lines, options) {
   const entries = [];
   let inEntries = false;
   let current = {};
@@ -143,7 +143,7 @@ export function parse7zSlt(lines) {
   }
   flush();
 
-  return validateEntries(entries);
+  return validateEntries(entries, options);
 }
 
 export function summarizeEntries(entries) {

@@ -22,7 +22,7 @@ function mockNavigator(t, { quota = 2 ** 31, createError = null, writeError = nu
       } };
     },
   };
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { storage: {
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { locks: { request: async (_name, _options, action) => action() }, storage: {
     estimate: async () => ({ quota, usage: 0 }), getDirectory: async () => directory, persist: async () => false,
   } } });
   t.after(() => previous ? Object.defineProperty(globalThis, "navigator", previous) : delete globalThis.navigator);
@@ -54,6 +54,22 @@ test("ZIP with no index reports index-check instead of generic extraction", asyn
   await assert.rejects(extractZip({ file: await archive("site/asset.txt"), destination: "test", requireIndex: true }), (error) => {
     assert.equal(error.diagnosticContext.stage, "index-check");
     assert.equal(createDiagnosticReport(error).code, "GS-INDEX-CHECK");
+    return true;
+  });
+});
+
+test("ZIP rejects changed payload bytes even when file sizes still match", async (t) => {
+  mockNavigator(t);
+  const valid = await archive();
+  const bytes = Buffer.from(await valid.arrayBuffer());
+  const offset = bytes.indexOf(Buffer.from("<!doctype html>"));
+  assert.ok(offset >= 0);
+  bytes[offset] ^= 1;
+  await assert.rejects(extractZip({
+    file: new File([bytes], "crc-corrupt.zip"), destination: "test", requireIndex: true,
+  }), (error) => {
+    assert.equal(error.diagnosticContext.stage, "file-extract");
+    assert.match(error.message, /signature|CRC/i);
     return true;
   });
 });

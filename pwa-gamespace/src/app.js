@@ -33,6 +33,7 @@ import {
 import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-history.js";
 import { isAllowedExternalUrl } from "./navigation-policy.js";
 import { isAbortError } from "./abort.js";
+import { createScreenWakeLock } from "./screen-wake-lock.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -50,6 +51,9 @@ let siteInterfaceRefreshTimer = null;
 let licenseModalPreviousFocus = null;
 let licenseDocumentRequest = 0;
 const progressEstimator = new ProgressEstimator();
+const importScreenLock = createScreenWakeLock({
+  onStatus(message) { elements.progressScreen.textContent = message; },
+});
 let progressUnit = null;
 let lastStorageEstimate = null;
 const diagnosticSession = new DiagnosticSession();
@@ -420,6 +424,7 @@ async function importSelectedFile(file, source = "локальный архив"
   setBusy(true);
   activeImportController = new AbortController();
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
+  importScreenLock.start();
   let outcome = "ошибка";
   archiveStatistics = new ArchiveStatistics(file, diagnosticContext.operation);
   try {
@@ -451,6 +456,7 @@ async function importSelectedFile(file, source = "локальный архив"
       setStatus("Не удалось обработать архив", "bad");
     }
   } finally {
+    await importScreenLock.stop();
     const statistics = archiveStatistics.finish(outcome, {
       version: APP_VERSION,
       browser: formatBrowserEnvironment(browserEnvironment),
@@ -625,7 +631,7 @@ async function verifyStoredSite() {
   setBusy(true);
   setStatus("Перепроверяю файлы сайта", "neutral");
   try {
-    const result = await refreshInstalledSiteStatistics(state);
+    const result = await refreshInstalledSiteStatistics();
     state = result.state;
     renderState();
     await refreshStorage();
@@ -989,7 +995,7 @@ async function rollbackPwaRelease() {
 }
 
 async function initializeCapabilities() {
-  const required = Boolean(window.isSecureContext && navigator.storage?.getDirectory && window.WebAssembly && window.Worker);
+  const required = Boolean(window.isSecureContext && navigator.storage?.getDirectory && navigator.locks?.request && window.WebAssembly && window.Worker);
   if (!required) {
     elements.capabilityLabel.textContent = "Браузер не поддерживает обязательные функции";
     elements.capabilityLabel.dataset.tone = "bad";
@@ -1045,7 +1051,7 @@ async function initialize() {
     renderState();
     if (!state) finishBoot();
     // Restore an interrupted update before exposing potentially half-updated pages.
-    try { await cleanupOrphans(state); }
+    try { await cleanupOrphans(); }
     catch (error) {
       error.diagnosticContext = { ...error.diagnosticContext, stage: "startup-recovery", stageLabel: "Восстановление / очистка при запуске" };
       throw error;
@@ -1053,7 +1059,7 @@ async function initialize() {
     state = await readInstalledSiteState();
     diagnosticSession.site(state);
     if (state && !state.storageVerifiedAt) {
-      const result = await refreshInstalledSiteStatistics(state);
+      const result = await refreshInstalledSiteStatistics();
       state = result.state;
     }
     renderState();

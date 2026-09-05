@@ -33,7 +33,7 @@ function sevenZipCandidates() {
   return [...new Set(candidates.filter(Boolean))];
 }
 
-function findSevenZip() {
+export function findSevenZip() {
   for (const candidate of sevenZipCandidates()) {
     const probe = spawnSync(candidate, ["i"], { stdio: "ignore", windowsHide: true });
     if (!probe.error && probe.status === 0) return candidate;

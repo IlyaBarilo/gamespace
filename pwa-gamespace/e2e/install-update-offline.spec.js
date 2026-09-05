@@ -1,15 +1,19 @@
 import { test, expect } from "@playwright/test";
+import { fileURLToPath } from "node:url";
 
 test("installs demo, applies update and opens the site offline", async ({ page, context }) => {
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("/?gamespaceMode=app&gamespaceE2E=1");
+  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+  await page.goto("./");
   await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
 
   await page.locator("#demoButton").click();
   await expect(page.locator("#installedState")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
 
-  await page.locator("#e2eUpdateFixture").click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator("#fastUpdateButton").click();
+  await (await chooser).setFiles(fileURLToPath(new URL("../test/fixtures/gamespace-update.zip", import.meta.url)));
   await expect(page.locator("#progressPanel")).toBeVisible();
   await expect(page.locator("#progressPhase")).toHaveText("Готово", { timeout: 90_000 });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе", { timeout: 90_000 });

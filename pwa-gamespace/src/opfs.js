@@ -1,3 +1,5 @@
+import { throwIfAborted } from "./abort.js";
+
 export async function getOpfsRoot() {
   if (!navigator.storage?.getDirectory) {
     throw new Error("Браузер не поддерживает OPFS.");
@@ -57,6 +59,10 @@ export async function copyFile(sourceFileHandle, targetFileHandle, signal) {
   const source = await sourceFileHandle.getFile();
   const writable = await targetFileHandle.createWritable({ keepExistingData: false });
   await source.stream().pipeTo(writable, { signal });
+  if ((await targetFileHandle.getFile()).size !== source.size) {
+    throw new Error("Размер сохранённого файла не совпадает с исходным.");
+  }
+  return source.size;
 }
 
 export async function collectFiles(directory, prefix = "") {
@@ -64,7 +70,7 @@ export async function collectFiles(directory, prefix = "") {
   for await (const [name, handle] of directory.entries()) {
     const path = prefix ? `${prefix}/${name}` : name;
     if (handle.kind === "directory") {
-      files.push(...await collectFiles(handle, path));
+      for (const file of await collectFiles(handle, path)) files.push(file);
     } else {
       files.push({ path, handle });
     }
@@ -127,10 +133,15 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
   const sourceFiles = await collectFiles(sourceDirectory);
   const createdPaths = [];
   const restoredPaths = [];
+  let sourceBytes = 0;
+  let backupBytes = 0;
+  let journalSaved = false;
 
   try {
+    // Prepare every backup before publishing the complete rollback plan once.
+    // Its schema stays readable by older releases; journal serialization is O(n).
     for (let index = 0; index < sourceFiles.length; index += 1) {
-      signal?.throwIfAborted?.();
+      throwIfAborted(signal);
       const item = sourceFiles[index];
       const targetFilePath = `${targetPath}/${item.path}`;
       const rollbackFilePath = `${rollbackPath}/${item.path}`;
@@ -138,21 +149,32 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
       const existing = await getUpdateTargetFile(root, targetFilePath);
       if (existing) {
         const backup = await getFileHandleAt(root, rollbackFilePath, true);
-        await copyFile(existing, backup, signal);
+        backupBytes += await copyFile(existing, backup, signal);
         restoredPaths.push(item.path);
       } else {
         createdPaths.push(item.path);
       }
+    }
 
-      onDiagnostic?.({ type: "file-stage", phase: "journal-save", label: "Сохранение журнала перед заменой файла", path: item.path });
-      await onJournal?.({ createdPaths: [...createdPaths], restoredPaths: [...restoredPaths] });
+    throwIfAborted(signal);
+    onDiagnostic?.({ type: "phase", phase: "journal-save", label: "Сохраняю план отката подготовленного обновления…" });
+    if (!onJournal) throw new Error("Для безопасного обновления требуется постоянный журнал отката.");
+    await onJournal({ createdPaths, restoredPaths });
+    journalSaved = true;
 
+    for (let index = 0; index < sourceFiles.length; index += 1) {
+      throwIfAborted(signal);
+      const item = sourceFiles[index];
+      const targetFilePath = `${targetPath}/${item.path}`;
       onDiagnostic?.({ type: "file-stage", phase: "update-write", label: "Запись обновлённого файла в OPFS", path: item.path });
       const target = await getFileHandleAt(root, targetFilePath, true);
-      await copyFile(item.handle, target, signal);
+      sourceBytes += await copyFile(item.handle, target, signal);
       onProgress?.({ current: index + 1, total: sourceFiles.length, path: item.path });
     }
+    throwIfAborted(signal);
   } catch (error) {
+    // Before the journal is committed, only staging/backup files have changed.
+    if (!journalSaved) throw error;
     try {
       const complete = await rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths });
       if (!complete) error.rollbackIncomplete = true;
@@ -164,7 +186,7 @@ export async function mergeDirectoryWithRollback({ sourcePath, targetPath, rollb
     throw error;
   }
 
-  return { files: sourceFiles.length, createdPaths, restoredPaths };
+  return { files: sourceFiles.length, createdPaths, restoredPaths, sourceBytes, backupBytes };
 }
 
 export async function rollbackMergedDirectory({ targetPath, rollbackPath, createdPaths, restoredPaths }) {

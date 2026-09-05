@@ -11,7 +11,8 @@ async function createZip(entries) {
 
 async function openApp(page) {
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("/?gamespaceMode=app&gamespaceE2E=1");
+  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+  await page.goto("./");
   await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
 }
 

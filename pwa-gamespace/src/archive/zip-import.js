@@ -14,7 +14,7 @@ export async function extractZip({ file, destination, requireIndex, onEvent, sig
   const callback = onEvent;
   onEvent = (event) => { diagnostics.observe(event); callback?.(event); };
   const source = new BlobReader(measuredBlob(file, statistics));
-  const reader = new ZipReader(source, { checkAmbiguity: true });
+  const reader = new ZipReader(source, { checkAmbiguity: true, checkSignature: true });
   let failure = null;
   try {
     throwIfAborted(signal);

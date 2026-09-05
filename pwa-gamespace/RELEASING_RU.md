@@ -42,6 +42,8 @@ Release workflow извлекает их во временный `release-packag
    ```powershell
    npm install
    npm test
+   npx playwright install chromium
+   npm run test:e2e
    npm run verify:runtime
    ```
 

@@ -6,7 +6,9 @@ import path from "node:path";
 export const scriptsDirectory = path.dirname(fileURLToPath(import.meta.url));
 export const projectDirectory = path.resolve(scriptsDirectory, "..");
 export const workspaceDirectory = path.resolve(projectDirectory, "..");
-export const distDirectory = path.join(projectDirectory, "dist");
+export const distDirectory = process.env.GAMESPACE_DIST_DIRECTORY
+  ? path.resolve(process.env.GAMESPACE_DIST_DIRECTORY)
+  : path.join(projectDirectory, "dist");
 export const releasesDirectory = process.env.GAMESPACE_RELEASES_DIRECTORY
   ? path.resolve(process.env.GAMESPACE_RELEASES_DIRECTORY)
   : path.join(projectDirectory, "release-packages");

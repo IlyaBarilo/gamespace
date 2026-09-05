@@ -1,5 +1,6 @@
 import SevenZipFactory from "../vendor/7zz.js";
-import { dirname, findIndexEntry, parse7zSlt, summarizeEntries } from "./archive-plan.js";
+import { dirname, findIndexEntry, isIgnoredArchivePath, parse7zSlt, summarizeEntries } from "./archive-plan.js";
+import { getOpfsRoot, removePath } from "../opfs.js";
 import { OperationDiagnostics, serializeDiagnosticError } from "../diagnostics.js";
 import { ArchiveMetrics } from "../archive-statistics.js";
 import { instrumentSevenZip } from "./sevenzip-statistics.js";
@@ -112,9 +113,13 @@ async function extractArchive({ file, destination, requireIndex }, emit, diagnos
   const listExit = await statistics.async("engine", () => sevenZip.callMain(["l", "-slt", ARCHIVE_PATH]));
   if (listExit !== 0) throw new Error(`Не удалось прочитать 7z (код ${listExit}). Архив может быть повреждён или зашифрован.`);
 
-  const entries = parse7zSlt(listLines);
+  const allEntries = parse7zSlt(listLines, { includeIgnored: true });
+  const entries = allEntries.filter((entry) => !isIgnoredArchivePath(entry.path));
   statistics.details.method = listLines.find((line) => line.startsWith("Method = "))?.slice(9) || "";
   const summary = summarizeEntries(entries);
+  // 7z extracts the original names. Count temporary system files in the quota
+  // estimate too, then remove them before the installed-content verification.
+  const extractedSummary = summarizeEntries(allEntries);
   emit({ type: "phase", phase: "index-check", label: "Проверяю стартовую страницу в 7z…" });
   const indexEntry = findIndexEntry(entries);
   if (requireIndex && !indexEntry) {
@@ -125,8 +130,8 @@ async function extractArchive({ file, destination, requireIndex }, emit, diagnos
   const storage = await navigator.storage.estimate();
   const quotaKnown = Number.isFinite(storage.quota) && storage.quota > 0;
   const availableBytes = quotaKnown ? Math.max(0, storage.quota - (storage.usage || 0)) : null;
-  const reserveBytes = Math.max(512 * 1024 * 1024, Math.ceil(summary.uncompressedBytes * 0.1));
-  const requiredBytes = summary.uncompressedBytes + reserveBytes;
+  const reserveBytes = Math.max(512 * 1024 * 1024, Math.ceil(extractedSummary.uncompressedBytes * 0.1));
+  const requiredBytes = extractedSummary.uncompressedBytes + reserveBytes;
   emit({
     type: "archive-info",
     archiveBytes: file.size,
@@ -144,14 +149,14 @@ async function extractArchive({ file, destination, requireIndex }, emit, diagnos
   let lastProgressAt = 0;
   sevenZip.OPFS.onWrite = (_path, bytesWritten) => {
     processedBytes += bytesWritten;
-    diagnostics.observe({ type: "progress", processedBytes, totalBytes: summary.uncompressedBytes, currentFile });
+    diagnostics.observe({ type: "progress", processedBytes, totalBytes: extractedSummary.uncompressedBytes, currentFile });
     const now = performance.now();
     if (now - lastProgressAt >= PROGRESS_INTERVAL_MS) {
       lastProgressAt = now;
       emit({
         type: "progress",
         processedBytes,
-        totalBytes: summary.uncompressedBytes,
+        totalBytes: extractedSummary.uncompressedBytes,
         currentFile,
       });
     }
@@ -163,10 +168,16 @@ async function extractArchive({ file, destination, requireIndex }, emit, diagnos
   const extractExit = await statistics.async("engine", () => sevenZip.callMain(["x", ARCHIVE_PATH, `-o${outputPath}`, "-y", "-bb1", "-bso1"]));
   if (extractExit !== 0) throw new Error(`Распаковка 7z завершилась с кодом ${extractExit}.`);
 
+  emit({ type: "phase", phase: "archive-cleanup", label: "Удаляю служебные файлы архива…" });
+  const root = await getOpfsRoot();
+  for (const entry of allEntries) {
+    if (isIgnoredArchivePath(entry.path)) await removePath(root, `${destination}/${entry.path}`);
+  }
+
   emit({
     type: "progress",
     processedBytes,
-    totalBytes: summary.uncompressedBytes,
+    totalBytes: extractedSummary.uncompressedBytes,
     currentFile: null,
   });
   return {

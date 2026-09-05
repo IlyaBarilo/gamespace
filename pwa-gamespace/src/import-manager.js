@@ -22,6 +22,7 @@ import {
   summarizeMergeStorage,
 } from "./opfs.js";
 import { throwIfAborted } from "./abort.js";
+import { withSiteOperation } from "./site-operation-lock.js";
 
 const APP_ROOT = "gamespace";
 const REVISIONS_ROOT = `${APP_ROOT}/revisions`;
@@ -98,7 +99,14 @@ export async function requestPersistentStorage() {
   }
 }
 
-export async function installFullArchive(file, onEvent, { signal } = {}) {
+export function installFullArchive(file, onEvent, options = {}) {
+  return withSiteOperation(() => installFullArchiveUnlocked(file, onEvent, options), {
+    signal: options.signal,
+    onWait: () => onEvent?.({ type: "phase", phase: "storage-lock", label: "Ожидаю доступа к хранилищу…" }),
+  });
+}
+
+async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
   const diagnostics = new OperationDiagnostics("полная установка", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let revisionPath = null;
@@ -110,7 +118,7 @@ export async function installFullArchive(file, onEvent, { signal } = {}) {
     onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
-    await recoverInterruptedOperation();
+    await recoverInterruptedOperationUnlocked();
     onEvent({ type: "phase", phase: "state-read", label: "Чтение сведений об установленном сайте из IndexedDB" });
     const previousState = await readState();
     const revision = jobId();
@@ -149,6 +157,7 @@ export async function installFullArchive(file, onEvent, { signal } = {}) {
       storageVerifiedAt: Date.now(),
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
+    throwIfAborted(signal);
     await writeState(state);
     committed = true;
     emitServiceWorkerStateChanged();
@@ -157,7 +166,7 @@ export async function installFullArchive(file, onEvent, { signal } = {}) {
       onEvent?.({ type: "phase", phase: "cleanup", label: "Удаляю предыдущую версию сайта…" });
       await cleanupAfterCommit(() => removePath(root, previousState.revisionPath), onEvent, "Очистка предыдущей ревизии после успешной установки");
     }
-    await cleanupAfterCommit(() => cleanupOrphans(state), onEvent, "Очистка временных файлов после успешной установки");
+    await cleanupAfterCommit(() => cleanupOrphansUnlocked(), onEvent, "Очистка временных файлов после успешной установки");
     return state;
   } catch (error) {
     const failure = diagnostics.failure(error);
@@ -170,7 +179,14 @@ export async function installFullArchive(file, onEvent, { signal } = {}) {
   }
 }
 
-export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
+export function applyUpdateArchive(file, onEvent, options = {}) {
+  return withSiteOperation(() => applyUpdateArchiveUnlocked(file, onEvent, options), {
+    signal: options.signal,
+    onWait: () => onEvent?.({ type: "phase", phase: "storage-lock", label: "Ожидаю доступа к хранилищу…" }),
+  });
+}
+
+async function applyUpdateArchiveUnlocked(file, onEvent, { signal } = {}) {
   const diagnostics = new OperationDiagnostics("быстрое обновление", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let state;
@@ -186,10 +202,14 @@ export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
     onEvent({ type: "phase", phase: "storage-prepare", label: "Подготовка постоянного хранилища" });
     await requestPersistentStorage();
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
-    await recoverInterruptedOperation();
+    await recoverInterruptedOperationUnlocked();
     onEvent({ type: "phase", phase: "state-read", label: "Чтение установленного сайта и подготовка обновления" });
     state = await readState();
     if (!state?.revisionPath) throw new Error("Сначала установите основной архив сайта.");
+    if (!hasVerifiedStatistics(state)) {
+      onEvent({ type: "phase", phase: "site-verify", label: "Проверяю исходную статистику установленного сайта…" });
+      state = (await refreshInstalledSiteStatisticsUnlocked()).state;
+    }
     const updateId = jobId();
     updatePath = `${UPDATES_ROOT}/${updateId}`;
     rollbackPath = `${ROLLBACK_ROOT}/${updateId}`;
@@ -223,9 +243,6 @@ export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
       createdPaths: [],
       restoredPaths: [],
     };
-    onEvent({ type: "phase", phase: "journal-save", label: "Сохранение журнала отката обновления" });
-    await writeOperationJournal(baseJournal);
-    ownsJournal = true;
     const merge = await mergeDirectoryWithRollback({
       sourcePath: updatePath,
       targetPath: state.revisionPath,
@@ -236,18 +253,18 @@ export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
       },
       async onJournal(paths) {
         await writeOperationJournal({ ...baseJournal, ...paths });
+        ownsJournal = true;
       },
       signal,
     });
     mergeJournal = merge;
+    throwIfAborted(signal);
 
     onEvent({ type: "phase", phase: "index-check", label: "Проверяю index.html после обновления…" });
     if (!await fileExists(root, `${state.revisionPath}/${state.indexPath}`)) {
       throw new Error("После обновления не найден установленный index.html.");
     }
-    const targetDirectory = await getDirectoryAt(root, state.revisionPath, false);
-    onEvent({ type: "phase", phase: "site-verify", label: "Проверяю файлы после обновления…" });
-    const stored = await summarizeDirectory(targetDirectory);
+    const stored = updatedSiteStatistics(state, merge);
 
     const updatedState = {
       ...state,
@@ -263,6 +280,7 @@ export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
       storageVerifiedAt: Date.now(),
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю результат обновления…" });
+    throwIfAborted(signal);
     await commitStateAndClearOperationJournal(updatedState);
     ownsJournal = false;
     mergeJournal = null;
@@ -293,7 +311,11 @@ export async function applyUpdateArchive(file, onEvent, { signal } = {}) {
   }
 }
 
-export async function removeInstalledSite() {
+export function removeInstalledSite() {
+  return withSiteOperation(removeInstalledSiteUnlocked);
+}
+
+async function removeInstalledSiteUnlocked() {
   const state = await readState();
   const pending = await readOperationJournal();
   if (pending?.type !== "site-delete") {
@@ -301,10 +323,14 @@ export async function removeInstalledSite() {
     await beginSiteRemoval({ schema: 1, type: "site-delete", startedAt: Date.now(), revisionPath: state?.revisionPath || null });
   }
   emitServiceWorkerStateChanged();
-  await recoverInterruptedOperation();
+  await recoverInterruptedOperationUnlocked();
 }
 
-export async function readInstalledSiteState() {
+export function readInstalledSiteState() {
+  return withSiteOperation(readInstalledSiteStateUnlocked);
+}
+
+async function readInstalledSiteStateUnlocked() {
   const installed = await readState();
   if (!installed?.revisionPath) return installed;
   const root = await getOpfsRoot();
@@ -322,8 +348,29 @@ export async function readInstalledSiteState() {
   return result.state;
 }
 
-export async function refreshInstalledSiteStatistics(currentState = null) {
-  const installedState = currentState || await readState();
+function hasVerifiedStatistics(state) {
+  return state?.storageVerifiedAt && Number.isSafeInteger(state.files) && state.files >= 0
+    && Number.isSafeInteger(state.writtenBytes) && state.writtenBytes >= 0;
+}
+
+export function updatedSiteStatistics(state, merge) {
+  const files = state.files + merge.createdPaths.length;
+  const bytes = state.writtenBytes + merge.sourceBytes - merge.backupBytes;
+  if (!Number.isSafeInteger(files) || files < 0 || !Number.isSafeInteger(bytes) || bytes < 0) {
+    throw new Error("Не удалось обновить статистику сайта. Выполните проверку хранилища.");
+  }
+  return { files, bytes };
+}
+
+export function refreshInstalledSiteStatistics() {
+  return withSiteOperation(async () => {
+    await recoverInterruptedOperationUnlocked();
+    return refreshInstalledSiteStatisticsUnlocked();
+  });
+}
+
+async function refreshInstalledSiteStatisticsUnlocked() {
+  const installedState = await readState();
   if (!installedState?.revisionPath) return { state: installedState, files: 0, bytes: 0 };
   const root = await getOpfsRoot();
   const directory = await getDirectoryAt(root, installedState.revisionPath, false);
@@ -341,9 +388,14 @@ export async function refreshInstalledSiteStatistics(currentState = null) {
   return { state: updatedState, ...stored };
 }
 
-export async function cleanupOrphans(state = null) {
-  await recoverInterruptedOperation();
-  const currentState = state || await readState();
+export function cleanupOrphans() {
+  return withSiteOperation(cleanupOrphansUnlocked);
+}
+
+async function cleanupOrphansUnlocked() {
+  await recoverInterruptedOperationUnlocked();
+  // Never trust a snapshot captured before another window acquired the lock.
+  const currentState = await readState();
   const root = await getOpfsRoot();
   await removePath(root, UPDATES_ROOT);
   await removePath(root, ROLLBACK_ROOT);
@@ -360,7 +412,11 @@ export async function cleanupOrphans(state = null) {
   }
 }
 
-export async function recoverInterruptedOperation() {
+export function recoverInterruptedOperation() {
+  return withSiteOperation(recoverInterruptedOperationUnlocked);
+}
+
+async function recoverInterruptedOperationUnlocked() {
   const journal = await readOperationJournal();
   if (!journal) return false;
   const root = await getOpfsRoot();
