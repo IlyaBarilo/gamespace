@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 
 test("diagnostic controls exist on both app and landing surfaces, with manual-copy fallback", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  for (const id of ["diagnosticDialog", "diagnosticText", "diagnosticCopy", "diagnosticShare", "diagnosticClose", "lastErrorButton", "landingLastErrorButton", "errorDetailsButton", "manualReportButton", "landingReportButton", "viewerReport", "viewerMenuToggle"]) {
+  for (const id of ["diagnosticDialog", "diagnosticText", "diagnosticCopy", "diagnosticShare", "diagnosticClose", "lastErrorButton", "landingLastErrorButton", "errorDetailsButton", "manualReportButton", "landingReportButton", "viewerMenuToggle"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, /<textarea id="diagnosticText" readonly/);

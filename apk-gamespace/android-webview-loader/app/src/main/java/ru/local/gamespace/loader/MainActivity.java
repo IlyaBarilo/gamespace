@@ -126,8 +126,6 @@ public class MainActivity extends Activity {
     private TextView emptyDetails;
     private TextView progressTitle;
     private TextView progressDetails;
-    private Button backButton;
-    private Button homeButton;
     private Button menuButton;
     private Button chooseButton;
     private Button demoButton;
@@ -336,24 +334,6 @@ public class MainActivity extends Activity {
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-
-        backButton = createToolbarIconButton("←", "Назад");
-        backButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                navigateBackInSite();
-            }
-        });
-        toolbar.addView(backButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
-
-        homeButton = createToolbarIconButton("⌂", "Главное меню");
-        homeButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                openSiteHome();
-            }
-        });
-        toolbar.addView(homeButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         menuButton = createToolbarIconButton("⚙", "Настройки");
         menuButton.setOnClickListener(new View.OnClickListener() {
@@ -910,12 +890,6 @@ public class MainActivity extends Activity {
         emptyPanel.setVisibility(View.VISIBLE);
         emptyTitle.setText("Сайт не установлен");
         emptyDetails.setText("Выберите ZIP/7z-архив с сайтом или загрузите встроенный демо-сайт для проверки приложения.\n\nДемо-сайт распакуется во внутренний каталог приложения и запустится без интернета. Позже его можно заменить своим архивом через настройки.");
-        if (backButton != null) {
-            backButton.setEnabled(false);
-        }
-        if (homeButton != null) {
-            homeButton.setEnabled(false);
-        }
         showTopBarPersistent();
         updateSystemBackCallbackRegistration();
     }
@@ -967,12 +941,6 @@ public class MainActivity extends Activity {
             homeWebView.loadUrl(indexUrl);
         }
         showHomeWebView();
-        if (backButton != null) {
-            backButton.setEnabled(true);
-        }
-        if (homeButton != null) {
-            homeButton.setEnabled(true);
-        }
     }
 
     private String buildIndexUrl(File indexFile) {
@@ -1074,36 +1042,6 @@ public class MainActivity extends Activity {
         return false;
     }
 
-    private void navigateBackInSite() {
-        if (busy) {
-            return;
-        }
-
-        if (!navigateBackWithinSite()) {
-            Toast.makeText(this, "Нет предыдущей страницы.", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void openSiteHome() {
-        if (busy) {
-            return;
-        }
-
-        if (currentIndexFile != null && currentIndexFile.isFile()) {
-            loadSite(currentIndexFile);
-            return;
-        }
-
-        File index = findInstalledIndex();
-        if (index != null) {
-            loadSite(index);
-            return;
-        }
-
-        Toast.makeText(this, "Сайт не установлен.", Toast.LENGTH_SHORT).show();
-        loadInstalledSiteOrPrompt();
-    }
-
     private void showProgress(final String title, final String details) {
         mainHandler.post(new Runnable() {
             @Override
@@ -1115,8 +1053,6 @@ public class MainActivity extends Activity {
                 progressDetails.setText(details);
                 cancelOperationButton.setVisibility(operationCancelable ? View.VISIBLE : View.GONE);
                 cancelOperationButton.setEnabled(operationCancelable && !operationCancellationRequested);
-                backButton.setEnabled(false);
-                homeButton.setEnabled(false);
                 menuButton.setEnabled(true);
                 chooseButton.setEnabled(false);
                 if (demoButton != null) {
@@ -1180,8 +1116,6 @@ public class MainActivity extends Activity {
             @Override
             public void run() {
                 getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                backButton.setEnabled(currentIndexFile != null && currentIndexFile.isFile());
-                homeButton.setEnabled(currentIndexFile != null && currentIndexFile.isFile());
                 menuButton.setEnabled(true);
                 chooseButton.setEnabled(true);
                 if (demoButton != null) {

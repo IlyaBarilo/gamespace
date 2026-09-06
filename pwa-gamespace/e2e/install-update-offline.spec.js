@@ -37,4 +37,25 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
     gameFrame.evaluate(() => location.reload()),
   ]);
   expect(await gameFrame.evaluate(() => localStorage.getItem("gamespace-e2e-save"))).toBe("saved");
+
+  // Reports remain accessible through the menu after removing the viewer shortcut.
+  await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
+    message: "Viewer menu diagnostic fixture", error: new Error("Viewer menu diagnostic fixture"),
+  })));
+  await page.locator("#viewerClose").click();
+  await expect(page.locator("#viewer")).toBeHidden();
+  await page.locator("#lastErrorButton").click();
+  await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
+  await page.locator("#diagnosticClose").click();
+
+  // On a small screen the collapsed control must still open the menu directly.
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.locator("#openSiteButton").click();
+  await expect(page.locator("#viewerLoading")).toBeHidden();
+  await expect(page.locator("#viewerMenuToggle")).toBeVisible();
+  await page.locator("#viewerMenuToggle").click();
+  await expect(page.locator("#viewer")).toBeHidden();
+  await page.locator("#manualReportButton").click();
+  await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
+  await page.locator("#diagnosticClose").click();
 });

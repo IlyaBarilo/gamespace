@@ -157,8 +157,6 @@ function saveBackgroundIssue(error, context = {}) {
   backgroundIssueCount += 1;
   diagnosticSession.record("Сбой / предупреждение", `${context.stage || "runtime"}: ${errorMessage(error)}`, true);
   diagnosticUI.capture(error, { operation: "работа приложения", severity: "предупреждение", ...context }, { reveal: false });
-  elements.viewerReport.textContent = "!";
-  elements.viewerReport.title = "Сохранена ошибка. Создать отчёт о проблеме";
   if (!elements.viewer.hidden) showViewerToolbar();
 }
 
@@ -1093,7 +1091,7 @@ async function initialize() {
 }
 
 elements.chooseArchiveButton.addEventListener("click", () => chooseArchive("full"));
-for (const button of [elements.manualReportButton, elements.landingReportButton, elements.viewerReport]) {
+for (const button of [elements.manualReportButton, elements.landingReportButton]) {
   button.addEventListener("click", () => {
     diagnosticSession.record("Ручной отчёт", "", true);
     diagnosticUI.manual({ operation: busy ? "текущая операция продолжается" : "проверка состояния", previousSite: state ? "установлен" : "не установлен" });
@@ -1164,20 +1162,8 @@ elements.archiveInput.addEventListener("change", () => importSelectedFile(elemen
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerClose.addEventListener("click", closeViewer);
-elements.viewerMenuToggle.addEventListener("click", showViewerToolbar);
+elements.viewerMenuToggle.addEventListener("click", closeViewer);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
-elements.viewerHome.addEventListener("click", () => {
-  const url = contentIndexUrl();
-  beginGameLoad(url);
-  elements.siteFrame.src = url;
-  elements.viewerLoading.hidden = false;
-  showViewerToolbar();
-});
-elements.viewerBack.addEventListener("click", () => {
-  diagnosticSession.record("Назад в просмотре");
-  elements.siteFrame.contentWindow?.history.back();
-  showViewerToolbar();
-});
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;
   elements.progressCancelButton.disabled = true;
