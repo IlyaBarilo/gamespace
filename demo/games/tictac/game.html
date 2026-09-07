@@ -7,21 +7,24 @@
     <title>Крестики-нолики с минами</title>
     <style>
         :root {
+            --viewport-height: 100vh;
+            /* Надписи и кнопки сохраняют свои пропорции относительно высоты игры. */
+            font-size: calc(var(--viewport-height) * 0.018);
             --cell-size: 40px;
-            --page-padding: 10px;
-            --header-gap: 5px;
-            --message-gap: 15px;
+            --page-padding: 0.625rem;
+            --header-gap: 0.5rem;
             --board-gap: 2px;
             --board-border: 2px;
             --board-radius: 5px;
-            --message-font-size: 16px;
-            --counter-font-size: 16px;
-            --button-font-size: 16px;
-            --button-padding-y: 5px;
-            --button-padding-x: 8px;
-            --button-radius: 5px;
-            --title-font-size: 24px;
-            --game-info-font-size: 18px;
+            --message-font-size: 1rem;
+            --counter-font-size: 1rem;
+            --button-font-size: 1.25rem;
+            --button-size: 2.75rem;
+            --button-padding-y: 0.3125rem;
+            --button-padding-x: 0.5rem;
+            --button-radius: 0.375rem;
+            --title-font-size: 1.5rem;
+            --game-info-font-size: 1.125rem;
             --cell-base-font-size: 24px;
             --number-shadow-size: 3px;
             --mine-shadow-size: 10px;
@@ -38,6 +41,8 @@
             margin: 0;
             padding: 0;
             overflow: hidden;
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
         }
 
         body {
@@ -50,11 +55,11 @@
             user-select: none;
             -webkit-user-select: none;
         }
-
+        
         .game-wrapper {
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            height: var(--viewport-height);
             padding: var(--page-padding);
             box-sizing: border-box;
             align-items: center; /* Центрируем содержимое */
@@ -65,17 +70,6 @@
             max-width: 100%;
             display: flex;
             flex-direction: column;
-        }
-
-        .game-header {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: var(--header-gap);
-            gap: var(--header-gap);
-            margin: 0 auto; /* Центрируем относительно доски */
-            max-width: 100%; /* Не превышаем ширину доски */
         }
 
         .board-container {
@@ -107,15 +101,18 @@
 
         .game-header {
             display: flex;
+            flex-wrap: nowrap;
             justify-content: space-between;
             align-items: center;
             width: 100%;
-            margin-bottom: var(--header-gap);
+            max-width: 100%;
+            margin: 0 auto var(--header-gap);
             gap: var(--header-gap);
             flex-shrink: 0;
         }
 
         .board {
+            flex-shrink: 0;
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             grid-gap: var(--board-gap);
@@ -130,12 +127,21 @@
 
 
         .message {
-            flex: 1;
+            flex: 1 1 0;
             white-space: nowrap;
             overflow: hidden;
-            text-overflow: ellipsis;
             min-width: 0;
             font-size: var(--message-font-size);
+            line-height: 1.375;
+            text-align: left;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            flex-shrink: 0;
+            gap: var(--header-gap);
+            margin-left: auto;
         }
 
         .moves-counter {
@@ -143,8 +149,8 @@
             align-items: center;
             flex-shrink: 0;
             font-weight: bold;
-            margin-left: var(--header-gap);
             font-size: var(--counter-font-size);
+            line-height: 1.375;
         }
 
         .x-icon {
@@ -154,37 +160,36 @@
 
         #restart-btn {
             flex-shrink: 0;
-            padding: var(--button-padding-y) var(--button-padding-x);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            width: var(--button-size);
+            height: var(--button-size);
+            padding: 0;
+            font-family: inherit;
             font-size: var(--button-font-size);
+            line-height: 1;
             margin: 0;
         }
-
+        
         h1 {
             font-size: var(--title-font-size);
             margin-bottom: var(--header-gap);
             color: #333;
         }
-
+        
         .game-info {
             padding-top: var(--header-gap);
             margin-bottom: var(--header-gap);
             font-size: var(--game-info-font-size);
         }
-
-        .message {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex-grow: 1;
-            margin-right: var(--message-gap);
-            font-size: var(--message-font-size);
-        }
+        
 
 
 
 
-
-
+        
         .cell {
             background-color: #ddd;
             display: flex;
@@ -197,7 +202,7 @@
             aspect-ratio: 1/1;
             overflow: hidden;
         }
-
+        
         .cell.x::before {
             content: "X";
             color: #e74c3c;
@@ -205,7 +210,7 @@
             position: absolute;
             z-index: 2;
         }
-
+        
         .cell.o::before {
             content: "O";
             color: #3498db;
@@ -213,7 +218,7 @@
             position: absolute;
             z-index: 2;
         }
-
+        
         /* Стиль для последнего нолика */
         .cell.o.last-move::before {
             font-size: calc(var(--symbol-ratio) * var(--cell-size) * 1.3);
@@ -235,18 +240,18 @@
         .cell.mine {
             background-color: #ddd;
         }
-
+        
         .cell.mine::after {
             content: "💣";
             /* font-size: 70%; */
             font-size: calc(var(--mine-ratio) * var(--cell-size));
             position: absolute;
         }
-
+        
         .cell.revealed {
             background-color: #f9f9f9;
         }
-
+        
         .cell .number {
             position: absolute;
             font-size: calc(var(--number-ratio) * var(--cell-size) * 3.5);
@@ -259,14 +264,14 @@
             text-shadow: 0 0 var(--number-shadow-size) white;
             pointer-events: none; /* Чтобы не мешали кликам */
         }
-
+        
         .controls {
             margin-top: var(--controls-top-gap);
             display: flex;
             justify-content: center;
             gap: var(--controls-gap);
         }
-
+        
         button {
             padding: var(--button-padding-y) var(--button-padding-x);
             font-size: var(--button-font-size);
@@ -277,12 +282,12 @@
             cursor: pointer;
             touch-action: manipulation;
         }
-
+        
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
         }
-
+        
 
 
 
@@ -290,7 +295,7 @@
         .win {
             color: #108800;
         }
-
+        
         .lose {
             color: #ff1900;
         }
@@ -367,22 +372,18 @@
     </div> -->
 
     <div class="game-wrapper">
-        <div class="header-board-container"></div>
-            <div class="game-header">
-                <div class="message" id="message"></div>
+        <div class="game-header">
+            <div class="message" id="message"></div>
+            <div class="header-controls">
                 <div class="moves-counter">
                     <span class="x-icon">❌</span>
                     <span id="player-moves">0</span>
                 </div>
-                <button id="restart-btn">🚀</button>
-            </div>
-            <div class="board-container"></div>
-                <div class="board" id="board"></div>
-            </div>
-            <div class="controls" style="opacity:0">
-                <span id="turn-indicator">X</span>
+                <button id="restart-btn" type="button" aria-label="Новая игра">🚀</button>
             </div>
         </div>
+        <div class="board" id="board"></div>
+        <span id="turn-indicator" hidden>X</span>
     </div>
     <script>
 
@@ -395,7 +396,7 @@
                 winCondition: 4,
                 winConditionText: '❌❌❌❌',
                 safeHints: 10,
-                stars: '🎮⭐'
+                stars: '🎮⭐' 
             },
             normal: {
                 width: 10,
@@ -462,7 +463,10 @@
         let gameOver = false;
         let playerTurn = true;
         let winner = null;
-
+        let gameId = 0;
+        let computerMoveTimer = null;
+        let gameResultTimer = null;
+        
         let clickedRow = null;
         let clickedCol = null;
 
@@ -482,165 +486,96 @@
         const turnIndicator = document.getElementById('turn-indicator');
         const restartBtn = document.getElementById('restart-btn');
 
-        function fitHeaderToWidth(cellSize = 16) {
-            const root = document.documentElement;
-            const gameHeader = document.querySelector('.game-header');
-            const message = document.getElementById('message');
-            const restartButton = document.getElementById('restart-btn');
-
-            if (!gameHeader || !message || !restartButton) return;
-
-            const headerWidth = gameHeader.getBoundingClientRect().width;
-            if (!Number.isFinite(headerWidth) || headerWidth <= 0) return;
-
-            const viewport = window.visualViewport || window;
-            const viewportWidth = viewport.width || window.innerWidth || headerWidth;
-            const viewportHeight = viewport.height || window.innerHeight || headerWidth;
-            const phoneLikeViewport = Math.min(viewportWidth, viewportHeight) <= 600;
-            const baseFontSize = phoneLikeViewport
-                ? Math.min(20, Math.max(14, headerWidth * 0.06))
-                : Math.max(cellSize * 0.26, Math.min(22, headerWidth * 0.045));
-            const messageSafetyScale = 0.9;
-
-            const applyHeaderChromeSize = (fontSize) => {
-                root.style.setProperty('--message-font-size', `${fontSize.toFixed(2)}px`);
-                root.style.setProperty('--counter-font-size', `${fontSize.toFixed(2)}px`);
-                root.style.setProperty('--button-font-size', `${(fontSize * 1.04).toFixed(2)}px`);
-                root.style.setProperty('--header-gap', `${Math.max(1, fontSize * 0.22).toFixed(2)}px`);
-                root.style.setProperty('--message-gap', `${Math.max(2, fontSize * 0.28).toFixed(2)}px`);
-                root.style.setProperty('--button-padding-y', `${Math.max(2, fontSize * 0.18).toFixed(2)}px`);
-                root.style.setProperty('--button-padding-x', `${Math.max(3, fontSize * 0.28).toFixed(2)}px`);
-                root.style.setProperty('--button-radius', `${Math.max(4, fontSize * 0.28).toFixed(2)}px`);
-            };
-
-            const applyMessageSize = (fontSize) => {
-                root.style.setProperty('--message-font-size', `${fontSize.toFixed(2)}px`);
-            };
-
-            const fits = () => (
-                gameHeader.scrollWidth <= headerWidth + 1 &&
-                message.scrollWidth <= message.clientWidth + 1
-            );
-
-            applyHeaderChromeSize(baseFontSize);
-
-            if (fits()) {
-                applyMessageSize(baseFontSize * messageSafetyScale);
-                return fits();
-            }
-
-            const minMessageFontSize = baseFontSize * 0.25;
-            let bestMessageFontSize = minMessageFontSize;
-            let low = minMessageFontSize;
-            let high = baseFontSize;
-
-            for (let i = 0; i < 10; i++) {
-                const testMessageFontSize = (low + high) / 2;
-                applyMessageSize(testMessageFontSize);
-
-                if (fits()) {
-                    bestMessageFontSize = testMessageFontSize;
-                    low = testMessageFontSize;
-                } else {
-                    high = testMessageFontSize;
-                }
-            }
-
-            applyMessageSize(bestMessageFontSize * messageSafetyScale);
-            return fits();
-        }
-
         function updateCellSize() {
             const root = document.documentElement;
+            const gameWrapper = document.querySelector('.game-wrapper');
             const gameHeader = document.querySelector('.game-header');
-            const headerBoardContainer = document.querySelector('.header-board-container');
             const viewport = window.visualViewport || window;
             const viewportWidth = viewport.width || window.innerWidth;
             const viewportHeight = viewport.height || window.innerHeight;
 
+            // Базовые размеры панели — доли текущей видимой высоты игры.
+            // При Ctrl+/Ctrl− высота в CSS-пикселях меняется вместе с размерами панели,
+            // поэтому ее видимая доля остается прежней, независимо от типа устройства.
+            root.style.setProperty('--viewport-height', viewportHeight + 'px');
+
+            const wrapperStyles = getComputedStyle(gameWrapper);
+            const horizontalPadding = parseFloat(wrapperStyles.paddingLeft) + parseFloat(wrapperStyles.paddingRight);
+            const verticalPadding = parseFloat(wrapperStyles.paddingTop) + parseFloat(wrapperStyles.paddingBottom);
+            const headerGap = parseFloat(getComputedStyle(gameHeader).marginBottom);
+            const availableWidth = Math.max(1, viewportWidth - horizontalPadding);
+
             const setPxVar = (name, value) => {
-                root.style.setProperty(name, `${Math.max(0, value).toFixed(2)}px`);
-            };
-
-            const applyScaleVars = (cellSize) => {
-                root.style.setProperty('--cell-size', `${cellSize.toFixed(2)}px`);
-                root.style.setProperty('--symbol-ratio', '0.7');
-                root.style.setProperty('--number-ratio', '0.4');
-                root.style.setProperty('--mine-ratio', '0.6');
-
-                setPxVar('--page-padding', cellSize * 0.14);
-                setPxVar('--header-gap', cellSize * 0.12);
-                setPxVar('--message-gap', cellSize * 0.22);
-                setPxVar('--board-gap', cellSize * 0.035);
-                setPxVar('--board-border', cellSize * 0.035);
-                setPxVar('--board-radius', cellSize * 0.075);
-                setPxVar('--message-font-size', cellSize * 0.26);
-                setPxVar('--counter-font-size', cellSize * 0.26);
-                setPxVar('--button-font-size', cellSize * 0.26);
-                setPxVar('--button-padding-y', cellSize * 0.09);
-                setPxVar('--button-padding-x', cellSize * 0.14);
-                setPxVar('--button-radius', cellSize * 0.075);
-                setPxVar('--title-font-size', cellSize * 0.35);
-                setPxVar('--game-info-font-size', cellSize * 0.28);
-                setPxVar('--cell-base-font-size', cellSize * 0.36);
-                setPxVar('--number-shadow-size', cellSize * 0.045);
-                setPxVar('--mine-shadow-size', cellSize * 0.15);
-                setPxVar('--controls-top-gap', cellSize * 0.3);
-                setPxVar('--controls-gap', cellSize * 0.15);
-            };
-
-            const applyBoardSize = (cellSize) => {
-                const boardWidth = cellSize * BOARD_WIDTH;
-                boardElement.style.width = `${boardWidth.toFixed(2)}px`;
-                boardElement.style.height = `${(cellSize * BOARD_HEIGHT).toFixed(2)}px`;
-
-                if (headerBoardContainer) {
-                    headerBoardContainer.style.width = `${boardWidth.toFixed(2)}px`;
-                }
-
-                if (gameHeader) {
-                    gameHeader.style.width = `${boardWidth.toFixed(2)}px`;
-                }
+                root.style.setProperty(name, Math.max(0, value).toFixed(2) + 'px');
             };
 
             const applyLayout = (cellSize) => {
-                applyScaleVars(cellSize);
-                applyBoardSize(cellSize);
-                fitHeaderToWidth(cellSize);
+                // Только поле и его содержимое подстраиваются под размер окна.
+                setPxVar('--cell-size', cellSize);
+                root.style.setProperty('--symbol-ratio', '0.7');
+                root.style.setProperty('--number-ratio', '0.4');
+                root.style.setProperty('--mine-ratio', '0.6');
+                setPxVar('--board-gap', cellSize * 0.035);
+                setPxVar('--board-border', cellSize * 0.035);
+                setPxVar('--board-radius', cellSize * 0.075);
+                setPxVar('--cell-base-font-size', cellSize * 0.36);
+                setPxVar('--number-shadow-size', cellSize * 0.045);
+                setPxVar('--mine-shadow-size', cellSize * 0.15);
+
+                const boardWidth = cellSize * BOARD_WIDTH;
+                boardElement.style.width = boardWidth.toFixed(2) + 'px';
+                boardElement.style.height = (cellSize * BOARD_HEIGHT).toFixed(2) + 'px';
+                // Панель всегда ограничена левым и правым краями игрового поля.
+                gameHeader.style.width = boardElement.style.width;
             };
 
-            let cellSize = Math.min(
-                viewportWidth / (BOARD_WIDTH + 0.35),
-                viewportHeight / (BOARD_HEIGHT + 1.2)
-            );
-
-            cellSize = Math.max(1, cellSize);
+            let cellSize = Math.max(1, Math.min(
+                availableWidth / BOARD_WIDTH,
+                (viewportHeight - verticalPadding) / BOARD_HEIGHT
+            ));
             applyLayout(cellSize);
 
-            for (let i = 0; i < 2; i++) {
-                const styles = getComputedStyle(root);
-                const pagePadding = parseFloat(styles.getPropertyValue('--page-padding')) || 0;
-                const headerGap = parseFloat(styles.getPropertyValue('--header-gap')) || 0;
-                const headerHeight = gameHeader ? gameHeader.offsetHeight : 0;
-                const maxCellByHeight = (viewportHeight - headerHeight - pagePadding * 2 - headerGap) / BOARD_HEIGHT;
-                const maxCellByWidth = (viewportWidth - pagePadding * 2) / BOARD_WIDTH;
-                const fittedCellSize = Math.max(1, Math.min(cellSize, maxCellByHeight, maxCellByWidth));
+            for (let i = 0; i < 3; i++) {
+                const headerHeight = gameHeader.getBoundingClientRect().height;
+                const maxCellByHeight = (viewportHeight - verticalPadding - headerHeight - headerGap) / BOARD_HEIGHT;
+                const fittedCellSize = Math.max(1, Math.min(cellSize, maxCellByHeight));
+                if (Math.abs(fittedCellSize - cellSize) <= 0.01) break;
+                cellSize = fittedCellSize;
+                applyLayout(cellSize);
+            }
 
-                if (Number.isFinite(fittedCellSize) && Math.abs(fittedCellSize - cellSize) > 0.25) {
-                    cellSize = fittedCellSize;
-                    applyLayout(cellSize);
+            // Счетчик и кнопка сохраняют размер; подгоняем только надпись слева.
+            messageElement.style.fontSize = 'var(--message-font-size)';
+            if (messageElement.scrollWidth > messageElement.clientWidth) {
+                let minFontSize = 0;
+                let maxFontSize = parseFloat(getComputedStyle(messageElement).fontSize);
+                for (let i = 0; i < 12; i++) {
+                    const fontSize = (minFontSize + maxFontSize) / 2;
+                    messageElement.style.fontSize = fontSize + 'px';
+                    if (messageElement.scrollWidth <= messageElement.clientWidth) {
+                        minFontSize = fontSize;
+                    } else {
+                        maxFontSize = fontSize;
+                    }
                 }
+                messageElement.style.fontSize = minFontSize + 'px';
             }
         }
 
-        // Вызываем при инициализации и при ресайзе окна
-        window.addEventListener('resize', () => {
-            updateCellSize();
-            renderBoard(); // Также перерисовываем доску при изменении размера
-        });
+        // Размеры меняются через CSS без пересоздания клеток и потери подсветки.
+        window.addEventListener('resize', updateCellSize);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', updateCellSize);
+        }
 
         // Инициализация игры
         function initGame() {
+            // Отменяем отложенные действия предыдущей партии до сброса состояния.
+            gameId++;
+            clearTimeout(computerMoveTimer);
+            clearTimeout(gameResultTimer);
+            computerMoveTimer = null;
+            gameResultTimer = null;
 
             // Показываем текущий уровень сложности
             showMessage(`Собрать ${config.winConditionText}      ${config.stars}      💣${config.mines}`, 'info');
@@ -651,7 +586,7 @@
             //boardElement.innerHTML = '';
             //hideMessage();
 
-            // Разблокируем доску при перезапуске.
+            // Добавьте эту строку, чтобы разблокировать доску при рестарте
             boardElement.classList.remove('board-disabled');
 
             playerMoveCount = 0;
@@ -666,7 +601,7 @@
             //messageElement.textContent = '';
             //messageElement.className = 'message';
             turnIndicator.textContent = 'X';
-
+            
             // Создаем пустую доску
             for (let i = 0; i < BOARD_HEIGHT; i++) {
                 board[i] = [];
@@ -679,13 +614,13 @@
                     };
                 }
             }
-
+            
             // Размещаем мины
             placeMines();
-
+            
             // Подсчитываем мины вокруг каждой клетки
             calculateMinesAround();
-
+        
 
             // Создаем клетки на доске
             renderBoard();
@@ -693,17 +628,17 @@
             //clearHighlightedCells();
             highlightRandomSafeCells();
         }
-
-
+        
+        
 
         // Размещение мин на поле
         function placeMines() {
             let minesPlaced = 0;
-
+            
             while (minesPlaced < MINES_COUNT) {
                 const row = Math.floor(Math.random() * BOARD_HEIGHT);
                 const col = Math.floor(Math.random() * BOARD_WIDTH);
-
+                
                 if (!board[row][col].mine) {
                     board[row][col].mine = true;
                     mines.push({row, col});
@@ -711,7 +646,7 @@
                 }
             }
         }
-
+        
         // Подсчет мин вокруг каждой клетки
         function calculateMinesAround() {
             const directions = [
@@ -719,27 +654,27 @@
                 [0, -1],           [0, 1],
                 [1, -1],  [1, 0],  [1, 1]
             ];
-
+            
             for (let i = 0; i < BOARD_HEIGHT; i++) {
                 for (let j = 0; j < BOARD_WIDTH; j++) {
                     if (board[i][j].mine) continue;
-
+                    
                     let count = 0;
-
+                    
                     for (const [di, dj] of directions) {
                         const ni = i + di;
                         const nj = j + dj;
-
+                        
                         if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH && board[ni][nj].mine) {
                             count++;
                         }
                     }
-
+                    
                     board[i][j].minesAround = count;
                 }
             }
         }
-
+        
         // Отрисовка доски
         function renderBoard() {
 
@@ -748,39 +683,39 @@
                 row: parseInt(cell.dataset.row),
                 col: parseInt(cell.dataset.col)
             }));
-
-
+            
+            
 
             // Сохраняем состояние последнего хода
-            const wasLastMove = lastComputerMove
-                ? {row: lastComputerMove.row, col: lastComputerMove.col}
+            const wasLastMove = lastComputerMove 
+                ? {row: lastComputerMove.row, col: lastComputerMove.col} 
                 : null;
 
             // Очищаем доску перед перерисовкой
             boardElement.innerHTML = '';
-
+    
             // Устанавливаем grid с разным количеством колонок и строк
             boardElement.style.gridTemplateColumns = `repeat(${BOARD_WIDTH}, 1fr)`;
             boardElement.style.gridTemplateRows = `repeat(${BOARD_HEIGHT}, 1fr)`;
-
+            
             for (let i = 0; i < BOARD_HEIGHT; i++) {
                 for (let j = 0; j < BOARD_WIDTH; j++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
                     cell.dataset.row = i;
                     cell.dataset.col = j;
-
+                    
                     const cellData = board[i][j];
-
+                    
                     if (cellData.revealed) {
                         cell.classList.add('revealed');
-
+                        
                         if (cellData.mine) {
                             cell.classList.add('mine');
                         } else if (cellData.value) {
                             cell.classList.add(cellData.value);
                         }
-
+                        
                         if (cellData.minesAround > 0) {
                             const number = document.createElement('span');
                             number.className = 'number';
@@ -788,7 +723,7 @@
                             cell.appendChild(number);
                         }
                     }
-
+                    
                     cell.addEventListener('click', () => handleCellClick(i, j));
                     boardElement.appendChild(cell);
                 }
@@ -797,14 +732,14 @@
             // Восстанавливаем подсветку только для тех клеток, которые остались безопасными
             highlightedCoords.forEach(coord => {
                 if (board[coord.row] && board[coord.row][coord.col] &&
-                    !board[coord.row][coord.col].value &&
-                    !board[coord.row][coord.col].revealed &&
+                    !board[coord.row][coord.col].value && 
+                    !board[coord.row][coord.col].revealed && 
                     !board[coord.row][coord.col].mine) {
-
+                    
                     const cellElement = document.querySelector(
                         `.cell[data-row="${coord.row}"][data-col="${coord.col}"]`
                     );
-
+                    
                     if (cellElement) {
                         cellElement.classList.add('safe-hint');
                         currentHighlightedCells.push(cellElement);
@@ -821,42 +756,42 @@
                 cell?.classList.add('last-move');
             }
         }
-
+        
         // Обработка клика по клетке
         function handleCellClick(row, col) {
-
+            
             if (gameOver || !playerTurn || board[row][col].value || board[row][col].revealed) return;
-
+            
             // Увеличиваем счетчик ходов
             playerMoveCount++;
             updatePlayerMovesDisplay();
-
+            
             // Скрываем подсветку только при успешном ходе игрока
             clearHighlightedCells();
-
+                 
             // Мгновенно обновляем доску для крестика игрока
             // Открываем клетку
             board[row][col].revealed = true;
             // board[row][col].value = 'x';
             renderBoard(); // Немедленный рендер
 
-
-
+ 
+            
             // Проверяем, не мина ли это
             if (board[row][col].mine) {
 
                 clickedRow = row;
                 clickedCol = col;
-
+                
                 // Сначала отмечаем клетку как раскрытую
                 board[row][col].revealed = true;
-
+                
                 // Находим элемент клетки в DOM
                 const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-
+                
                 // Добавляем классы для мины и подсветки
                 cellElement.classList.add('mine', 'mine-clicked', 'revealed');
-
+                
                 // Показываем все мины
                 revealAllMines();
 
@@ -867,7 +802,7 @@
                 showMessage('Вы проиграли!', 'lose');
                 return;
             }
-
+            
             // Ставим крестик
             board[row][col].value = 'x';
             playerTurn = false;
@@ -886,7 +821,7 @@
                 showMessage('Вы победили!', 'win');
                 return;
             }
-
+            
             // Передаем ход компьютеру БЕЗ задержки
             playerTurn = false;
             turnIndicator.textContent = 'O';
@@ -894,23 +829,23 @@
             // Ход компьютера
             //setTimeout(computerMove, 500);
         }
-
+        
         // Ход компьютера
         function computerMove() {
             if (gameOver) return;
-
+            
             // 🟢 Блокируем доску в начале хода компьютера
             boardElement.classList.add('board-disabled');
 
             // Скрываем предыдущие подсвеченные клетки
             clearHighlightedCells();
-
+            
             // Находим и подсвечиваем новые безопасные клетки
             // highlightRandomSafeCells();
 
             // Находим все возможные ходы (клетки без мин и без крестиков/ноликов)
             const availableMoves = [];
-
+            
             for (let i = 0; i < BOARD_HEIGHT; i++) {
                 for (let j = 0; j < BOARD_WIDTH; j++) {
                     if (!board[i][j].value && !board[i][j].mine && !board[i][j].revealed) {
@@ -918,7 +853,7 @@
                     }
                 }
             }
-
+            
             if (availableMoves.length === 0) {
                 // Нет доступных ходов - ничья
                 gameOver = true;
@@ -926,16 +861,16 @@
                 showMessage('Ничья!', 'lose');
                 return;
             }
-
+            
             // Простая стратегия: сначала пытаемся выиграть, потом блокируем игрока, потом случайный ход
-
+            
             // 1. Попытка выиграть (поставить 3 нолика)
             const winningMove = findWinningMove('o', availableMoves);
             if (winningMove) {
                 makeComputerMove(winningMove.row, winningMove.col);
                 return;
             }
-
+            
             // 2. Блокировка игрока (если у него 2 крестика в ряд)
             const blockingMove = findWinningMove('x', availableMoves);
             if (blockingMove) {
@@ -949,7 +884,7 @@
                 makeComputerMove(doubleLineMove.row, doubleLineMove.col);
                 return;
             }
-
+            
             // 3. Случайный ход
             const randomIndex = Math.floor(Math.random() * availableMoves.length);
             const move = availableMoves[randomIndex];
@@ -958,12 +893,12 @@
             clearHighlightedCells();
             //highlightRandomSafeCells();
         }
-
+        
         function findAdjacentDoubleLines(symbol, availableMoves) {
     const directions = [[0,1],[1,0],[1,1],[1,-1]];
     const availableSet = new Set(availableMoves.map(m => `${m.row},${m.col}`));
 
-
+    
 
     // 2. Затем блокируем линии игрока из 2 элементов
     for (let i = 0; i < BOARD_HEIGHT; i++) {
@@ -973,11 +908,11 @@
                     // Проверяем линию из 2 элементов
                     const ni = i + di;
                     const nj = j + dj;
-
+                    
                     // Проверяем следующую клетку в линии
-                    if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH &&
+                    if (ni >= 0 && ni < BOARD_HEIGHT && nj >= 0 && nj < BOARD_WIDTH && 
                         board[ni][nj].value === symbol) {
-
+                        
                         // Проверяем клетку перед началом линии
                         const pi = i - di;
                         const pj = j - dj;
@@ -988,12 +923,12 @@
                                 return {row: pi, col: pj};
                             }
                         }
-
+                        
                         // Проверяем клетку после линии
                         const ai = ni + di;
                         const aj = nj + dj;
                         const key = `${ai},${aj}`;
-                        if (ai >= 0 && ai < BOARD_HEIGHT && aj >= 0 && aj < BOARD_WIDTH &&
+                        if (ai >= 0 && ai < BOARD_HEIGHT && aj >= 0 && aj < BOARD_WIDTH && 
                             availableSet.has(key)) {
                             console.log('Блокируем линию игрока из 2 элементов (конец)');
                             return {row: ai, col: aj};
@@ -1009,7 +944,7 @@
         for (const [di, dj] of directions) {
             // Проверяем в обе стороны от потенциального хода
             let count = 1; // Учитываем текущую пустую клетку как потенциальный нолик
-
+            
             // Проверяем в одном направлении
             for (let k = 1; k < WIN_CONDITION; k++) {
                 const ni = move.row + di*k;
@@ -1019,7 +954,7 @@
                     else break;
                 }
             }
-
+            
             // Проверяем в противоположном направлении
             for (let k = 1; k < WIN_CONDITION; k++) {
                 const ni = move.row - di*k;
@@ -1029,7 +964,7 @@
                     else break;
                 }
             }
-
+            
             if (count >= 2) {
                 console.log('Развиваем свою линию из', count-1, 'ноликов');
                 return move;
@@ -1047,7 +982,7 @@
                 board[row][col].value = symbol;
                 const wins = checkWin(symbol);
                 board[row][col].value = null;
-
+                
                 if (wins)
                 {
                     console.log('нашли выигрышный ход');
@@ -1056,9 +991,10 @@
             }
             return null;
         }
-
+        
         // Совершение хода компьютером
         function makeComputerMove(row, col) {
+            const currentGameId = gameId;
 
             // Убираем выделение с предыдущего последнего хода
             if (lastComputerMove) {
@@ -1080,18 +1016,24 @@
             currentCell?.classList.add('last-move');
 
             // Задержка только для визуального отображения нолика
-            setTimeout(() => {
+            computerMoveTimer = setTimeout(() => {
+                if (currentGameId !== gameId) return;
+                computerMoveTimer = null;
+
                 board[row][col].revealed = true;
                 board[row][col].value = 'o';
-
+                
                 // Проверяем победу компьютера
                 const winCells = checkWin('o');
                 if (winCells) {
                     gameOver = true;
-
+                    
                     // Сначала обновляем DOM
                     renderBoard();
-                    setTimeout(() => {
+                    gameResultTimer = setTimeout(() => {
+                        if (currentGameId !== gameId) return;
+                        gameResultTimer = null;
+
                         highlightWinningCells(winCells, 'lose');
                         winner = 'computer';
                         //messageElement.textContent = 'Компьютер победил!';
@@ -1101,7 +1043,7 @@
                     }, 10);
                     return;
                 }
-
+                
                 renderBoard();
 
                 highlightRandomSafeCells();
@@ -1113,7 +1055,7 @@
 
             }, 200); // Задержка только здесь
         }
-
+        
         function highlightWinningCells(cells, type) {
 
             // Сначала сбрасываем все предыдущие подсветки
@@ -1182,7 +1124,7 @@
                 }
             }
         }
-
+        
         // Функция показа сообщения
         function showMessage(text, type = 'info') {
             const messageElement = document.getElementById('message');
@@ -1200,7 +1142,7 @@
             updateCellSize();
         }
 
-
+        
 
         // Функция скрытия сообщения
         function hideMessage() {
@@ -1214,7 +1156,7 @@
         // Обновленная функция highlightRandomSafeCells()
         function highlightRandomSafeCells() {
             const safeCells = [];
-
+            
             // Собираем безопасные клетки
             for (let i = 0; i < BOARD_HEIGHT; i++) {
                 for (let j = 0; j < BOARD_WIDTH; j++) {
@@ -1223,30 +1165,30 @@
                     }
                 }
             }
-
+    
             // Выбираем новые клетки для подсветки
             const shuffled = [...safeCells].sort(() => 0.5 - Math.random());
             const newHighlighted = new Set(shuffled.slice(0, VISIBLE_SAFE_CELLS));
-
+            
             // Находим клетки для скрытия (старые, которых нет в новых)
             const toRemove = [...currentHighlighted].filter(coord => !newHighlighted.has(coord));
-
+            
             // Находим клетки для показа (новые, которых не было в старых)
             const toAdd = [...newHighlighted].filter(coord => !currentHighlighted.has(coord));
-
+            
             // Применяем изменения
             toRemove.forEach(coord => {
                 const [row, col] = coord.split(',');
                 const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
                 cell?.classList.remove('safe-hint', 'fade-out', 'fade-in');
             });
-
+            
             toAdd.forEach(coord => {
                 const [row, col] = coord.split(',');
                 const cell = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
                 cell?.classList.add('safe-hint', 'fade-in');
             });
-
+            
             currentHighlighted = newHighlighted;
         }
 
@@ -1267,7 +1209,7 @@
 
         // Обработчик кнопки перезапуска
         restartBtn.addEventListener('click', initGame);
-
+        
         // Запуск игры при загрузке страницы
         window.addEventListener('DOMContentLoaded', () => {
             updateCellSize();

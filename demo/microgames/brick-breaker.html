@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><body style=margin:0;overflow:hidden><canvas id=c style=display:block;width:100vw;height:100vh;touch-action:none></canvas><script>
+var $d=3,D=devicePixelRatio||1,W=240,B=7,C=c.getContext('2d'),f=C.fillRect.bind(C),s='fillStyle',o=0
+F=_=>{w=innerWidth;h=innerHeight;S=Math.min(w/W,h/360);O=(w-W*S)/2;H=h/S;PY=H-75;c.width=w*D;c.height=h*D;C.setTransform(D*S,0,0,D*S,O*D,0)}
+R=q=>{J=100-$d*10;X=120;Y=180;V=1.1+$d/6;U=-1.2-$d/4;P=(W-J)/2;K=0;A=-1;Q=q|0}
+M=e=>{e.preventDefault();P=Math.max(0,Math.min(W-J,(e.clientX-O)/S-J/2))}
+c.onpointerdown=e=>{Q&&R();M(e)};c.onpointermove=M;onresize=F;R(1);F()
+L=t=>{g=Math.min(2,(t-o)/16.7||1);o=t;if(!Q){X+=V*g;Y+=U*g;if(X<B||X>W-B)V=-V,X=X<B?B:W-B;if(Y<B)U=Math.abs(U),Y=B;if(U>0&&Y+B>=PY&&Y-U*g+B<=PY&&X>P&&X<P+J)Y=PY-B,U=-Math.abs(U);for(i=0;i<32;i++)if(A>>i&1){Z=6+i%8*29;T=35+(i>>3)*16;if(X+B>Z&&X-B<Z+25&&Y+B>T&&Y-B<T+14){A^=1<<i;K++;U=-U;if(!A)Q=3;break}}if(Y-B>H)Q=2}C[s]='#06131c';f(-O/S,0,w/S,H);for(i=0;i<32;i++)if(A>>i&1)C[s]='hsl('+i*43+',80%,60%)',f(6+i%8*29,35+(i>>3)*16,25,14);C[s]='#183b4b';f(0,PY+20,W,H-PY-20);C[s]='#5de4cf';f(P,PY,J,10);C.beginPath();C.arc(X,Y,B,0,7);C[s]='#fff';C.fill();C.font='bold 16px Arial';C.textAlign='left';C.fillText(K,12,24);if(Q){C[s]='#0c202ddd';f(22,120,196,110);C.textAlign='center';C.font='bold 20px Arial';C[s]='#fff';C.fillText(Q==3?'ПОБЕДА':Q==1?'РАЗБЕЙ БЛОКИ':'СЧЕТ '+K,120,168);C.font='13px Arial';C[s]='#9ab4c0';C.fillText(Q==3?'ГОТОВО':Q==1?'ВЕДИ ПАЛЬЦЕМ':'ЕЩЕ РАЗ',120,196)}requestAnimationFrame(L)};L()
+</script>
