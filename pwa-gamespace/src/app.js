@@ -1,6 +1,7 @@
 import "./styles.css";
 import { readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
+import { summarizeStorage, formatStoragePercent } from "./storage-summary.js";
 import {
   cleanupOrphans,
   installFullArchive,
@@ -573,31 +574,31 @@ function attachFrameGuards() {
 }
 
 async function refreshStorage() {
+  let estimate;
+  try { estimate = await navigator.storage?.estimate?.(); }
+  catch { /* Storage estimates are optional; the installed site remains usable. */ }
+
+  // Read current metadata after awaiting the browser: an import or removal may
+  // have completed while an earlier estimate was still pending.
   const managedBytes = state?.writtenBytes || 0;
   const managedFiles = Number(state?.files || 0);
+  const summary = summarizeStorage(managedBytes, estimate);
+  lastStorageEstimate = { quota: summary.quota, usage: summary.usage, measuredAt: new Date().toISOString() };
   elements.storageManaged.textContent = state ? `Сайт GameSpace: ${formatBytes(managedBytes)}` : "Сайт GameSpace: не установлен";
   elements.storageFiles.textContent = state ? `${managedFiles.toLocaleString("ru-RU")} файлов в OPFS` : "0 файлов в OPFS";
-  if (!navigator.storage?.estimate) {
-    elements.storageUsage.textContent = "Оценка браузера: недоступна";
-    elements.storageQuota.textContent = "Доступная квота: не сообщается";
-    elements.storageBar.style.width = "0%";
-    elements.storageRing.style.setProperty("--fill", "0deg");
-    elements.storageBarText.textContent = "—";
-    elements.storagePersistent.textContent = "Не определено";
-    return;
-  }
-  const estimate = await navigator.storage.estimate();
-  lastStorageEstimate = { quota: estimate.quota, usage: estimate.usage, measuredAt: new Date().toISOString() };
-  elements.storageUsage.textContent = `Оценка браузера: ${formatBytes(estimate.usage || 0)}`;
-  elements.storageQuota.textContent = `Доступная квота: ${formatBytes(estimate.quota || 0)}`;
-  const percent = estimate.quota ? Math.min(100, (estimate.usage || 0) / estimate.quota * 100) : 0;
-  elements.storageBar.style.width = `${percent}%`;
-  elements.storageRing.style.setProperty("--fill", `${percent * 3.6}deg`);
-  elements.storageBarText.textContent = percent > 0 && percent < 0.1
-    ? "<0,1%"
-    : `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%`;
-  const persisted = await navigator.storage.persisted?.().catch(() => false);
-  elements.storagePersistent.textContent = persisted ? "Постоянное" : "По решению браузера";
+  elements.storageUsage.textContent = summary.usesManagedSize
+    ? `Учтено не менее ${formatBytes(summary.usedBytes)} — по файлам сайта`
+    : summary.usage !== null ? `Оценка браузера: ${formatBytes(summary.usage)}` : "Оценка браузера: недоступна";
+  elements.storageQuota.textContent = summary.quota !== null
+    ? `Квота браузера: ${formatBytes(summary.quota)}` : "Квота браузера: не сообщается";
+  elements.storageBar.style.width = `${summary.percent ?? 0}%`;
+  elements.storageRing.style.setProperty("--fill", `${(summary.percent ?? 0) * 3.6}deg`);
+  elements.storageBarText.textContent = formatStoragePercent(summary.percent);
+  let persisted;
+  try { persisted = await navigator.storage?.persisted?.(); }
+  catch { /* Persistence status can be unavailable independently of the quota. */ }
+  elements.storagePersistent.textContent = persisted === true ? "Постоянное"
+    : persisted === false ? "По решению браузера" : "Не определено";
 }
 
 async function synchronizeSiteInterface({ reloadState = false } = {}) {
