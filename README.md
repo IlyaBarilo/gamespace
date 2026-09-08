@@ -56,16 +56,24 @@ GameSpace представлен двумя приложениями с общи
 
 ## На мероприятиях
 
-На мероприятии использовались GameSpace APK и GameSpace PWA вместе с
-программами из других проектов автора. Посетители играли на нескольких
-планшетах; на фотографиях показаны
-«Киберрефлекс», игры с игровым полем и задания с текстовой графикой.
+GameSpace развивается как инструмент для запуска игр и интерактивных
+материалов на планшетах и телефонах. Проект используется на мероприятиях,
+где посетители могут сами попробовать игры и задания.
 
-<p align="center">
-  <a href="docs/images/field-use/event-20260905-visitors.webp"><img src="docs/images/field-use/event-20260905-visitors.webp" width="640" alt="Участники мероприятия играют на трёх планшетах с программами автора; лица размыты"></a>
-</p>
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <a href="docs/images/field-use/den-molodezhi-004.jpg"><img src="docs/images/field-use/den-molodezhi-004.jpg" width="360" alt="Посетители играют на четырёх планшетах с GameSpace на Дне молодёжи; лица размыты"></a>
+      <br><strong>GameSpace на Дне молодёжи</strong>
+    </td>
+    <td align="center" width="50%">
+      <a href="docs/images/field-use/event-20260905-visitors.webp"><img src="docs/images/field-use/event-20260905-visitors.webp" width="360" alt="Участники пробуют игры и интерактивные задания на планшетах на следующем мероприятии; лица размыты"></a>
+      <br><strong>Игровая площадка с GameSpace</strong>
+    </td>
+  </tr>
+</table>
 
-[Подробнее о применении GameSpace и других проектов, с фотографиями](docs/CASE_STUDY_RU.md#gamespace-и-другие-проекты-на-мероприятии).
+[Подробнее о мероприятиях](docs/CASE_STUDY_RU.md#полевое-применение-первого-поколения).
 
 ## Какой вариант выбрать
 
