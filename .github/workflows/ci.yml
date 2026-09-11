@@ -121,5 +121,11 @@ jobs:
           $env:GAMESPACE_CATALOG_TEST_APK = (Resolve-Path ".\apk-gamespace\release\GameSpace.apk").Path
           $env:GAMESPACE_CATALOG_TEST_AAPT2 = Join-Path $sdkRoot "build-tools\36.0.0\aapt2.exe"
           $env:GAMESPACE_CATALOG_TEST_APKSIGNER_JAR = Join-Path $sdkRoot "build-tools\36.0.0\lib\apksigner.jar"
-          node --test apk-gamespace/tests/apk-update-catalog.test.mjs apk-gamespace/tests/restore-update-catalog.test.mjs
-          if ($LASTEXITCODE -ne 0) { throw "APK update catalog tests failed." }
+          $testLog = Join-Path $env:RUNNER_TEMP "apk-catalog-tests.tap"
+          node --test --test-reporter=tap apk-gamespace/tests/apk-update-catalog.test.mjs apk-gamespace/tests/restore-update-catalog.test.mjs 2>&1 | Tee-Object -FilePath $testLog
+          $testExitCode = $LASTEXITCODE
+          if ($testExitCode -ne 0) {
+            $report = Get-Content -LiteralPath $testLog -Raw
+            @("## Ошибка проверки каталога APK", '```text', $report, '```') | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8
+            throw "APK update catalog tests failed. See the test log in the workflow summary."
+          }

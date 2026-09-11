@@ -49,19 +49,20 @@ function entry(tag = "v0.3.13") {
   );
 }
 
-async function temporaryDirectory(t) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "gamespace-apk-catalog-"));
+async function temporaryDirectory(t, parent = os.tmpdir()) {
+  const base = path.resolve(parent);
+  const directory = await mkdtemp(path.join(base, "gamespace-apk-catalog-"));
   t.after(async () => {
     const resolved = path.resolve(directory);
-    const relative = path.relative(path.resolve(os.tmpdir()), resolved);
+    const relative = path.relative(base, resolved);
     assert.ok(relative && !relative.startsWith("..") && !path.isAbsolute(relative));
     await rm(resolved, { recursive: true, force: true });
   });
   return directory;
 }
 
-async function preparationFixture(t) {
-  const directory = await temporaryDirectory(t);
+async function preparationFixture(t, parent) {
+  const directory = await temporaryDirectory(t, parent);
   const options = {
     apk: path.join(directory, "input with spaces.apk"),
     release: path.join(directory, "release.json"),
@@ -232,7 +233,8 @@ test("preparation verifies through SDK tools, writes a fresh catalog, and preser
 });
 
 test("relative APK paths resolve to the same input for both SDK tools", async (t) => {
-  const { options, inspectTool, calls } = await preparationFixture(t);
+  // Windows cannot make a relative path between the workspace and TEMP on different drives.
+  const { options, inspectTool, calls } = await preparationFixture(t, process.cwd());
   const canonicalApk = await realpath(options.apk);
   options.apk = path.relative(process.cwd(), options.apk);
   assert.ok(!path.isAbsolute(options.apk));
