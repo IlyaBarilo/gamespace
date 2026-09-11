@@ -114,6 +114,8 @@ public class MainActivity extends Activity {
 
     private WebView homeWebView;
     private WebView webView;
+    private AppUpdateDialog appUpdateDialog;
+    private AlertDialog externalLinkDialog;
     private FrameLayout contentFrame;
     private LinearLayout topBarContainer;
     private ProgressBar topBarCountdown;
@@ -847,6 +849,7 @@ public class MainActivity extends Activity {
         settings.setDatabaseEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
+        WebViewIsolation.configure(settings);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setLoadWithOverviewMode(true);
         settings.setUseWideViewPort(true);
@@ -1136,8 +1139,8 @@ public class MainActivity extends Activity {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"} : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1146,7 +1149,11 @@ public class MainActivity extends Activity {
                 public void onClick(DialogInterface dialog, int which) {
                     String item = items[which];
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
-                    if ("Выбрать архив".equals(item)) {
+                    if ("Обновление приложения".equals(item)) {
+                        if (appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(MainActivity.this);
+                        showHeldDialog(appUpdateDialog.create());
+                        appUpdateDialog.shown();
+                    } else if ("Выбрать архив".equals(item)) {
                         pendingUpdateMode = UPDATE_MODE_FULL;
                         openZipPicker();
                     } else if ("Загрузить встроенный демо-сайт".equals(item)) {
@@ -3504,6 +3511,8 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (appUpdateDialog != null) appUpdateDialog.destroy();
+        if (externalLinkDialog != null) externalLinkDialog.dismiss();
         mainHandler.removeCallbacks(topBarCountdownRunnable);
         cancelPendingContentLoadState();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && api33BackNavigationHandler != null) {
@@ -3537,7 +3546,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean openExternalUrl(String url) {
-        Uri target = Uri.parse(url);
+        final Uri target = Uri.parse(url);
         String scheme = target.getScheme();
         String normalizedScheme = scheme == null ? "" : scheme.toLowerCase(Locale.US);
         if (!("http".equals(normalizedScheme)
@@ -3551,13 +3560,23 @@ public class MainActivity extends Activity {
             Toast.makeText(this, "Ссылка с неподдерживаемым протоколом заблокирована.", Toast.LENGTH_LONG).show();
             return true;
         }
-        try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, target);
-            intent.addCategory(Intent.CATEGORY_BROWSABLE);
-            startActivity(intent);
-        } catch (ActivityNotFoundException ignored) {
-            return true;
-        }
+        if (externalLinkDialog != null && externalLinkDialog.isShowing()) return true;
+        // The legacy Android 6 navigation callback cannot prove a user gesture.
+        // A native confirmation also prevents scripts from silently opening a browser.
+        externalLinkDialog = new AlertDialog.Builder(this).setTitle("Открыть внешнюю ссылку?")
+            .setMessage(target.toString())
+            .setPositiveButton("Открыть", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, target);
+                        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                        startActivity(intent);
+                    } catch (ActivityNotFoundException ignored) {
+                        Toast.makeText(MainActivity.this, "Нет приложения для открытия этой ссылки.", Toast.LENGTH_LONG).show();
+                    }
+                }
+            }).setNegativeButton("Отмена", null).create();
+        showHeldDialog(externalLinkDialog);
         return true;
     }
 

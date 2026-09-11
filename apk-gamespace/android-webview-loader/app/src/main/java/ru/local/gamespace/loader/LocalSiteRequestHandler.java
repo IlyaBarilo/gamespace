@@ -16,8 +16,7 @@ import java.util.Map;
 
 /** Serves installed content through one private HTTPS origin without file:// access. */
 final class LocalSiteRequestHandler {
-    static final String ORIGIN = "https://content.gamespace.local";
-    private static final String HOST = "content.gamespace.local";
+    static final String ORIGIN = LocalWebPolicy.ORIGIN;
     private volatile File contentRoot;
 
     void setContentRoot(File root) {
@@ -33,16 +32,7 @@ final class LocalSiteRequestHandler {
     }
 
     boolean isInternalUrl(String value) {
-        if (value == null) return false;
-        try {
-            Uri uri = Uri.parse(value);
-            int port = uri.getPort();
-            return "https".equalsIgnoreCase(uri.getScheme())
-                && HOST.equalsIgnoreCase(uri.getHost())
-                && (port == -1 || port == 443);
-        } catch (Exception ignored) {
-            return false;
-        }
+        return LocalWebPolicy.isInternalUrl(value);
     }
 
     File fileForUrl(String value) throws IOException {
@@ -77,12 +67,7 @@ final class LocalSiteRequestHandler {
     private WebResourceResponse intercept(String value, String method, Map<String, String> requestHeaders) {
         try {
             if (isInternalUrl(value)) return serve(value, method, requestHeaders);
-            Uri uri = Uri.parse(value);
-            String scheme = uri.getScheme();
-            if ("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme)) {
-                return response(403, "Forbidden", "text/plain", "utf-8", new ByteArrayInputStream(new byte[0]), 0L, null);
-            }
-            return null;
+            return LocalWebPolicy.isInMemoryUrl(value) ? null : blocked();
         } catch (Exception error) {
             byte[] message;
             try { message = "Локальный файл недоступен.".getBytes("UTF-8"); }
@@ -92,6 +77,7 @@ final class LocalSiteRequestHandler {
     }
 
     private WebResourceResponse serve(String value, String method, Map<String, String> requestHeaders) throws IOException {
+        if (!("GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method))) return blocked();
         File file = fileForUrl(value);
         if (file == null || !file.isFile()) {
             return response(404, "Not Found", "text/plain", "utf-8", new ByteArrayInputStream(new byte[0]), 0L, null);
@@ -127,8 +113,13 @@ final class LocalSiteRequestHandler {
         headers.put("X-Content-Type-Options", "nosniff");
         headers.put("Accept-Ranges", "bytes");
         headers.put("Content-Length", Long.toString(Math.max(0L, length)));
+        headers.put("Content-Security-Policy", LocalWebPolicy.CSP);
         if (extra != null) headers.putAll(extra);
         return new WebResourceResponse(mime, encoding, status, reason, headers, data);
+    }
+
+    static WebResourceResponse blocked() {
+        return response(403, "Forbidden", "text/plain", "utf-8", new ByteArrayInputStream(new byte[0]), 0L, null);
     }
 
     private static String header(Map<String, String> headers, String name) {

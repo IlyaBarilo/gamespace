@@ -119,7 +119,9 @@ Package отличается от старого `ru.local.gamespace`, поэт�
 
 `targetSdkVersion 36` нужен для требований Google Play к новым приложениям и обновлениям после 31 августа 2026.
 
-В `AndroidManifest.xml` нет разрешения `INTERNET` и нет storage-разрешений.
+В `AndroidManifest.xml` есть `INTERNET` для ручной нативной проверки обновлений;
+storage-разрешений нет. Сетевые загрузки WebView ограничены явно. Механизм и
+границы ограничений описаны в [APP_UPDATES_RU.md](APP_UPDATES_RU.md).
 
 ## Ориентация
 
@@ -703,7 +705,10 @@ $zip.Dispose()
 
 ### Нужно работать без интернета
 
-Решение: APK не содержит `INTERNET` permission. WebView открывает локальный `file://` index, а сайт должен содержать все нужные ресурсы локально.
+Решение: WebView получает файлы из каталога приложения через виртуальный адрес
+`https://content.gamespace.local`. Прямые `file://` и `content://` загрузки
+отключены; сайт должен содержать все нужные ресурсы локально. Нативная проверка
+обновлений требует интернет, запускается только кнопкой и не нужна для игры.
 
 ### Нужны сайты 40 ГБ+
 
@@ -784,7 +789,7 @@ $zip.Dispose()
 
 ## Короткая сводка для нового чата
 
-`apk-gamespace` - Android WebView loader для больших офлайн-сайтов. Основной сайт не упаковывается в APK; внутри есть только маленький `assets/demo.7z` для проверки. APK маленький, package `ru.local.gamespace.loader`, target SDK 36, без INTERNET permission. При первом запуске пользователь выбирает ZIP/ZIP64 или 7z либо загружает встроенное демо, приложение распаковывает архив в `Android/data/ru.local.gamespace.loader/files/gamespace-loader/site-files` и открывает найденный `index.html`.
+`apk-gamespace` - Android WebView loader для больших офлайн-сайтов. Основной сайт не упаковывается в APK; внутри есть только маленький `assets/demo.7z` для проверки. APK маленький, package `ru.local.gamespace.loader`, target SDK 36. Разрешение INTERNET добавлено для ручной нативной проверки каталога обновлений; сетевые загрузки WebView ограничены в коде. При первом запуске пользователь выбирает ZIP/ZIP64 или 7z либо загружает встроенное демо, приложение распаковывает архив в `Android/data/ru.local.gamespace.loader/files/gamespace-loader/site-files` и открывает найденный `index.html`.
 
 Главный код: `apk-gamespace/android-webview-loader/app/src/main/java/ru/local/gamespace/loader/MainActivity.java`.
 
@@ -798,7 +803,7 @@ $zip.Dispose()
 - не добавлять сайт внутрь APK;
 - update-архив должен содержать только изменённые файлы с теми же логическими
   путями, что и в полном архиве;
-- не добавлять INTERNET permission;
+- сохранять ручной запуск проверки обновлений и ограничения WebView; не предоставлять играм JavaScript-доступ к обновлению APK;
 - сохранять `sensorPortrait`, потому что игры вертикальные;
 - верхняя панель overlay, 50% прозрачность, автоскрытие 5 секунд;
 - игру показывать только после `postVisualStateCallback`; при долгой подготовке использовать нативный индикатор 0,5/1/10 секунд;

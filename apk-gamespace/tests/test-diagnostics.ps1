@@ -42,6 +42,15 @@ if ($LASTEXITCODE -ne 0) { throw "Site transaction manager tests failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ZipFailureTest (Join-Path $sourceDirectory "MainActivity.java") $outputDirectory
 if ($LASTEXITCODE -ne 0) { throw "ZIP extraction diagnostic tests failed." }
 
+$updateSources = @("UpdateJson.java", "AppUpdateCatalog.java", "AppUpdateClient.java", "AppUpdateRepository.java", "LocalWebPolicy.java") | ForEach-Object { Join-Path $sourceDirectory $_ }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory $updateSources (Join-Path $PSScriptRoot "AppUpdateTest.java")
+if ($LASTEXITCODE -ne 0) { throw "APK update client compilation failed." }
+$updateFixture = Join-Path $outputDirectory "producer-updates.json"
+& node (Join-Path $PSScriptRoot "write-update-client-fixture.mjs") $updateFixture
+if ($LASTEXITCODE -ne 0) { throw "APK update producer fixture failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.AppUpdateTest $updateFixture
+if ($LASTEXITCODE -ne 0) { throw "APK update client tests failed." }
+
 # Wiring checks supplement JVM tests; they do not replace Android device tests.
 $activity = Get-Content -LiteralPath (Join-Path $sourceDirectory "MainActivity.java") -Raw -Encoding UTF8
 $checks = @{
@@ -64,6 +73,8 @@ $checks = @{
     "WebView errors" = 'class DiagnosticSiteClient extends WebViewClient'
     "virtual HTTPS content origin" = 'LocalSiteRequestHandler localSiteRequestHandler = new LocalSiteRequestHandler\(\)'
     "direct file access disabled" = 'settings\.setAllowFileAccess\(false\)'
+    "WebView network restrictions installed" = 'WebViewIsolation\.configure\(settings\)'
+    "native update menu" = '"Обновление приложения"\.equals\(item\)'
     "operation cancellation" = 'ensureOperationNotCancelled\(\)'
     "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
     "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'
@@ -80,6 +91,9 @@ if ($activity -match 'finally\s*\{\s*context\.stage\s*=') {
 if ($activity -match 'Build\.SERIAL|Build\.getSerial|ANDROID_ID') {
     throw "Diagnostic reports must not collect unique device identifiers."
 }
+if ($activity -match 'addJavascriptInterface\(') {
+    throw "Imported pages must not receive a native JavaScript bridge."
+}
 $manifest = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loader\app\src\main\AndroidManifest.xml") -Raw -Encoding UTF8
 if ($manifest -notmatch 'android:enableOnBackInvokedCallback="true"') {
     throw "Predictive back must be enabled in AndroidManifest.xml."
@@ -88,4 +102,4 @@ $appGradle = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loade
 if ($appGradle -notmatch 'minSdk\s+23') {
     throw "Back navigation changes must preserve Android 6 / minSdk 23."
 }
-Write-Host "Diagnostic wiring: $($checks.Count + 4) checks passed. Android UI still requires a device test."
+Write-Host "Diagnostic wiring: $($checks.Count + 5) checks passed. Android UI still requires a device test."
