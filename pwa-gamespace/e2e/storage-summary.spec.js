@@ -70,5 +70,50 @@ test("unavailable browser storage estimates do not fail app startup", async ({ p
   await expect(page.locator("#storageBarText")).toHaveText("—");
   await expect(page.locator("#storageQuota")).toHaveText("Квота браузера: не сообщается");
   await expect(page.locator("#storagePersistent")).toHaveText("Не определено");
+  await expect(page.locator("#storageRetention")).toHaveAttribute("data-mode", "unknown");
+  await expect(page.locator("#storageRetention")).toContainText("Нельзя подтвердить защиту");
   await expect(page.locator("#errorPanel")).toBeHidden();
 });
+
+for (const granted of [true, false]) {
+  test(`storage guidance reflects ${granted ? "granted" : "denied"} persistence after importing`, async ({ page }, testInfo) => {
+    page.on("dialog", dialog => dialog.accept());
+    await page.addInitScript((permissionGranted) => {
+      Object.defineProperty(navigator, "standalone", { get: () => true });
+      let persistent = false;
+      Object.defineProperty(navigator.storage, "persisted", {
+        configurable: true, value: async () => persistent,
+      });
+      Object.defineProperty(navigator.storage, "persist", {
+        configurable: true, value: async () => {
+          persistent = permissionGranted;
+          return persistent;
+        },
+      });
+    }, granted);
+    await page.goto("./");
+    await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+    await expect(page.locator("#storagePersistent")).toHaveText("Обычное");
+    await expect(page.locator("#storageRetention")).toContainText("может автоматически удалить");
+
+    const zip = new ZipWriter(new BlobWriter("application/zip"));
+    await zip.add("index.html", new TextReader("<!doctype html><title>Persistence fixture</title>"));
+    const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
+    const chooser = page.waitForEvent("filechooser");
+    await page.locator("#chooseArchiveButton").click();
+    await (await chooser).setFiles({ name: "persistence-fixture.zip", mimeType: "application/zip", buffer });
+    await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
+    await expect(page.locator("#storagePersistent")).toHaveText(granted ? "Постоянное" : "Обычное");
+    await expect(page.locator("#storageRetention")).toHaveAttribute("data-mode", granted ? "persistent" : "best-effort");
+    await expect(page.locator("#storageRetention")).toContainText(granted
+      ? "Ручная очистка данных приложения или браузера может удалить"
+      : "Постоянное хранение не предоставлено");
+    await expect(page.locator(".storage-retention-help")).toContainText("Квота не резервирует место");
+    await expect(page.locator("#errorPanel")).toBeHidden();
+
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.locator(".storage-panel").scrollIntoViewIfNeeded();
+    expect(await page.locator(".storage-panel").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.locator(".storage-panel").screenshot({ path: testInfo.outputPath("storage-retention-mobile.png") });
+  });
+}

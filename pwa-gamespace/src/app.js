@@ -598,7 +598,15 @@ async function refreshStorage() {
   try { persisted = await navigator.storage?.persisted?.(); }
   catch { /* Persistence status can be unavailable independently of the quota. */ }
   elements.storagePersistent.textContent = persisted === true ? "Постоянное"
-    : persisted === false ? "По решению браузера" : "Не определено";
+    : persisted === false ? "Обычное" : "Не определено";
+  elements.storagePersistent.setAttribute("aria-label", `Режим хранения: ${elements.storagePersistent.textContent}`);
+  elements.storageRetention.dataset.mode = persisted === true ? "persistent"
+    : persisted === false ? "best-effort" : "unknown";
+  elements.storageRetention.textContent = persisted === true
+    ? "Браузер предоставил постоянное хранение: данные защищены от автоматической очистки при нехватке места. Ручная очистка данных приложения или браузера может удалить сайт и сохранения игр."
+    : persisted === false
+      ? "Постоянное хранение не предоставлено. При нехватке места браузер может автоматически удалить распакованный сайт и сохранения игр."
+      : "Не удалось определить режим хранения. Нельзя подтвердить защиту сайта и сохранений игр от автоматической очистки.";
 }
 
 async function synchronizeSiteInterface({ reloadState = false } = {}) {
