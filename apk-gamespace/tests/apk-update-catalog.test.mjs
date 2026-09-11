@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFile, spawnSync } from "node:child_process";
@@ -217,6 +217,7 @@ test("hashing reads actual bytes; JSON rejects oversized files and invalid UTF-8
 
 test("preparation verifies through SDK tools, writes a fresh catalog, and preserves inputs", async (t) => {
   const { options, inspectTool, calls } = await preparationFixture(t);
+  const canonicalApk = await realpath(options.apk);
   const before = await stat(options.apk);
   const catalog = await prepareUpdateCatalog(options, { inspectTool });
   assert.equal(catalog.latestVersionCode, 313);
@@ -226,7 +227,19 @@ test("preparation verifies through SDK tools, writes a fresh catalog, and preser
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[0].args.slice(0, 5), ["-jar", options.apksignerJar, "verify", "--verbose", "--print-certs"]);
   assert.deepEqual(calls[1].args.slice(0, 2), ["dump", "badging"]);
-  assert.equal(calls[0].args.at(-1), options.apk);
+  // Windows TEMP can use a short name or different casing for the same file.
+  for (const call of calls) assert.equal(call.args.at(-1), canonicalApk);
+});
+
+test("relative APK paths resolve to the same input for both SDK tools", async (t) => {
+  const { options, inspectTool, calls } = await preparationFixture(t);
+  const canonicalApk = await realpath(options.apk);
+  options.apk = path.relative(process.cwd(), options.apk);
+  assert.ok(!path.isAbsolute(options.apk));
+  await prepareUpdateCatalog(options, { inspectTool });
+  assert.equal(calls.length, 2);
+  for (const call of calls) assert.equal(call.args.at(-1), canonicalApk);
+  assert.deepEqual(await readFile(canonicalApk), BYTES);
 });
 
 test("signature-tool failure stops preparation before a catalog is created", async (t) => {
