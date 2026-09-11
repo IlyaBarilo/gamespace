@@ -89,7 +89,7 @@ test("only the final job uploads Pages, using the highest verified version and w
   assert.match(pages, /APK_SIGNER_SHA256: \$\{\{ needs.apk.outputs.signer_sha256 \}\}/);
   assert.match(pages, /PAGES_VERSION: \$\{\{ steps.apk_catalog.outputs.latest_version \}\}/);
   assert.match(pages, /assemble-pages.mjs "\$PAGES_VERSION"/);
-  assert.match(pages, /test ! -e "\$pages\/apk\/updates.json"/);
+  assert.match(pages, /assemble-pages.mjs "\$PAGES_VERSION" --apk-catalog "\$RUNNER_TEMP\/apk-catalog-output\/updates.json"/);
   assert.ok(pages.indexOf("restore-update-catalog.mjs") < pages.indexOf("assemble-pages.mjs"));
   assert.ok(pages.indexOf("assemble-pages.mjs") < pages.indexOf("upload-pages-artifact"));
   assert.equal((workflow.match(/uses: actions\/upload-pages-artifact/g) || []).length, 1);
@@ -178,11 +178,11 @@ test("corrupt downloaded upload fails verification before Pages deployment", she
   assert.deepEqual(f.state().releases["v0.4"], f.prepared);
 });
 
-function pagesFixture(t) {
+function pagesFixture(t, versions = ["0.3.9", "0.3.14"]) {
   const f = fixture(t);
   const root = path.join(f.directory, "pwa-gamespace");
   mkdirSync(path.join(root, "scripts"), { recursive: true });
-  for (const name of ["assemble-pages.mjs", "release-utils.mjs", "verify-runtime.mjs", "verify-releases.mjs"]) {
+  for (const name of ["assemble-pages.mjs", "release-utils.mjs", "verify-runtime.mjs", "verify-releases.mjs", "verify-pages-size.mjs"]) {
     copyFileSync(new URL(`../scripts/${name}`, import.meta.url), path.join(root, "scripts", name));
   }
   const runtime = "// immutable fixture runtime\r\n";
@@ -192,7 +192,7 @@ function pagesFixture(t) {
   writeFileSync(path.join(root, "runtime-lock.json"), JSON.stringify({
     files: { "public/sw-runtime-v1.js": digest(runtime) }, releaseFiles: { "sw-runtime-v1.js": digest(runtime) },
   }));
-  for (const version of ["0.3.9", "0.3.14"]) {
+  for (const version of versions) {
     const release = path.join(root, "release-packages", version);
     mkdirSync(release, { recursive: true });
     const contents = { "index.html": `<!doctype html><title>${version}</title>`, "sw-runtime-v1.js": runtime };
@@ -242,4 +242,36 @@ test("a corrupted PWA package stops final assembly before any Pages artifact is 
   const result = f.run();
   assert.notEqual(result.status, 0);
   assert.equal(existsSync(path.join(f.root, "pages-output")), false);
+});
+
+test("PWA history restoration downloads only ten newest packages plus an old current tag", shellOptions, t => {
+  const tags = ["v0.4", ...Array.from({ length: 15 }, (_, i) => `v0.5.${i + 1}`)];
+  const releases = Object.fromEntries(tags.map(tag => [tag, {
+    [`gamespace-pwa-${tag === "v0.4" ? "0.4.0" : tag.slice(1)}.tar.gz`]: `immutable ${tag}`,
+  }]));
+  const f = fixture(t, { tags: tags.slice(1), releases });
+  const result = f.run(prepare);
+  assert.equal(result.status, 0, result.stderr);
+  const downloaded = f.state().calls.filter(call => call[0] === "gh" && call[2] === "download").map(call => call[3]);
+  assert.deepEqual(downloaded, [...Array.from({ length: 10 }, (_, i) => `v0.5.${15 - i}`), "v0.4"]);
+  assert.equal(readFileSync(path.join(f.directory, f.assets[0]), "utf8"), "immutable v0.4");
+  assert.deepEqual(f.state().releases, releases, "history in GitHub Releases is never deleted");
+});
+
+test("Pages keeps ten numerically newest packages without changing source archives", shellOptions, t => {
+  const versions = Array.from({ length: 14 }, (_, i) => `0.3.${i + 1}`);
+  const f = pagesFixture(t, versions);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const output = path.join(f.root, "pages-output/0.3.14");
+  const catalog = JSON.parse(readFileSync(path.join(output, "versions.json"), "utf8"));
+  assert.deepEqual(catalog.versions.map(r => r.version), versions.slice(-10).reverse());
+  for (const version of versions) {
+    const source = path.join(f.root, "release-packages", version, "index.html");
+    assert.ok(existsSync(source));
+    const published = path.join(output, "releases", version, "index.html");
+    if (Number(version.split(".")[2]) <= 4) assert.equal(existsSync(published), false);
+    else assert.deepEqual(readFileSync(published), readFileSync(source));
+  }
+  assert.match(result.stdout, /Размер Pages:/);
 });

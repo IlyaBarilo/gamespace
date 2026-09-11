@@ -4,11 +4,53 @@ import { appendFile, copyFile, mkdir, mkdtemp, writeFile } from "node:fs/promise
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { MAX_JSON_BYTES, REPOSITORY_URL, hashApk, parseReleaseTag, sha256, validatePublishedRelease } from "./apk-update-catalog.mjs";
+import { APPLICATION_ID, MAX_JSON_BYTES, REPOSITORY_URL, createReleaseEntry, hashApk, mergeCatalog, parseReleaseTag, serializeCatalog, sha256, validateCatalog, validatePublishedRelease } from "./apk-update-catalog.mjs";
 import { prepareUpdateCatalog } from "./prepare-update-catalog.mjs";
 
 const REPOSITORY = "IlyaBarilo/gamespace";
+const PUBLISHED_CATALOG_URL = "https://ilyabarilo.github.io/gamespace/apk/updates.json";
 const execute = promisify(execFile);
+
+export async function readPublishedCache({ fetchCatalog = fetch, notice = console.log } = {}) {
+  let reader;
+  try {
+    const response = await fetchCatalog(PUBLISHED_CATALOG_URL, {
+      redirect: "error", credentials: "omit", cache: "no-store", signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+    reader = response.body.getReader();
+    if (Number(response.headers.get("content-length")) > MAX_JSON_BYTES) throw new Error("Каталог превышает 1 МиБ.");
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_JSON_BYTES) throw new Error("Каталог превышает 1 МиБ.");
+      chunks.push(value);
+    }
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks));
+    return validateCatalog(JSON.parse(text));
+  } catch (error) {
+    notice(`Кэш каталога APK недоступен; выполняется полная проверка релизов: ${error.message}`);
+    return null;
+  } finally {
+    if (reader) await reader.cancel().catch(() => {});
+  }
+}
+
+function cachedRelease(cache, release, latestAsset, expectedSigner) {
+  const entry = cache?.releases.find((item) => item.tag === release.tag);
+  if (!entry || entry.apk.signerSha256 !== expectedSigner || entry.publishedAt !== release.publishedAt
+      || entry.apk.sha256 !== release.asset.digest || entry.apk.size !== release.asset.size
+      || latestAsset.size !== entry.apk.size || typeof latestAsset.digest !== "string"
+      || latestAsset.digest.toLowerCase() !== `sha256:${entry.apk.sha256}`) return null;
+  // Rebuild from live release metadata, retaining only the previously verified APK identity.
+  return createReleaseEntry(release, {
+    applicationId: APPLICATION_ID, version: entry.version, versionCode: entry.versionCode,
+    minSdk: entry.minSdk, signerSha256: entry.apk.signerSha256,
+  }, { size: entry.apk.size, sha256: entry.apk.sha256 });
+}
 
 async function executeTool(executable, args) {
   const { stdout } = await execute(executable, args, {
@@ -37,12 +79,12 @@ function readyAssets(release, version) {
   });
 }
 
-// Reconstruct from release assets, not from the mutable Pages endpoint. This also
-// bootstraps the first catalog without treating HTTP/network errors as an empty history.
-export async function restoreUpdateCatalog(options, { run = executeTool, notice = console.log } = {}) {
+// GitHub Releases remain the source of history. Pages can only save a repeated APK
+// download when both live asset digests and the trusted signing certificate match.
+export async function restoreUpdateCatalog(options, { run = executeTool, notice = console.log, fetchCatalog = fetch } = {}) {
   if (options.repository !== REPOSITORY) throw new Error("Каталог предназначен для официального репозитория GameSpace.");
   parseReleaseTag(options.currentTag);
-  sha256(options.expectedSignerSha256);
+  const expectedSigner = sha256(options.expectedSignerSha256);
   if (path.basename(options.output) !== "updates.json") throw new Error("Выходной файл должен называться updates.json.");
   const listed = parseJson(await run("gh", [
     "release", "list", "--repo", REPOSITORY, "--limit", "100", "--exclude-drafts", "--exclude-pre-releases", "--json", "tagName",
@@ -58,6 +100,7 @@ export async function restoreUpdateCatalog(options, { run = executeTool, notice 
     }
     tags.add(tagName);
   }
+  const cache = options.usePublishedCache ? await readPublishedCache({ fetchCatalog, notice }) : null;
   await mkdir(options.workDirectory, { recursive: true });
   const work = await mkdtemp(path.join(options.workDirectory, "restore-"));
   let previous = null;
@@ -75,8 +118,18 @@ export async function restoreUpdateCatalog(options, { run = executeTool, notice 
       continue;
     }
     const validated = validatePublishedRelease(release);
+    const latestAsset = release.assets.find((asset) => asset.name === "GameSpace-latest.apk");
     const directory = path.join(work, version);
     await mkdir(directory);
+    const output = path.join(directory, "updates.json");
+    const cached = cachedRelease(cache, validated, latestAsset, expectedSigner);
+    if (cached) {
+      catalog = mergeCatalog(cached, catalog);
+      await writeFile(output, serializeCatalog(catalog), { encoding: "utf8", flag: "wx" });
+      previous = output;
+      notice(`Повторно использованы проверенные сведения APK ${tag}: SHA-256 обоих файлов совпадает с GitHub.`);
+      continue;
+    }
     const metadata = path.join(directory, "release.json");
     await writeFile(metadata, raw, { encoding: "utf8", flag: "wx" });
     for (const name of [validated.asset.name, "GameSpace-latest.apk"]) {
@@ -85,14 +138,12 @@ export async function restoreUpdateCatalog(options, { run = executeTool, notice 
     const apk = path.join(directory, validated.asset.name);
     const versioned = await hashApk(apk);
     const latest = await hashApk(path.join(directory, "GameSpace-latest.apk"));
-    const latestAsset = release.assets.find((asset) => asset.name === "GameSpace-latest.apk");
     if (versioned.size !== latest.size || versioned.sha256 !== latest.sha256 || latest.size !== latestAsset.size) {
       throw new Error(`Версионный APK и GameSpace-latest.apk различаются: ${tag}`);
     }
     if (latestAsset.digest != null && latestAsset.digest.toLowerCase() !== `sha256:${latest.sha256}`) {
       throw new Error(`SHA-256 GameSpace-latest.apk не совпадает с GitHub: ${tag}`);
     }
-    const output = path.join(directory, "updates.json");
     catalog = await prepareUpdateCatalog({ ...options, apk, release: metadata, previous, output }, { inspectTool: run });
     previous = output;
   }
@@ -110,6 +161,7 @@ function argumentsFrom(args) {
   };
   const options = {};
   for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--use-published-cache" && !options.usePublishedCache) { options.usePublishedCache = true; continue; }
     if (args[index] === "--github-output" && !options.githubOutput) { options.githubOutput = true; continue; }
     const field = fields[args[index]];
     if (!field || options[field] !== undefined || !args[index + 1] || args[index + 1].startsWith("--")) {

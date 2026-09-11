@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-import { APPLICATION_ID, REPOSITORY_URL, parseReleaseTag } from "../scripts/apk-update-catalog.mjs";
-import { restoreUpdateCatalog } from "../scripts/restore-update-catalog.mjs";
+import { APPLICATION_ID, MAX_JSON_BYTES, REPOSITORY_URL, parseReleaseTag } from "../scripts/apk-update-catalog.mjs";
+import { readPublishedCache, restoreUpdateCatalog } from "../scripts/restore-update-catalog.mjs";
 
 const SIGNER = "ab".repeat(32);
 const bytesFor = (tag) => Buffer.from(`test APK ${tag}`);
@@ -74,7 +74,7 @@ async function fixture(t, tags = ["v0.3.14", "v0.3.13"]) {
     const { version, versionCode } = parseReleaseTag(tag);
     return `package: name='${APPLICATION_ID}' versionCode='${versionCode}' versionName='${version}'\nminSdkVersion:'23'\n`;
   }
-  return { options, state, calls, notices, run, restore: () => restoreUpdateCatalog(options, { run, notice: (text) => notices.push(text) }) };
+  return { options, state, calls, notices, run, restore: (dependencies = {}) => restoreUpdateCatalog(options, { run, notice: (text) => notices.push(text), ...dependencies }) };
 }
 
 test("first catalog is reconstructed from ready assets without fetching a Pages endpoint", async (t) => {
@@ -175,4 +175,104 @@ test("the published catalog is never overwritten by local preparation", async (t
   await writeFile(f.options.output, "previous published bytes");
   await assert.rejects(f.restore(), { code: "EEXIST" });
   assert.equal(await readFile(f.options.output, "utf8"), "previous published bytes");
+});
+
+async function cacheFixture(t) {
+  const f = await fixture(t);
+  const cache = await f.restore();
+  f.options.output = path.join(path.dirname(f.options.output), "next", "updates.json");
+  f.options.usePublishedCache = true;
+  f.calls.length = 0;
+  const fetchCatalog = async (url, options) => {
+    assert.equal(url, "https://ilyabarilo.github.io/gamespace/apk/updates.json");
+    assert.equal(options.redirect, "error");
+    assert.equal(options.credentials, "omit");
+    assert.equal(options.headers, undefined, "GitHub token is never sent to Pages");
+    return new Response(JSON.stringify(cache));
+  };
+  return { ...f, cache, cached: () => f.restore({ fetchCatalog }) };
+}
+
+const downloads = f => f.calls.filter(call => call[1] === "release" && call[2] === "download");
+
+test("matching published entries avoid all APK downloads and SDK calls, but refresh descriptions", async t => {
+  const f = await cacheFixture(t);
+  f.state.releases["v0.3.13"].body = "Новое описание";
+  const catalog = await f.cached();
+  assert.equal(catalog.releases[1].description, "Новое описание");
+  assert.equal(downloads(f).length, 0);
+  assert.ok(f.calls.every(call => call[0] === "gh"));
+  assert.equal(f.calls.filter(call => call[1] === "api").length, 2);
+});
+
+test("a new release downloads only its two APK copies while older entries use the cache", async t => {
+  const f = await cacheFixture(t);
+  f.options.currentTag = "v0.3.15";
+  f.state.releases["v0.3.15"] = releaseFor("v0.3.15");
+  const catalog = await f.cached();
+  assert.equal(catalog.latestVersionCode, 315);
+  assert.equal(catalog.releases.length, 3);
+  assert.equal(downloads(f).length, 2);
+  assert.ok(downloads(f).every(call => call[3] === "v0.3.15"));
+});
+
+test("cache reuse requires both GitHub digests and the trusted certificate", async t => {
+  for (const change of [
+    f => { delete f.state.releases["v0.3.13"].assets[0].digest; },
+    f => { delete f.state.releases["v0.3.13"].assets[1].digest; },
+    f => { f.cache.releases[1].apk.sha256 = "00".repeat(32); },
+    f => { f.cache.releases[1].apk.signerSha256 = "cd".repeat(32); },
+    f => { f.cache.releases[1].apk.size++; },
+    f => { f.cache.releases[1].publishedAt = "2026-09-10T12:00:00Z"; },
+  ]) {
+    const f = await cacheFixture(t); change(f);
+    assert.equal((await f.cached()).releases.length, 2);
+    assert.equal(downloads(f).length, 2);
+    assert.ok(downloads(f).every(call => call[3] === "v0.3.13"));
+  }
+});
+
+test("a missing or invalid cache rebuilds the full history instead of shortening it", async t => {
+  for (const fetchCatalog of [
+    async () => { throw new Error("network unavailable"); },
+    async () => new Response("not found", { status: 404 }),
+    async () => new Response('{"schema":999}'),
+  ]) {
+    const f = await cacheFixture(t);
+    assert.equal((await f.restore({ fetchCatalog })).releases.length, 2);
+    assert.equal(downloads(f).length, 4);
+    assert.ok(f.notices.some(text => text.includes("полная проверка")));
+  }
+});
+
+test("live release failures remain fatal even with a complete cache", async t => {
+  const f = await cacheFixture(t);
+  f.state.failMetadata = "v0.3.13";
+  await assert.rejects(f.cached(), /metadata unavailable/);
+  await assert.rejects(stat(f.options.output), { code: "ENOENT" });
+  const g = await cacheFixture(t);
+  g.state.releases["v0.3.13"].assets[1].digest = `sha256:${"00".repeat(32)}`;
+  await assert.rejects(g.cached(), /SHA-256/);
+  await assert.rejects(stat(g.options.output), { code: "ENOENT" });
+});
+
+test("cached releases removed or made incomplete on GitHub do not remain advertised", async t => {
+  const f = await cacheFixture(t);
+  f.state.tags = ["v0.3.14"];
+  assert.equal((await f.cached()).releases.length, 1);
+  const g = await cacheFixture(t);
+  g.state.releases["v0.3.13"].assets.pop();
+  assert.equal((await g.cached()).releases.length, 1);
+});
+
+test("published cache reads are bounded and reject invalid UTF-8", async () => {
+  for (const response of [
+    new Response("small", { headers: { "content-length": String(MAX_JSON_BYTES + 1) } }),
+    new Response(new Uint8Array(MAX_JSON_BYTES + 1)),
+    new Response(new Uint8Array([0xc3, 0x28])),
+  ]) {
+    const notices = [];
+    assert.equal(await readPublishedCache({ fetchCatalog: async () => response, notice: text => notices.push(text) }), null);
+    assert.equal(notices.length, 1);
+  }
 });

@@ -77,6 +77,66 @@ test("production UI installs a verified release and can roll back offline", asyn
   await expect(page.locator("#appHeaderVersion")).toHaveText(versions.version);
 });
 
+test("an installed release evicted by the three-release size budget survives restart, updates and rolls back offline with its content and saves", async ({ request, baseURL }) => {
+  const { version, retainedVersion } = await (await request.get("/__e2e_versions__")).json();
+  const tempRoot = await realpath(tmpdir());
+  const profile = await mkdtemp(path.join(tempRoot, "gs-pwa-e2e-"));
+  let context = await chromium.launchPersistentContext(profile, { headless: true });
+  const content = "<!doctype html><title>Retained user site</title><p>LOCAL CONTENT</p>";
+  async function checkContentAndSave(page) {
+    await expect(page.locator("#viewer")).toBeVisible();
+    await expect(page.frameLocator("#siteFrame").locator("body")).toContainText("LOCAL CONTENT");
+    await expect(page.locator("#viewerLoading")).toBeHidden();
+    const frame = page.frames().find(frame => frame.url().includes("/__gamespace_content__/"));
+    expect(frame).toBeTruthy();
+    expect(await frame.evaluate(() => localStorage.getItem("retention-save"))).toBe("level-42");
+    expect(await page.evaluate(async () => (await fetch("./__gamespace_content__/index.html")).text())).toContain("LOCAL CONTENT");
+    await page.locator("#viewerClose").click();
+  }
+  try {
+    const first = context.pages()[0]; await installedWindow(first); await first.goto(baseURL);
+    await expect(first.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+    await choose(first, "#chooseArchiveButton", await zipFiles({ "index.html": content }));
+    await expect(first.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
+    await first.locator("#openSiteButton").click();
+    await expect(first.locator("#viewer")).toBeVisible();
+    await expect(first.frameLocator("#siteFrame").locator("body")).toContainText("LOCAL CONTENT");
+    await expect(first.locator("#viewerLoading")).toBeHidden();
+    const frame = first.frames().find(frame => frame.url().includes("/__gamespace_content__/"));
+    await frame.evaluate(() => localStorage.setItem("retention-save", "level-42"));
+    await context.close();
+
+    expect((await request.post("/__e2e_retention__/enable")).ok()).toBe(true);
+    expect((await request.get(`${baseURL}releases/${version}/release.json`)).status()).toBe(404);
+    const catalog = await (await request.get(`${baseURL}versions.json`)).json();
+    expect(catalog.versions).toHaveLength(3);
+    expect(catalog.versions.some(entry => entry.version === version)).toBe(false);
+
+    context = await chromium.launchPersistentContext(profile, { headless: true });
+    const restarted = context.pages()[0]; await installedWindow(restarted); await restarted.goto(baseURL);
+    await expect(restarted.locator("#appHeaderVersion")).toHaveText(version);
+    await checkContentAndSave(restarted);
+    await restarted.locator("#checkPwaUpdateButton").click();
+    const card = restarted.locator("#pwaVersionsList .release-option").filter({ has: restarted.locator("strong", { hasText: `GameSpace ${retainedVersion}` }) });
+    await card.locator("button").click();
+    await expect(restarted.locator("#appHeaderVersion")).toHaveText(retainedVersion);
+    await expect.poll(async () => (await runtime(restarted, "GET_RUNTIME_STATE")).state.pendingVersion).toBeNull();
+    await checkContentAndSave(restarted);
+    await context.setOffline(true);
+    await restarted.reload();
+    await checkContentAndSave(restarted);
+    await restarted.locator("#rollbackPwaButton").click();
+    await expect(restarted.locator("#appHeaderVersion")).toHaveText(version);
+    await checkContentAndSave(restarted);
+  } finally {
+    await request.post("/__e2e_retention__/reset");
+    await context.close();
+    const resolved = await realpath(profile);
+    if (path.dirname(resolved) !== tempRoot || !path.basename(resolved).startsWith("gs-pwa-e2e-")) throw new Error("Unexpected browser profile path");
+    await rm(resolved, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("a release with invalid SHA-256 leaves the working version active", async ({ page }) => {
   await openApp(page);
   const before = await runtime(page, "GET_RUNTIME_STATE");

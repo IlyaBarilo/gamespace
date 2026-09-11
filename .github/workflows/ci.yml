@@ -64,6 +64,7 @@ jobs:
           version="$(node -e "process.stdout.write(JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version)")"
           npm run pages:assemble -- "$version"
           test -f "pages-output/$version/index.html"
+          node scripts/verify-pages-size.mjs "pages-output/$version"
 
   apk:
     name: APK с тестовой подписью — Windows

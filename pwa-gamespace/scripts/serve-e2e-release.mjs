@@ -7,6 +7,8 @@ import path from "node:path";
 import { build } from "vite";
 import { projectDirectory, assertInside, listFiles, readJson } from "./release-utils.mjs";
 import { findSevenZip } from "./verify-demo-archive.mjs";
+import { assemblePages } from "./assemble-pages.mjs";
+import { measurePagesSize } from "./verify-pages-size.mjs";
 
 const working = await mkdtemp(path.join(projectDirectory, ".codex-e2e-release-"));
 const built = path.join(working, "dist");
@@ -16,6 +18,7 @@ const { version } = await readJson(path.join(projectDirectory, "package.json"));
 const [major, minor, patch] = version.split(".").map(Number);
 const goodVersion = `${major}.${minor}.${patch + 1}`;
 const brokenVersion = `${major}.${minor}.${patch + 2}`;
+const retainedVersion = `${major}.${minor}.${patch + 12}`;
 const env = { ...process.env, GAMESPACE_DIST_DIRECTORY: built, GAMESPACE_RELEASES_DIRECTORY: releases, GAMESPACE_PAGES_OUTPUT_DIRECTORY: pages };
 
 async function run(script, args = []) {
@@ -30,9 +33,20 @@ async function writeJson(file, value) {
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`.replaceAll("\n", "\r\n"));
 }
 
-async function fixtureRelease(nextVersion, broken = false) {
+async function fixtureRelease(nextVersion, broken = false, catalogOnly = false) {
   const target = path.join(releases, nextVersion);
-  await cp(path.join(releases, version), target, { recursive: true });
+  if (catalogOnly) {
+    // Intermediate entries only exercise retention ordering. The installed and
+    // target releases remain full production builds; avoid copying demo/source
+    // archives nine extra times merely to fill the release window.
+    await mkdir(target);
+    await cp(path.join(releases, version, "sw-runtime-v1.js"), path.join(target, "sw-runtime-v1.js"));
+    await writeFile(path.join(target, "index.html"), `<!doctype html><title>Catalog fixture ${nextVersion}</title>\r\n`);
+    const manifest = await readJson(path.join(releases, version, "release.json"));
+    delete manifest.licenseBundle;
+    manifest.files = manifest.files.filter(file => ["index.html", "sw-runtime-v1.js"].includes(file.path));
+    await writeJson(path.join(target, "release.json"), manifest);
+  } else await cp(path.join(releases, version), target, { recursive: true });
   // These are synthetic future releases used only by browser tests. Production
   // source/version files and the immutable runtime are never rewritten.
   for (const relative of await listFiles(target)) {
@@ -76,6 +90,22 @@ try {
   await run("verify-runtime.mjs");
   await run("assemble-pages.mjs", [version]);
   const root = path.join(pages, version);
+  // A second real Pages assembly evicts the installed version under a budget
+  // that fits three releases. Switching roots simulates a deployment.
+  for (let offset = 3; offset <= 12; offset++) await fixtureRelease(`${major}.${minor}.${patch + offset}`, false, offset < 12);
+  await run("verify-releases.mjs");
+  await run("verify-runtime.mjs");
+  const recentSizes = await Promise.all([12, 11, 10].map(async offset =>
+    (await measurePagesSize(path.join(releases, `${major}.${minor}.${patch + offset}`))).bytes));
+  // The catalog needs less than 4 KiB here; a fourth fixture includes the 25 KiB
+  // immutable runtime and cannot fit. Production keeps the 900 MB default.
+  const limited = await assemblePages(retainedVersion, {
+    releasesRoot: releases, outputRoot: pages,
+    limit: recentSizes[0] * 2 + recentSizes[1] + recentSizes[2] + 4096,
+  });
+  if (limited.versions.length !== 3) throw new Error("Expected a three-release retention fixture");
+  const retainedRoot = path.join(pages, retainedVersion);
+  let activeRoot = root;
   const archiveSource = path.join(working, "archive-fixture");
   await mkdir(path.join(archiveSource, "site"), { recursive: true });
   await mkdir(path.join(archiveSource, "__MACOSX"));
@@ -101,7 +131,11 @@ try {
       }
       if (url.pathname === "/__e2e_versions__") {
         response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-        response.end(JSON.stringify({ version, goodVersion, brokenVersion })); return;
+        response.end(JSON.stringify({ version, goodVersion, brokenVersion, retainedVersion })); return;
+      }
+      if (request.method === "POST" && ["/__e2e_retention__/enable", "/__e2e_retention__/reset"].includes(url.pathname)) {
+        activeRoot = url.pathname.endsWith("/enable") ? retainedRoot : root;
+        response.writeHead(200, { "Cache-Control": "no-store" }); response.end("ok"); return;
       }
       if (url.pathname === "/__e2e_archive__") {
         response.writeHead(200, { "Content-Type": "application/x-7z-compressed" }); response.end(await readFile(archive)); return;
@@ -113,8 +147,8 @@ try {
         response.writeHead(200, { "Content-Type": "application/json" }); response.end(JSON.stringify(corruptManifest)); return;
       }
       if (relative.startsWith("releases/corrupt/")) relative = relative.replace("releases/corrupt/", `releases/${goodVersion}/`);
-      const absolute = path.resolve(root, relative);
-      assertInside(root, absolute);
+      const absolute = path.resolve(activeRoot, relative);
+      assertInside(activeRoot, absolute);
       const file = (await stat(absolute)).isDirectory() ? path.join(absolute, "index.html") : absolute;
       const bytes = await readFile(file);
       response.writeHead(200, { "Content-Type": types[path.extname(file)] || "application/octet-stream", "Content-Length": bytes.length, "Cache-Control": "no-store" });

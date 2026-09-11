@@ -111,8 +111,12 @@ jobs:
           set -euo pipefail
           mkdir -p release-packages
           published_tags="$(gh release list --limit 100 --exclude-drafts --exclude-pre-releases --json tagName --jq '.[].tagName')"
+          # Include an old manually retried tag even when it is outside the API window.
+          published_tags="$(printf '%s\n%s\n' "$published_tags" "$RELEASE_TAG" | sort -u -V -r)"
+          restored=0
           while IFS= read -r tag; do
             [[ "$tag" == v* ]] || continue
+            if (( restored >= 10 )) && [[ "$tag" != "$RELEASE_TAG" ]]; then continue; fi
             if ! version="$(node scripts/read-release-version.mjs "$tag" 2>/dev/null)"; then
               continue
             fi
@@ -126,6 +130,7 @@ jobs:
             mkdir -p "$download_dir" "release-packages/${version}"
             gh release download "$tag" --pattern "$asset" --dir "$download_dir"
             tar -xzf "${download_dir}/${asset}" -C "release-packages/${version}"
+            restored=$((restored + 1))
           done <<<"$published_tags"
 
           export GAMESPACE_RELEASE_DESCRIPTION="$(gh release view "$RELEASE_TAG" --json body --jq .body)"
@@ -421,7 +426,7 @@ jobs:
             --expected-signer-sha256 "$APK_SIGNER_SHA256" \
             --aapt2 "$APK_AAPT2" --apksigner-jar "$APK_APKSIGNER_JAR" \
             --work-directory "$RUNNER_TEMP/apk-catalog-work" \
-            --output "$RUNNER_TEMP/apk-catalog-output/updates.json" --github-output
+            --output "$RUNNER_TEMP/apk-catalog-output/updates.json" --use-published-cache --github-output
 
       - name: Assemble Pages with the latest verified APK and PWA release
         env:
@@ -430,13 +435,11 @@ jobs:
           set -euo pipefail
           node pwa-gamespace/scripts/verify-runtime.mjs
           node pwa-gamespace/scripts/verify-releases.mjs
-          node pwa-gamespace/scripts/assemble-pages.mjs "$PAGES_VERSION"
+          node pwa-gamespace/scripts/assemble-pages.mjs "$PAGES_VERSION" --apk-catalog "$RUNNER_TEMP/apk-catalog-output/updates.json"
           pages="pwa-gamespace/pages-output/$PAGES_VERSION"
-          mkdir -p "$pages/apk"
-          test ! -e "$pages/apk/updates.json"
-          cp "$RUNNER_TEMP/apk-catalog-output/updates.json" "$pages/apk/updates.json"
           test -s "$pages/apk/updates.json"
           test -f "$pages/.nojekyll"
+          node pwa-gamespace/scripts/verify-pages-size.mjs "$pages"
 
       - name: Upload the complete GitHub Pages artifact
         uses: actions/upload-pages-artifact@v5
