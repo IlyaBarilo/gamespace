@@ -218,6 +218,11 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         initializeDiagnosticJournal();
+        try {
+            DemoImportFile.cleanupInterrupted(getNoBackupFilesDir());
+        } catch (IOException error) {
+            if (diagnosticJournal != null) diagnosticJournal.record("Очистка временного демо отложена: " + error.getMessage(), true);
+        }
         buildUi();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             api33BackNavigationHandler = new Api33BackNavigationHandler(this);
@@ -475,7 +480,7 @@ public class MainActivity extends Activity {
         demoButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                installBuiltinDemoSite();
+                confirmInstallBuiltinDemoSite();
             }
         });
         LinearLayout.LayoutParams demoParams = new LinearLayout.LayoutParams(
@@ -1143,7 +1148,7 @@ public class MainActivity extends Activity {
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"}
             : appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()
             ? new String[] {"Обновление приложения", "Информация", "Создать отчёт о проблеме", "Последняя ошибка"} : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -1166,7 +1171,7 @@ public class MainActivity extends Activity {
                         pendingUpdateMode = UPDATE_MODE_FULL;
                         openZipPicker();
                     } else if ("Загрузить встроенный демо-сайт".equals(item)) {
-                        installBuiltinDemoSite();
+                        confirmInstallBuiltinDemoSite();
                     } else if ("Быстро обновить из архива".equals(item)) {
                         pendingUpdateMode = UPDATE_MODE_FAST;
                         openZipPicker();
@@ -1515,6 +1520,25 @@ public class MainActivity extends Activity {
         worker.start();
     }
 
+    private void confirmInstallBuiltinDemoSite() {
+        if (busy || appUpdateBlocksSite()) return;
+        if (currentIndexFile == null || !currentIndexFile.isFile()) {
+            installBuiltinDemoSite();
+            return;
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this)
+            .setTitle("Установить демо-сайт?")
+            .setMessage("Текущий сайт будет заменён встроенным демо после успешной подготовки. Для возврата к своему сайту потребуется снова установить его архив.")
+            .setNegativeButton("Отмена", null)
+            .setPositiveButton("Установить демо", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface dialog, int which) {
+                    installBuiltinDemoSite();
+                }
+            })
+            .create();
+        showHeldDialog(dialog);
+    }
+
     private void installBuiltinDemoSite() {
         if (busy || appUpdateBlocksSite()) {
             return;
@@ -1532,7 +1556,7 @@ public class MainActivity extends Activity {
                 File base = null;
                 File stagingRoot = null;
                 File activeRoot = null;
-                File demoArchive = null;
+                DemoImportFile demoImportFile = null;
                 boolean filesystemCommitted = false;
                 final File previousIndexFile = currentIndexFile;
                 long totalStartedAt = System.currentTimeMillis();
@@ -1542,13 +1566,15 @@ public class MainActivity extends Activity {
                 if (diagnosticJournal != null) diagnosticJournal.begin(context.mode);
                 context.archiveName = BUILTIN_DEMO_ARCHIVE_NAME;
                 context.archiveFormat = "7z";
-                context.source = "встроенный ресурс APK";
+                    context.source = "встроенный ресурс APK";
 
                 try {
                     context.previousSite = describeInstalledSite();
-                    context.setStage("DEMO-COPY", "копирование встроенного архива во временный каталог");
-                    updateProgress("Копирую встроенный demo.7z во временный каталог...");
-                    demoArchive = copyAssetToCache(BUILTIN_DEMO_ASSET_NAME, "builtin-demo.7z");
+                    context.setStage("DEMO-COPY", "копирование встроенного архива в рабочий каталог приложения");
+                    updateProgress("Подготавливаю встроенный demo.7z в хранилище приложения...");
+                    demoImportFile = DemoImportFile.prepare(getNoBackupFilesDir());
+                    File demoArchive = demoImportFile.file();
+                    copyAssetToFile(BUILTIN_DEMO_ASSET_NAME, demoArchive);
                     context.archiveSize = demoArchive.length();
 
                     context.setStage("STORAGE-SELECT", "выбор хранилища");
@@ -1687,8 +1713,12 @@ public class MainActivity extends Activity {
                         }
                     });
                 } finally {
-                    if (demoArchive != null && demoArchive.isFile()) {
-                        demoArchive.delete();
+                    if (demoImportFile != null) {
+                        try {
+                            demoImportFile.close();
+                        } catch (IOException cleanupError) {
+                            if (diagnosticJournal != null) diagnosticJournal.record("Очистка временного демо отложена: " + cleanupError.getMessage(), true);
+                        }
                     }
                     saveArchiveStatistics(context);
                     finishBusy();
@@ -1699,8 +1729,7 @@ public class MainActivity extends Activity {
         worker.start();
     }
 
-    private File copyAssetToCache(String assetName, String fileName) throws IOException {
-        File out = new File(getCacheDir(), fileName);
+    private void copyAssetToFile(String assetName, File out) throws IOException {
         try (InputStream input = getAssets().open(assetName);
              FileOutputStream output = new FileOutputStream(out)) {
             byte[] buffer = new byte[BUFFER_SIZE];
@@ -1710,7 +1739,6 @@ public class MainActivity extends Activity {
                 output.write(buffer, 0, read);
             }
         }
-        return out;
     }
 
     private int detectArchiveType(Uri uri, String archiveName) {

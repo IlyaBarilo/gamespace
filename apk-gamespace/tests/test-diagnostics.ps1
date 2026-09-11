@@ -15,6 +15,10 @@ $sourceDirectory = Join-Path $apkRoot "android-webview-loader\app\src\main\java\
 $outputDirectory = Join-Path $apkRoot "android-webview-loader\app\build\diagnostics-tests"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\app\libs\*')"
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "DemoImportFile.java") (Join-Path $PSScriptRoot "DemoImportFileTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Demo import work file compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DemoImportFileTest $outputDirectory
+if ($LASTEXITCODE -ne 0) { throw "Demo import work file tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ProgressEstimator.java") (Join-Path $PSScriptRoot "ProgressEstimatorTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Progress estimator compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ProgressEstimatorTest
@@ -60,6 +64,13 @@ if ($LASTEXITCODE -ne 0) { throw "APK download tests failed." }
 # Wiring checks supplement JVM tests; they do not replace Android device tests.
 $activity = Get-Content -LiteralPath (Join-Path $sourceDirectory "MainActivity.java") -Raw -Encoding UTF8
 $checks = @{
+    "demo available with an installed site" = '\? new String\[\] \{"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт"'
+    "demo menu asks before replacing site" = 'else if \("Загрузить встроенный демо-сайт"\.equals\(item\)\)\s*\{\s*confirmInstallBuiltinDemoSite\(\);'
+    "demo replacement has cancel and explicit install" = 'private void confirmInstallBuiltinDemoSite\(\)[\s\S]*?\.setNegativeButton\("Отмена", null\)[\s\S]*?\.setPositiveButton\("Установить демо"'
+    "demo copy outside cache" = 'DemoImportFile\.prepare\(getNoBackupFilesDir\(\)\)'
+    "interrupted demo copy cleanup" = 'DemoImportFile\.cleanupInterrupted\(getNoBackupFilesDir\(\)\)'
+    "demo lease acquired before copying" = 'demoImportFile = DemoImportFile\.prepare[\s\S]*?copyAssetToFile\(BUILTIN_DEMO_ASSET_NAME, demoArchive\)'
+    "demo copy released after failure or success" = 'finally\s*\{\s*if \(demoImportFile != null\)[\s\S]*?demoImportFile\.close\(\)'
     "ZIP uses try-with-resources" = 'try \(ZipInputStream zip ='
     "7z uses try-with-resources" = 'try \(SevenZFile sevenZ ='
     "separate saved report" = 'getSharedPreferences\(DIAGNOSTIC_PREFS, MODE_PRIVATE\)\.edit\(\)\.putString\(PREF_LAST_ERROR_REPORT, report\)\.commit\(\)'
@@ -94,6 +105,9 @@ foreach ($entry in $checks.GetEnumerator()) {
 if ($activity -match 'finally\s*\{\s*context\.stage\s*=') {
     throw "Resource cleanup must not overwrite the original failure stage."
 }
+if ($activity -match 'copyAssetToCache|getCacheDir\(') {
+    throw "The bundled demo import must not depend on Android's disposable cache."
+}
 if ($activity -match 'Build\.SERIAL|Build\.getSerial|ANDROID_ID') {
     throw "Diagnostic reports must not collect unique device identifiers."
 }
@@ -108,7 +122,7 @@ $appGradle = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loade
 if ($appGradle -notmatch 'minSdk\s+23') {
     throw "Back navigation changes must preserve Android 6 / minSdk 23."
 }
-Write-Host "Diagnostic wiring: $($checks.Count + 5) checks passed. Android UI still requires a device test."
+Write-Host "Diagnostic wiring: $($checks.Count + 6) checks passed. Android UI still requires a device test."
 
 # Packaging/UI guards supplement the executable transfer tests, not device installation tests.
 [xml]$updateManifest = $manifest

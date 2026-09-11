@@ -278,6 +278,7 @@ function renderState() {
   const installed = Boolean(state?.revisionPath);
   elements.emptyState.hidden = installed;
   elements.installedState.hidden = !installed;
+  elements.restoreDemoButton.hidden = !installed;
   elements.openSiteButton.disabled = !installed || busy;
   elements.fastUpdateButton.disabled = !installed || busy;
   elements.fullUpdateButton.disabled = busy;
@@ -1106,7 +1107,7 @@ for (const button of [elements.manualReportButton, elements.landingReportButton]
     diagnosticUI.manual({ operation: busy ? "текущая операция продолжается" : "проверка состояния", previousSite: state ? "установлен" : "не установлен" });
   });
 }
-elements.demoButton.addEventListener("click", async () => {
+async function installBuiltinDemoSite() {
   if (busy) return;
   const startedAt = Date.now();
   setBusy(true);
@@ -1130,7 +1131,9 @@ elements.demoButton.addEventListener("click", async () => {
     diagnosticSession.finish("получение демо остановлено");
     setBusy(false);
   }
-});
+}
+elements.demoButton.addEventListener("click", installBuiltinDemoSite);
+elements.restoreDemoButton.addEventListener("click", installBuiltinDemoSite);
 elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full"));
 elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"));
 elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
