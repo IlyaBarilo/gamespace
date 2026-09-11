@@ -16,6 +16,8 @@ test("formats canonical shortened release tags", () => {
   assert.equal(formatReleaseTag("1.0.0"), "v1");
   assert.equal(formatReleaseTag("0.5.0"), "v0.5");
   assert.equal(formatReleaseTag("0.6.22"), "v0.6.22");
+  assert.equal(formatReleaseTag("1.0.1"), "v1.0.1");
+  assert.equal(formatReleaseTag("0.0.1"), "v0.0.1");
 });
 
 test("accepts only canonical release tag spelling", () => {
@@ -26,6 +28,8 @@ test("accepts only canonical release tag spelling", () => {
   });
   assert.equal(parseReleaseTag("v0.5").version, "0.5.0");
   assert.equal(parseReleaseTag("v0.6.22").version, "0.6.22");
+  assert.equal(parseReleaseTag("v1.0.1").version, "1.0.1");
+  assert.equal(parseReleaseTag("v0.0.1").version, "0.0.1");
   assert.throws(() => parseReleaseTag("v0.5.0"), /Используйте v0\.5/);
   assert.throws(() => parseReleaseTag("v1.0"), /Используйте v1/);
   assert.throws(() => parseReleaseTag("v10.10.11.2"), /Некорректная версия/);

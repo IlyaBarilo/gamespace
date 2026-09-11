@@ -97,8 +97,10 @@ export function formatReleaseTag(version) {
     throw new Error(`Тег выпуска не поддерживает суффикс версии: ${normalized}`);
   }
   const parts = normalized.split(".");
-  if (parts[2] === "0") parts.pop();
-  if (parts[1] === "0") parts.pop();
+  if (parts[2] === "0") {
+    parts.pop();
+    if (parts[1] === "0") parts.pop();
+  }
   return `v${parts.join(".")}`;
 }
 

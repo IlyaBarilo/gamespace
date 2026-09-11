@@ -73,6 +73,11 @@ jobs:
       - name: Получить исходники
         uses: actions/checkout@v7
 
+      - name: Настроить Node.js для проверок каталога APK
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
       - name: Настроить Java
         uses: actions/setup-java@v5
         with:
@@ -107,3 +112,13 @@ jobs:
           if (-not (Test-Path -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -PathType Leaf)) {
             throw "GameSpace.apk was not created."
           }
+
+      - name: Проверить каталог обновлений APK и восстановление релизов
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
+          $env:GAMESPACE_CATALOG_TEST_APK = (Resolve-Path ".\apk-gamespace\release\GameSpace.apk").Path
+          $env:GAMESPACE_CATALOG_TEST_AAPT2 = Join-Path $sdkRoot "build-tools\36.0.0\aapt2.exe"
+          $env:GAMESPACE_CATALOG_TEST_APKSIGNER_JAR = Join-Path $sdkRoot "build-tools\36.0.0\lib\apksigner.jar"
+          node --test apk-gamespace/tests/apk-update-catalog.test.mjs apk-gamespace/tests/restore-update-catalog.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "APK update catalog tests failed." }

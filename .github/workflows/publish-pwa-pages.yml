@@ -145,9 +145,6 @@ jobs:
             cp "${RUNNER_TEMP}/${asset}" .
           fi
 
-      - name: Assemble release-only Pages artifact
-        run: npm run pages:assemble -- "${{ needs.validate.outputs.version }}"
-
       - name: Upload immutable PWA package for publication
         uses: actions/upload-artifact@v4
         with:
@@ -156,10 +153,14 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Upload GitHub Pages artifact
-        uses: actions/upload-pages-artifact@v5
+      - name: Preserve verified PWA packages for final Pages assembly
+        uses: actions/upload-artifact@v4
         with:
-          path: pwa-gamespace/pages-output/${{ needs.validate.outputs.version }}
+          name: pwa-release-packages
+          path: pwa-gamespace/release-packages
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
 
   apk:
     name: Verify and package signed APK
@@ -168,6 +169,8 @@ jobs:
     timeout-minutes: 35
     permissions:
       contents: read
+    outputs:
+      signer_sha256: ${{ steps.signing_certificate.outputs.sha256 }}
     steps:
       - name: Check out the release tag
         uses: actions/checkout@v7
@@ -235,6 +238,18 @@ jobs:
           $assetDirectory = New-Item -ItemType Directory -Path "$env:RUNNER_TEMP\gamespace-apk-assets" -Force
           Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination (Join-Path $assetDirectory "GameSpace-${{ needs.validate.outputs.version }}.apk")
           Copy-Item -LiteralPath ".\apk-gamespace\release\GameSpace.apk" -Destination (Join-Path $assetDirectory "GameSpace-latest.apk")
+
+      - name: Record the certificate from the trusted signed build
+        id: signing_certificate
+        shell: pwsh
+        run: |
+          $sdkRoot = if ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT } else { $env:ANDROID_HOME }
+          $apksigner = Join-Path $sdkRoot "build-tools\36.0.0\apksigner.bat"
+          $signature = & $apksigner verify --verbose --print-certs ".\apk-gamespace\release\GameSpace.apk"
+          if ($LASTEXITCODE -ne 0) { throw "Signed build verification failed." }
+          $certificates = @($signature | Select-String 'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]{64})' | ForEach-Object { $_.Matches[0].Groups[1].Value })
+          if ($certificates.Count -ne 1) { throw "Expected exactly one APK signing certificate." }
+          "sha256=$($certificates[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Verify and reuse APKs already attached to this release
         shell: pwsh
@@ -338,9 +353,99 @@ jobs:
             cmp "release-assets/${asset}" "${RUNNER_TEMP}/verified-release-assets/${asset}"
           done
 
+  pages:
+    name: Prepare Pages and verify the APK update catalog
+    needs: [validate, pwa, apk, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the tooling used by this workflow
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download verified PWA packages
+        uses: actions/download-artifact@v4
+        with:
+          name: pwa-release-packages
+          path: pwa-gamespace/release-packages
+
+      - name: Download APKs for SDK verification tests
+        uses: actions/download-artifact@v4
+        with:
+          name: apk-release-assets
+          path: apk-sdk-tests
+
+      - name: Ensure Android SDK verification tools
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk_root"
+          if [[ ! -f "$sdk_root/build-tools/36.0.0/aapt2" || ! -f "$sdk_root/build-tools/36.0.0/lib/apksigner.jar" ]]; then
+            "$sdk_root/cmdline-tools/latest/bin/sdkmanager" "--sdk_root=$sdk_root" "build-tools;36.0.0"
+          fi
+          echo "APK_AAPT2=$sdk_root/build-tools/36.0.0/aapt2" >> "$GITHUB_ENV"
+          echo "APK_APKSIGNER_JAR=$sdk_root/build-tools/36.0.0/lib/apksigner.jar" >> "$GITHUB_ENV"
+
+      - name: Test APK catalog generation and release recovery
+        env:
+          GAMESPACE_CATALOG_TEST_APK: ${{ github.workspace }}/apk-sdk-tests/GameSpace-${{ needs.validate.outputs.version }}.apk
+        run: |
+          set -euo pipefail
+          export GAMESPACE_CATALOG_TEST_AAPT2="$APK_AAPT2"
+          export GAMESPACE_CATALOG_TEST_APKSIGNER_JAR="$APK_APKSIGNER_JAR"
+          node --test apk-gamespace/tests/apk-update-catalog.test.mjs apk-gamespace/tests/restore-update-catalog.test.mjs
+
+      - name: Restore APK catalog from verified published releases
+        id: apk_catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_SIGNER_SHA256: ${{ needs.apk.outputs.signer_sha256 }}
+        run: |
+          set -euo pipefail
+          node apk-gamespace/scripts/restore-update-catalog.mjs \
+            --repository "$GH_REPO" --current-tag "$RELEASE_TAG" \
+            --expected-signer-sha256 "$APK_SIGNER_SHA256" \
+            --aapt2 "$APK_AAPT2" --apksigner-jar "$APK_APKSIGNER_JAR" \
+            --work-directory "$RUNNER_TEMP/apk-catalog-work" \
+            --output "$RUNNER_TEMP/apk-catalog-output/updates.json" --github-output
+
+      - name: Assemble Pages with the latest verified APK and PWA release
+        env:
+          PAGES_VERSION: ${{ steps.apk_catalog.outputs.latest_version }}
+        run: |
+          set -euo pipefail
+          node pwa-gamespace/scripts/verify-runtime.mjs
+          node pwa-gamespace/scripts/verify-releases.mjs
+          node pwa-gamespace/scripts/assemble-pages.mjs "$PAGES_VERSION"
+          pages="pwa-gamespace/pages-output/$PAGES_VERSION"
+          mkdir -p "$pages/apk"
+          test ! -e "$pages/apk/updates.json"
+          cp "$RUNNER_TEMP/apk-catalog-output/updates.json" "$pages/apk/updates.json"
+          test -s "$pages/apk/updates.json"
+          test -f "$pages/.nojekyll"
+
+      - name: Upload the complete GitHub Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: pwa-gamespace/pages-output/${{ steps.apk_catalog.outputs.latest_version }}
+
   deploy:
-    name: Deploy the published PWA release
-    needs: [publish, pwa]
+    name: Deploy GameSpace and the APK update catalog
+    needs: pages
     runs-on: ubuntu-latest
     permissions:
       actions: read

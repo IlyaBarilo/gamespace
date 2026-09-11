@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, realpathSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, realpathSync, existsSync, copyFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
@@ -53,7 +54,8 @@ function fixture(t, options = {}) {
     `;
     return spawnSync(bash, ["--noprofile", "--norc", "-c", prelude + step(name)], {
       cwd: directory, encoding: "utf8", windowsHide: true, timeout: 30_000,
-      env: { ...process.env, GH_TOKEN: "fixture-only", GH_REPO: "fixture/repository", RELEASE_TAG: "v0.4", RELEASE_VERSION: "0.4.0", RUNNER_TEMP: slash(runner), FIXTURE_SCRIPT: slash(fixtureSource), FIXTURE_STATE: statePath, MSYS_NO_PATHCONV: "1" },
+      // Relative to the isolated fixture cwd: Git Bash need not traverse Windows drive parents.
+      env: { ...process.env, GH_TOKEN: "fixture-only", GH_REPO: "fixture/repository", RELEASE_TAG: "v0.4", RELEASE_VERSION: "0.4.0", RUNNER_TEMP: "runner", FIXTURE_SCRIPT: slash(fixtureSource), FIXTURE_STATE: statePath, MSYS_NO_PATHCONV: "1" },
     });
   }
   return { run, directory, assets, prepared, state: () => JSON.parse(readFileSync(statePath)), writeState: next => writeFileSync(statePath, JSON.stringify(next)) };
@@ -68,12 +70,37 @@ test("release publication starts both verified builds and gates assets and Pages
   assert.match(workflow, /env:\n  GH_REPO: \$\{\{ github.repository \}\}/);
   assert.match(workflow, /RELEASE_TAG: \$\{\{ github.event.release.tag_name \|\| inputs.tag \}\}/);
   assert.match(workflow, /publish:\n[^]*?needs: \[validate, pwa, apk\]/);
-  assert.match(workflow, /deploy:\n[^]*?needs: \[publish, pwa\]/);
+  assert.match(workflow, /pages:\n[^]*?needs: \[validate, pwa, apk, publish\]/);
+  assert.match(workflow, /deploy:\n[^]*?needs: pages/);
   assert.match(workflow, /run: npm test/);
   assert.match(workflow, /run: npm run test:e2e/);
   assert.match(workflow, /test-diagnostics.ps1/);
   assert.match(workflow, /-RequireExistingKeystore/);
   assert.doesNotMatch(workflow, /--clobber|gh release edit|--draft=false/);
+});
+
+test("only the final job uploads Pages, using the highest verified version and workflow tooling", () => {
+  const pages = workflow.slice(workflow.indexOf("\n  pages:"), workflow.indexOf("\n  deploy:"));
+  const pwa = workflow.slice(workflow.indexOf("\n  pwa:"), workflow.indexOf("\n  apk:"));
+  assert.doesNotMatch(pwa, /upload-pages-artifact|pages:assemble/);
+  assert.match(pwa, /name: pwa-release-packages/);
+  assert.match(pwa, /include-hidden-files: true/);
+  assert.match(pages, /ref: \$\{\{ github.workflow_sha \}\}/);
+  assert.match(pages, /APK_SIGNER_SHA256: \$\{\{ needs.apk.outputs.signer_sha256 \}\}/);
+  assert.match(pages, /PAGES_VERSION: \$\{\{ steps.apk_catalog.outputs.latest_version \}\}/);
+  assert.match(pages, /assemble-pages.mjs "\$PAGES_VERSION"/);
+  assert.match(pages, /test ! -e "\$pages\/apk\/updates.json"/);
+  assert.ok(pages.indexOf("restore-update-catalog.mjs") < pages.indexOf("assemble-pages.mjs"));
+  assert.ok(pages.indexOf("assemble-pages.mjs") < pages.indexOf("upload-pages-artifact"));
+  assert.equal((workflow.match(/uses: actions\/upload-pages-artifact/g) || []).length, 1);
+});
+
+test("CI verifies the APK catalog with a test APK and never uses release signing secrets", () => {
+  const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  assert.match(ci, /-AllowTestSigning/);
+  assert.match(ci, /GAMESPACE_CATALOG_TEST_APK/);
+  assert.match(ci, /restore-update-catalog.test.mjs/);
+  assert.doesNotMatch(ci, /secrets\.|contents: write|pages: write|gh release upload/);
 });
 
 test("release validation accepts publication and rejects draft, prerelease and API failure", shellOptions, async t => {
@@ -149,4 +176,70 @@ test("corrupt downloaded upload fails verification before Pages deployment", she
   const f = fixture(t, { corruptVerificationDownload: true });
   assert.notEqual(f.run(publish).status, 0);
   assert.deepEqual(f.state().releases["v0.4"], f.prepared);
+});
+
+function pagesFixture(t) {
+  const f = fixture(t);
+  const root = path.join(f.directory, "pwa-gamespace");
+  mkdirSync(path.join(root, "scripts"), { recursive: true });
+  for (const name of ["assemble-pages.mjs", "release-utils.mjs", "verify-runtime.mjs", "verify-releases.mjs"]) {
+    copyFileSync(new URL(`../scripts/${name}`, import.meta.url), path.join(root, "scripts", name));
+  }
+  const runtime = "// immutable fixture runtime\r\n";
+  const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  mkdirSync(path.join(root, "public"));
+  writeFileSync(path.join(root, "public/sw-runtime-v1.js"), runtime);
+  writeFileSync(path.join(root, "runtime-lock.json"), JSON.stringify({
+    files: { "public/sw-runtime-v1.js": digest(runtime) }, releaseFiles: { "sw-runtime-v1.js": digest(runtime) },
+  }));
+  for (const version of ["0.3.9", "0.3.14"]) {
+    const release = path.join(root, "release-packages", version);
+    mkdirSync(release, { recursive: true });
+    const contents = { "index.html": `<!doctype html><title>${version}</title>`, "sw-runtime-v1.js": runtime };
+    const files = Object.entries(contents).map(([name, text]) => {
+      writeFileSync(path.join(release, name), text);
+      return { path: name, size: Buffer.byteLength(text), sha256: digest(text) };
+    });
+    writeFileSync(path.join(release, "release.json"), JSON.stringify({
+      schema: 1, product: "gamespace-pwa", version, runtime: "sw-runtime-v1.js",
+      date: "2026-09-11", description: "Fixture release", files,
+      totalSize: files.reduce((sum, file) => sum + file.size, 0),
+    }));
+  }
+  const catalog = '{"fixture":"verified APK catalog"}\r\n';
+  mkdirSync(path.join(f.directory, "runner/apk-catalog-output"));
+  writeFileSync(path.join(f.directory, "runner/apk-catalog-output/updates.json"), catalog);
+  function run() {
+    // Execute the real assembly scripts with miniature, independently hashed releases.
+    const env = { ...process.env, RUNNER_TEMP: "runner", PAGES_VERSION: "0.3.14" };
+    delete env.GAMESPACE_RELEASES_DIRECTORY;
+    delete env.GAMESPACE_PAGES_OUTPUT_DIRECTORY;
+    return spawnSync(bash, ["--noprofile", "--norc", "-c", step("Assemble Pages with the latest verified APK and PWA release")], {
+      cwd: f.directory, encoding: "utf8", windowsHide: true, timeout: 30000, env,
+    });
+  }
+  return { root, run, catalog };
+}
+
+test("final Pages assembly preserves old PWA bytes and keeps the APK catalog outside immutable packages", shellOptions, t => {
+  const f = pagesFixture(t);
+  const result = f.run();
+  assert.equal(result.status, 0, result.stderr);
+  const output = path.join(f.root, "pages-output/0.3.14");
+  assert.match(readFileSync(path.join(output, "index.html"), "utf8"), /0\.3\.14/);
+  assert.match(readFileSync(path.join(output, "releases/0.3.9/index.html"), "utf8"), /0\.3\.9/);
+  assert.equal(JSON.parse(readFileSync(path.join(output, "latest.json"), "utf8")).version, "0.3.14");
+  assert.equal(readFileSync(path.join(output, "apk/updates.json"), "utf8"), f.catalog);
+  for (const version of ["0.3.9", "0.3.14"]) {
+    assert.equal(existsSync(path.join(output, "releases", version, "apk")), false);
+    assert.deepEqual(readFileSync(path.join(output, "releases", version, "sw-runtime-v1.js")), readFileSync(path.join(f.root, "release-packages", version, "sw-runtime-v1.js")));
+  }
+});
+
+test("a corrupted PWA package stops final assembly before any Pages artifact is prepared", shellOptions, t => {
+  const f = pagesFixture(t);
+  writeFileSync(path.join(f.root, "release-packages/0.3.9/index.html"), "corrupted");
+  const result = f.run();
+  assert.notEqual(result.status, 0);
+  assert.equal(existsSync(path.join(f.root, "pages-output")), false);
 });
