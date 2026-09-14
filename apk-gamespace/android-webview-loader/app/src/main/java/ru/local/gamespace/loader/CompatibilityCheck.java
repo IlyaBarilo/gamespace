@@ -134,7 +134,7 @@ final class CompatibilityCheck {
     }
     private static String label(String state) {
         if ("success".equals(state)) return "выполнено";
-        if ("recorded".equals(state)) return "зафиксирован";
+        if ("recorded".equals(state)) return "выполнено";
         if ("error".equals(state)) return "ошибка";
         if ("interrupted".equals(state)) return "прервано";
         return "not_checked".equals(state) ? "пока не проверено" : "пока не выполнено";

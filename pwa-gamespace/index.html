@@ -418,18 +418,16 @@
       <p>Отчёт содержит технические сведения об устройстве и результаты проверки GameSpace. Автор программы использует их для улучшения программы, исследований и публикации результатов, в том числе в интернете, научных публикациях и таблицах совместимости на GitHub. Сведения публикуются без привязки к отправителю. Предоставление отчёта добровольно.</p>
       <p>? — неизвестно; - — не применимо. Код целостности помогает обнаружить повреждение текста при копировании или пересылке.</p>
       <div class="diagnostic-actions">
-        <button id="compatibilityRefresh" class="version-secondary-button" type="button">Обновить отчёт</button>
         <button id="compatibilityReset" class="version-secondary-button" type="button">Начать новую проверку</button>
       </div>
-      <p id="compatibilitySnapshotHint"></p>
+      <p>Отчёт формируется заново при каждом открытии этого окна.</p>
       <label for="compatibilityText">Текст отчёта — доступен только для чтения</label>
       <textarea id="compatibilityText" readonly spellcheck="false" autocomplete="off"></textarea>
       <div class="diagnostic-actions">
         <button id="compatibilityCopy" class="version-secondary-button" type="button" disabled>Копировать</button>
-        <button id="compatibilitySave" class="version-secondary-button" type="button" disabled>Сохранить текст</button>
         <button id="compatibilityForm" class="version-secondary-button" type="button" disabled>Скопировать и открыть форму</button>
       </div>
-      <p>Откроется Яндекс Форма. Вставьте скопированный отчёт и отправьте его. Для отправки нужен интернет.</p>
+      <p>Откроется Яндекс Форма. Вставьте отчёт и отправьте его. Если он не скопировался автоматически, вернитесь в GameSpace и скопируйте текст вручную. Для отправки нужен интернет.</p>
       <p>Если автоматическое копирование недоступно, скопируйте текст вручную и <a id="compatibilityFormLink" target="_blank" rel="noopener noreferrer">откройте форму</a>.</p>
       <p id="compatibilityActionStatus" role="status" aria-live="polite"></p>
     </dialog>

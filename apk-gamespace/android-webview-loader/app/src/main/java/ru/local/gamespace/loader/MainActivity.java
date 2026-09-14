@@ -74,7 +74,6 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_OPEN_ZIP = 7001;
-    private static final int REQUEST_SAVE_COMPATIBILITY = 7002;
     private static final String COMPATIBILITY_PREFS = "gamespace_compatibility";
     private static CompatibilityCheck compatibilityCheck;
     private CompatibilityDialog compatibilityDialog;
@@ -1251,10 +1250,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_SAVE_COMPATIBILITY) {
-            finishCompatibilitySave(resultCode, data);
-            return;
-        }
         if (requestCode == ApkUpdateInstaller.REQUEST_SETTINGS || requestCode == ApkUpdateInstaller.REQUEST_INSTALL) {
             if (appUpdateDialog != null) appUpdateDialog.activityResult(requestCode);
             return;
@@ -2597,37 +2592,9 @@ public class MainActivity extends Activity {
             @Override public CompatibilityCheck check() { return compatibilityCheck; }
             @Override public Map<String, Object> input() { return compatibilityInput(); }
             @Override public boolean busy() { return MainActivity.this.busy || (appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()); }
-            @Override public void saveText(String text) { saveCompatibilityText(text); }
         });
         showHeldDialog(compatibilityDialog.create());
         compatibilityDialog.shown();
-    }
-
-    private void saveCompatibilityText(String text) {
-        try {
-            if (!getSharedPreferences(COMPATIBILITY_PREFS, MODE_PRIVATE).edit().putString("pending_export", text).commit()) throw new IllegalStateException();
-            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            save.addCategory(Intent.CATEGORY_OPENABLE); save.setType("text/plain");
-            save.putExtra(Intent.EXTRA_TITLE, "GameSpace-compatibility.txt");
-            startActivityForResult(save, REQUEST_SAVE_COMPATIBILITY);
-        } catch (RuntimeException unavailable) { Toast.makeText(this, "Не удалось открыть сохранение. Используйте копирование текста.", Toast.LENGTH_LONG).show(); }
-    }
-
-    private void finishCompatibilitySave(int resultCode, Intent data) {
-        SharedPreferences prefs = getSharedPreferences(COMPATIBILITY_PREFS, MODE_PRIVATE);
-        final String report = prefs.getString("pending_export", "");
-        prefs.edit().remove("pending_export").apply();
-        if (resultCode != RESULT_OK || data == null || data.getData() == null || report == null || report.isEmpty()) return;
-        final Uri target = data.getData();
-        new Thread(new Runnable() { public void run() {
-            String message;
-            try (java.io.OutputStream output = getContentResolver().openOutputStream(target, "wt")) {
-                if (output == null) throw new IOException("No stream");
-                output.write(report.getBytes(StandardCharsets.UTF_8)); message = "Отчёт сохранён.";
-            } catch (Exception unavailable) { message = "Не удалось сохранить отчёт. Используйте копирование текста."; }
-            final String result = message;
-            mainHandler.post(new Runnable() { public void run() { Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show(); } });
-        } }, "compatibility-export").start();
     }
 
     private void saveArchiveStatistics(InstallContext context) {

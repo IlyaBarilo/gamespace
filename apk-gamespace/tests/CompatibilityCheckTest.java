@@ -28,6 +28,7 @@ public final class CompatibilityCheckTest {
         check.pageLoaded(false); equal("not_performed", step(check, "game"));
         check.pageLoaded(true); check.pageLoaded(false);
         contains(report(check), "ИТОГ: базовая проверка пройдена");
+        contains(check.guidance(), "4. Переход в игру: выполнено");
         equal("recorded", step(make(store), "game"));
         String frozen = report(check);
         check.pageError(false, "page"); check.pageLoaded(false);

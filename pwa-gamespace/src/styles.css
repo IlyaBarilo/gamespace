@@ -909,7 +909,10 @@ a:focus-visible {
 .compatibility-steps { margin: 0; padding-left: 24px; display: grid; gap: 12px; }
 .compatibility-steps li > span { display: block; font-size: 0.86rem; margin-top: 4px; color: var(--muted); }
 .compatibility-steps strong { font-size: 0.92rem; }
-.compatibility-steps [data-state="error"], #compatibilityWarning, #compatibilityActionStatus { color: #f2d399; }
+.compatibility-dialog [data-state="success"], .compatibility-dialog [data-state="recorded"] { color: #6ee7b7; }
+.compatibility-dialog [data-state="not_performed"], .compatibility-dialog [data-state="not_checked"], .compatibility-dialog [data-state="interrupted"] { color: #ffd47c; }
+.compatibility-dialog [data-state="error"] { color: #ff9c9c; }
+#compatibilityWarning, #compatibilityActionStatus { color: #f2d399; }
 .compatibility-dialog button { white-space: normal; overflow-wrap: anywhere; }
 
 .dashboard-grid {
