@@ -15,6 +15,15 @@ $sourceDirectory = Join-Path $apkRoot "android-webview-loader\app\src\main\java\
 $outputDirectory = Join-Path $apkRoot "android-webview-loader\app\build\diagnostics-tests"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\app\libs\*')"
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "CompatibilityReport.java") (Join-Path $sourceDirectory "UpdateJson.java") (Join-Path $PSScriptRoot "CompatibilityReportTest.java")
+if ($LASTEXITCODE -ne 0) { throw "GS1 compatibility report compilation failed." }
+$gs1Fixtures = Join-Path (Split-Path -Parent $apkRoot) "docs\fixtures\compatibility-report-gs1.json"
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.CompatibilityReportTest $gs1Fixtures
+if ($LASTEXITCODE -ne 0) { throw "GS1 compatibility report tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "CompatibilityCheck.java") (Join-Path $PSScriptRoot "CompatibilityCheckTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Compatibility observations compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.CompatibilityCheckTest
+if ($LASTEXITCODE -ne 0) { throw "Compatibility observation tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "DemoImportFile.java") (Join-Path $PSScriptRoot "DemoImportFileTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Demo import work file compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DemoImportFileTest $outputDirectory
@@ -84,7 +93,7 @@ $checks = @{
     "metadata stage" = 'context\.setStage\("ARCHIVE-METADATA"'
     "missing index stage" = 'context\.setStage\("INDEX-CHECK"'
     "cleanup exception retained" = 'DiagnosticReport\.technicalDetails\(cleanupError\)'
-    "manual report menu during operations" = 'items = busy \? new String\[\] \{"Создать отчёт о проблеме", "Последняя ошибка"\}'
+    "manual report menu during operations" = 'items = busy \? new String\[\] \{"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"\}'
     "process-scoped journal" = 'private static DiagnosticJournal diagnosticJournal;'
     "previous process marker" = 'diagnosticJournal\.takePending\(\)'
     "WebView errors" = 'class DiagnosticSiteClient extends WebViewClient'

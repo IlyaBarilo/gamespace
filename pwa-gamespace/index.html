@@ -165,6 +165,7 @@
         <span>Архивы обрабатываются только на устройстве</span>
         <button id="landingLastErrorButton" class="version-secondary-button" type="button">Последняя ошибка</button>
         <button id="landingReportButton" class="version-secondary-button diagnostic-trigger" type="button">Создать отчёт о проблеме</button>
+        <button id="landingCompatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
       </footer>
     </main>
 
@@ -185,6 +186,11 @@
         <span id="statusDot" class="status-dot" data-tone="neutral"></span>
         <span id="statusText">Запуск приложения…</span>
       </div>
+
+      <section class="panel compatibility-panel" aria-label="Базовая проверка">
+        <button id="compatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
+        <p>Доступен с первого запуска, даже если архив ещё не установлен или возникла ошибка.</p>
+      </section>
 
       <section id="emptyState" class="setup-section">
         <div class="section-heading">
@@ -395,6 +401,38 @@
 
       <input id="archiveInput" type="file" accept=".7z,.zip,application/x-7z-compressed,application/zip" hidden>
     </main>
+
+    <dialog id="compatibilityDialog" class="diagnostic-dialog compatibility-dialog" aria-labelledby="compatibilityTitle" aria-describedby="compatibilitySummary">
+      <div class="diagnostic-heading">
+        <h2 id="compatibilityTitle">Проверка совместимости</h2>
+        <button id="compatibilityClose" class="version-secondary-button" type="button">Закрыть</button>
+      </div>
+      <p id="compatibilitySummary" role="status"></p>
+      <ol class="compatibility-steps">
+        <li><strong>Запуск приложения: <span id="compatibilityStep_launch"></span></strong><span>Установите PWA и откройте её значок. Локальный просмотр во вкладке не подтверждает установку.</span></li>
+        <li><strong>Импорт архива: <span id="compatibilityStep_import"></span></strong><span>Закройте окно и установите встроенное демо или свой архив. Дождитесь завершения полной установки.</span></li>
+        <li><strong>Загрузка витрины: <span id="compatibilityStep_storefront"></span></strong><span>Нажмите «Открыть GameSpace» и дождитесь появления витрины игр.</span></li>
+        <li><strong>Переход в игру: <span id="compatibilityStep_game"></span></strong><span>Откройте одну из игр из витрины внутри GameSpace. Проходить игру для проверки не требуется.</span></li>
+      </ol>
+      <p id="compatibilityWarning" role="status"></p>
+      <p>Отчёт содержит технические сведения об устройстве и результаты проверки GameSpace. Автор программы использует их для улучшения программы, исследований и публикации результатов, в том числе в интернете, научных публикациях и таблицах совместимости на GitHub. Сведения публикуются без привязки к отправителю. Предоставление отчёта добровольно.</p>
+      <p>? — неизвестно; - — не применимо. Код целостности помогает обнаружить повреждение текста при копировании или пересылке.</p>
+      <div class="diagnostic-actions">
+        <button id="compatibilityRefresh" class="version-secondary-button" type="button">Обновить отчёт</button>
+        <button id="compatibilityReset" class="version-secondary-button" type="button">Начать новую проверку</button>
+      </div>
+      <p id="compatibilitySnapshotHint"></p>
+      <label for="compatibilityText">Текст отчёта — доступен только для чтения</label>
+      <textarea id="compatibilityText" readonly spellcheck="false" autocomplete="off"></textarea>
+      <div class="diagnostic-actions">
+        <button id="compatibilityCopy" class="version-secondary-button" type="button" disabled>Копировать</button>
+        <button id="compatibilitySave" class="version-secondary-button" type="button" disabled>Сохранить текст</button>
+        <button id="compatibilityForm" class="version-secondary-button" type="button" disabled>Скопировать и открыть форму</button>
+      </div>
+      <p>Откроется Яндекс Форма. Вставьте скопированный отчёт и отправьте его. Для отправки нужен интернет.</p>
+      <p>Если автоматическое копирование недоступно, скопируйте текст вручную и <a id="compatibilityFormLink" target="_blank" rel="noopener noreferrer">откройте форму</a>.</p>
+      <p id="compatibilityActionStatus" role="status" aria-live="polite"></p>
+    </dialog>
 
     <dialog id="diagnosticDialog" class="diagnostic-dialog" aria-labelledby="diagnosticTitle" aria-describedby="diagnosticPrivacy">
       <div class="diagnostic-heading">

@@ -2,6 +2,10 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
+  server: {
+    // Generated browser-test releases must not reload the local app or retain directory watchers.
+    watch: { ignored: ["**/.codex-e2e-release-*/**", "**/test-results/**"] },
+  },
   build: {
     target: "es2022",
     assetsInlineLimit: 0,

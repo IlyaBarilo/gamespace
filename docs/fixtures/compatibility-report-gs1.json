@@ -1,0 +1,341 @@
+{
+  "format": 1,
+  "formUrl": "https://forms.yandex.ru/u/6aa7f1166d2d732f54bbcdc3/",
+  "cases": [
+    {
+      "name": "apk-demo-success",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "APK",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": "Xiaomi",
+        "model": "Redmi Note 13 Pro 4G",
+        "systemName": "Xiaomi HyperOS",
+        "systemVersion": "3.0.301.0",
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Android System WebView",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": "demo",
+        "archiveFormat": "7z",
+        "archiveBytes": 19293798,
+        "archiveFiles": 126,
+        "importDurationMs": 8000,
+        "steps": {
+          "launch": "success",
+          "import": "success",
+          "storefront": "success",
+          "game": "recorded"
+        }
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена",
+      "sha256": "7a86d337ec7c56295480e0597dbdad40ea30d16e619705fcf141905cbd8e48b3",
+      "code": "GS1-D40EA3",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена\r\nЦелостность текста: GS1-D40EA3"
+    },
+    {
+      "name": "pwa-quota-error",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "PWA",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": null,
+        "model": null,
+        "systemName": null,
+        "systemVersion": null,
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Google Chrome",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": "user",
+        "archiveFormat": "7z",
+        "archiveBytes": 42949672960,
+        "archiveFiles": 12,
+        "importDurationMs": 8250,
+        "steps": {
+          "launch": "success",
+          "import": "error",
+          "storefront": "not_checked",
+          "game": "not_checked"
+        },
+        "storageMode": "ordinary",
+        "error": "quota"
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: ?; модель: ?\r\nСИСТЕМА: название: ?; версия: ?; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Google Chrome; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: обычное\r\nАРХИВ: источник: пользовательский архив; формат: 7z; размер: 40 ГБ; файлов: ?; время импорта: 8,3 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: ошибка; загрузка витрины: не проверено; переход в игру внутри GameSpace: не проверено\r\nОШИБКА: этап: импорт архива; код: QuotaExceededError; описание: превышена квота хранилища браузера\r\nИТОГ: базовая проверка завершилась ошибкой\r\nДЕЙСТВИЯ: проверьте доступное хранилище в GameSpace и повторите импорт после освобождения места",
+      "sha256": "7baa00b4b80a824463c4f62e4e6e54e8848b3efcecc78252da50fcfabea90480",
+      "code": "GS1-4E8848",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: ?; модель: ?\r\nСИСТЕМА: название: ?; версия: ?; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Google Chrome; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: обычное\r\nАРХИВ: источник: пользовательский архив; формат: 7z; размер: 40 ГБ; файлов: ?; время импорта: 8,3 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: ошибка; загрузка витрины: не проверено; переход в игру внутри GameSpace: не проверено\r\nОШИБКА: этап: импорт архива; код: QuotaExceededError; описание: превышена квота хранилища браузера\r\nИТОГ: базовая проверка завершилась ошибкой\r\nДЕЙСТВИЯ: проверьте доступное хранилище в GameSpace и повторите импорт после освобождения места\r\nЦелостность текста: GS1-4E8848"
+    },
+    {
+      "name": "incomplete-unknown-archive",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "APK",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": "Xiaomi",
+        "model": "Redmi Note 13 Pro 4G",
+        "systemName": "Xiaomi HyperOS",
+        "systemVersion": "3.0.301.0",
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Android System WebView",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": null,
+        "archiveFormat": null,
+        "archiveBytes": null,
+        "archiveFiles": null,
+        "importDurationMs": null,
+        "steps": {
+          "launch": "success",
+          "import": "not_performed",
+          "storefront": "not_performed",
+          "game": "not_performed"
+        }
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: ?; формат: ?; размер: ?; файлов: ?; время импорта: ?\r\nПРОВЕРКА: запуск приложения: успешно; импорт: не выполнено; загрузка витрины: не выполнено; переход в игру внутри GameSpace: не выполнено\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: импортируйте встроенное демо или свой архив в рамках текущей проверки",
+      "sha256": "d1013114f544f6cda6a2fc0528480188069f27d285ecf9a6279eb544ee6abdb7",
+      "code": "GS1-188069",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: ?; формат: ?; размер: ?; файлов: ?; время импорта: ?\r\nПРОВЕРКА: запуск приложения: успешно; импорт: не выполнено; загрузка витрины: не выполнено; переход в игру внутри GameSpace: не выполнено\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: импортируйте встроенное демо или свой архив в рамках текущей проверки\r\nЦелостность текста: GS1-188069"
+    },
+    {
+      "name": "pwa-browser-not-installed",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "PWA",
+        "appVersion": "0.4.0",
+        "launchMode": "browser",
+        "manufacturer": "Xiaomi",
+        "model": "Redmi Note 13 Pro 4G",
+        "systemName": "Xiaomi HyperOS",
+        "systemVersion": "3.0.301.0",
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Google Chrome",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": "demo",
+        "archiveFormat": "7z",
+        "archiveBytes": 19293798,
+        "archiveFiles": 126,
+        "importDurationMs": 8000,
+        "steps": {
+          "launch": "success",
+          "import": "success",
+          "storefront": "success",
+          "game": "recorded"
+        },
+        "storageMode": null
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: вкладка браузера\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Google Chrome; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: ?\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: запустите установленное приложение и начните новую проверку",
+      "sha256": "ae8bee945592f5cc38275d70ee312dabcf62482cb9577bc4e898c4716c669f76",
+      "code": "GS1-DABCF6",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: вкладка браузера\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Google Chrome; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: ?\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: запустите установленное приложение и начните новую проверку\r\nЦелостность текста: GS1-DABCF6"
+    },
+    {
+      "name": "quoted-unicode-and-short-duration",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "APK",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": "\tTest; \"Maker\"\n",
+        "model": " Модель  X: 1\r\n🙂\u0000",
+        "systemName": "Xiaomi HyperOS",
+        "systemVersion": "3.0.301.0",
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Android System WebView",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": "demo",
+        "archiveFormat": "ZIP",
+        "archiveBytes": 1023,
+        "archiveFiles": 126,
+        "importDurationMs": 1,
+        "steps": {
+          "launch": "success",
+          "import": "success",
+          "storefront": "success",
+          "game": "recorded"
+        }
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: \"Test; \"\"Maker\"\"\"; модель: Модель X: 1 🙂�\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: ZIP; размер: 1023 Б; файлов: 126; время импорта: <0,1 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена",
+      "sha256": "73a03bb80684a2d20a0adcc8ab570bcc4d200ba868b768e35394c70cf24a568b",
+      "code": "GS1-BCC4D2",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: \"Test; \"\"Maker\"\"\"; модель: Модель X: 1 🙂�\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: ZIP; размер: 1023 Б; файлов: 126; время импорта: <0,1 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена\r\nЦелостность текста: GS1-BCC4D2"
+    },
+    {
+      "name": "pwa-windows-success",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": -210,
+        "variant": "PWA",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": null,
+        "model": null,
+        "systemName": "Windows",
+        "systemVersion": "11",
+        "baseOs": "-",
+        "baseOsVersion": "-",
+        "environmentName": "Microsoft Edge",
+        "environmentVersion": "151.0",
+        "archiveSource": "user",
+        "archiveFormat": "ZIP64",
+        "archiveBytes": 4294967296,
+        "archiveFiles": 126,
+        "importDurationMs": 8000,
+        "steps": {
+          "launch": "success",
+          "import": "success",
+          "storefront": "success",
+          "game": "recorded"
+        },
+        "storageMode": "persistent"
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 09:55:08 (UTC-03:30)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: ?; модель: ?\r\nСИСТЕМА: название: Windows; версия: 11; базовая ОС: -; версия базовой ОС: -\r\nСРЕДА: название: Microsoft Edge; версия: 151.0\r\nХРАНИЛИЩЕ: режим: постоянное\r\nАРХИВ: источник: пользовательский архив; формат: ZIP64; размер: 4 ГБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена",
+      "sha256": "a4629af4858e52bdd7471fd855518f3bcfae2decee051a3faed6626efa45946e",
+      "code": "GS1-F3BCFA",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 09:55:08 (UTC-03:30)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: ?; модель: ?\r\nСИСТЕМА: название: Windows; версия: 11; базовая ОС: -; версия базовой ОС: -\r\nСРЕДА: название: Microsoft Edge; версия: 151.0\r\nХРАНИЛИЩЕ: режим: постоянное\r\nАРХИВ: источник: пользовательский архив; формат: ZIP64; размер: 4 ГБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена\r\nЦелостность текста: GS1-F3BCFA"
+    },
+    {
+      "name": "interrupted-import",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "APK",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": "Xiaomi",
+        "model": "Redmi Note 13 Pro 4G",
+        "systemName": "Xiaomi HyperOS",
+        "systemVersion": "3.0.301.0",
+        "baseOs": "Android",
+        "baseOsVersion": "16",
+        "environmentName": "Android System WebView",
+        "environmentVersion": "151.0.7922.173",
+        "archiveSource": "demo",
+        "archiveFormat": "7z",
+        "archiveBytes": 19293798,
+        "archiveFiles": 10,
+        "importDurationMs": null,
+        "steps": {
+          "launch": "success",
+          "import": "interrupted",
+          "storefront": "not_checked",
+          "game": "not_checked"
+        }
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: ?; время импорта: ?\r\nПРОВЕРКА: запуск приложения: успешно; импорт: прервано; загрузка витрины: не проверено; переход в игру внутри GameSpace: не проверено\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: импортируйте встроенное демо или свой архив в рамках текущей проверки",
+      "sha256": "27854c13c410a1c1cde41f748c2f34a7ff510fc426ebe0a12c69c522b254116f",
+      "code": "GS1-4A7FF5",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: APK; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Xiaomi; модель: Redmi Note 13 Pro 4G\r\nСИСТЕМА: название: Xiaomi HyperOS; версия: 3.0.301.0; базовая ОС: Android; версия базовой ОС: 16\r\nСРЕДА: название: Android System WebView; версия: 151.0.7922.173\r\nХРАНИЛИЩЕ: режим: -\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: ?; время импорта: ?\r\nПРОВЕРКА: запуск приложения: успешно; импорт: прервано; загрузка витрины: не проверено; переход в игру внутри GameSpace: не проверено\r\nИТОГ: базовая проверка не завершена\r\nДЕЙСТВИЯ: импортируйте встроенное демо или свой архив в рамках текущей проверки\r\nЦелостность текста: GS1-4A7FF5"
+    },
+    {
+      "name": "pwa-ios-unknown-version",
+      "input": {
+        "formedAtMs": 1789392308000,
+        "utcOffsetMinutes": 180,
+        "variant": "PWA",
+        "appVersion": "0.4.0",
+        "launchMode": "installed",
+        "manufacturer": "Apple",
+        "model": null,
+        "systemName": "iOS",
+        "systemVersion": null,
+        "baseOs": "-",
+        "baseOsVersion": "-",
+        "environmentName": "Safari",
+        "environmentVersion": null,
+        "archiveSource": "demo",
+        "archiveFormat": "7z",
+        "archiveBytes": 19293798,
+        "archiveFiles": 126,
+        "importDurationMs": 8000,
+        "steps": {
+          "launch": "success",
+          "import": "success",
+          "storefront": "success",
+          "game": "recorded"
+        },
+        "storageMode": null
+      },
+      "body": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Apple; модель: ?\r\nСИСТЕМА: название: iOS; версия: ?; базовая ОС: -; версия базовой ОС: -\r\nСРЕДА: название: Safari; версия: ?\r\nХРАНИЛИЩЕ: режим: ?\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена",
+      "sha256": "5d6a4a2b09f362f2f0a42cbcee4c0702f248325ed336653dbb2c4e64d43d9ded",
+      "code": "GS1-702F24",
+      "text": "GameSpace — базовая проверка совместимости\r\nФОРМАТ: 1\r\nСФОРМИРОВАН: 14.09.2026 16:25:08 (UTC+03:00)\r\nПРИЛОЖЕНИЕ: вариант: PWA; версия: 0.4.0; запуск: установленное приложение\r\nУСТРОЙСТВО: производитель: Apple; модель: ?\r\nСИСТЕМА: название: iOS; версия: ?; базовая ОС: -; версия базовой ОС: -\r\nСРЕДА: название: Safari; версия: ?\r\nХРАНИЛИЩЕ: режим: ?\r\nАРХИВ: источник: демо-архив; формат: 7z; размер: 18,4 МБ; файлов: 126; время импорта: 8 с\r\nПРОВЕРКА: запуск приложения: успешно; импорт: успешно; загрузка витрины: успешно; переход в игру внутри GameSpace: зафиксирован\r\nИТОГ: базовая проверка пройдена\r\nЦелостность текста: GS1-702F24"
+    }
+  ],
+  "normalization": [
+    {
+      "text": "abc",
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "code": "GS1-223B00"
+    },
+    {
+      "text": " a\t b\r\n c                 　",
+      "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+      "code": "GS1-223B00"
+    },
+    {
+      "text": "a​b﻿c",
+      "sha256": "852c5b1e8de509ae7ec52e1289749ca2110f20ac4b47a4697a6ab4e7ee193ea2",
+      "code": "GS1-CA2110"
+    },
+    {
+      "text": "Ё;ё:12—-🙂",
+      "sha256": "c5a78d38c0c973a5be5f196dd7bd2cab040e0efd2a5164a652547d3b1040dc98",
+      "code": "GS1-CAB040"
+    },
+    {
+      "text": "é",
+      "sha256": "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c",
+      "code": "GS1-7CAD5F"
+    },
+    {
+      "text": "é",
+      "sha256": "bf12767b0f2a56b2190075bae8169f656e3ce8d6357d4aff184bc6c7ea48f9f6",
+      "code": "GS1-F656E3"
+    }
+  ],
+  "numbers": [
+    {
+      "bytes": null,
+      "expected": "?"
+    },
+    {
+      "bytes": 0,
+      "expected": "0 Б"
+    },
+    {
+      "bytes": 1023,
+      "expected": "1023 Б"
+    },
+    {
+      "bytes": 1024,
+      "expected": "1 КБ"
+    },
+    {
+      "bytes": 1048576,
+      "expected": "1 МБ"
+    },
+    {
+      "bytes": 4294967296,
+      "expected": "4 ГБ"
+    },
+    {
+      "bytes": 42949672960,
+      "expected": "40 ГБ"
+    },
+    {
+      "bytes": 9007199254740991,
+      "expected": "8192 ТБ"
+    }
+  ]
+}

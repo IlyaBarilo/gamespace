@@ -33,7 +33,7 @@ test("install action distinguishes a browser prompt from manual installation", a
 test("report dialog remains usable while import controls are busy", async () => {
   const app = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
   const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
-  assert.match(app, /button\.closest\("#viewer, #diagnosticDialog"\)/);
+  assert.match(app, /button\.closest\("#viewer, #diagnosticDialog, #compatibilityDialog"\)/);
   assert.match(styles, /body\.is-busy button:not\(#errorClose\):not\(#diagnosticDialog button\)/);
   assert.match(styles, /:not\(\.diagnostic-trigger\)/);
 });

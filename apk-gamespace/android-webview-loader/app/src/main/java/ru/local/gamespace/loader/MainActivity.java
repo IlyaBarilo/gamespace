@@ -61,6 +61,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.TimeZone;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -72,6 +74,11 @@ import org.apache.commons.compress.archivers.sevenz.SevenZFile;
 
 public class MainActivity extends Activity {
     private static final int REQUEST_OPEN_ZIP = 7001;
+    private static final int REQUEST_SAVE_COMPATIBILITY = 7002;
+    private static final String COMPATIBILITY_PREFS = "gamespace_compatibility";
+    private static CompatibilityCheck compatibilityCheck;
+    private CompatibilityDialog compatibilityDialog;
+    private String compatibilityPageUrl = "";
     private static final String PREFS = "gamespace_loader";
     private static final String DIAGNOSTIC_PREFS = "gamespace_diagnostics";
     private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
@@ -230,6 +237,7 @@ public class MainActivity extends Activity {
         configureWebView(homeWebView, true);
         configureWebView(webView, false);
         initializeRuntimeEnvironmentHistory();
+        initializeCompatibilityCheck();
         siteTransactionManager = new SiteTransactionManager(new SharedPreferencesTransactionStore(getPrefs()));
         if (!startPendingSiteRecovery()) {
             loadInstalledSiteOrPrompt();
@@ -489,6 +497,14 @@ public class MainActivity extends Activity {
         );
         demoParams.setMargins(0, dp(10), 0, 0);
         outer.addView(demoButton, demoParams);
+
+        Button compatibilityButton = new Button(this);
+        compatibilityButton.setText("Отчёт о совместимости");
+        compatibilityButton.setAllCaps(false);
+        compatibilityButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { showCompatibilityReport(); }
+        });
+        outer.addView(compatibilityButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         return outer;
     }
@@ -849,7 +865,7 @@ public class MainActivity extends Activity {
         dialog.show();
     }
 
-    private void configureWebView(WebView view, boolean homeView) {
+    private void configureWebView(final WebView view, boolean homeView) {
         WebSettings settings = view.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -875,6 +891,7 @@ public class MainActivity extends Activity {
                 if (message.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
                     String text = message.message();
                     if (text != null && (text.startsWith("GS-PROMISE:") || text.startsWith("Uncaught "))) {
+                        compatibilityPageUrl = view.getUrl();
                         recordRuntimeIssue("GAME-SCRIPT", new IOException(text),
                             "Скрипт: " + diagnosticPagePath(message.sourceId()) + "; строка: " + message.lineNumber(), false);
                     }
@@ -939,6 +956,7 @@ public class MainActivity extends Activity {
     }
 
     private void loadSite(File indexFile) {
+        if (compatibilityCheck != null) compatibilityCheck.reconcileContent(compatibilityContentKey());
         currentIndexFile = indexFile;
         currentContentRoot = indexFile.getParentFile();
         localSiteRequestHandler.setContentRoot(currentContentRoot);
@@ -1145,11 +1163,11 @@ public class MainActivity extends Activity {
     private void showAppMenu() {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
-        final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка"}
+        final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()
-            ? new String[] {"Обновление приложения", "Информация", "Создать отчёт о проблеме", "Последняя ошибка"} : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Обновление приложения", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"} : installed
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1158,7 +1176,9 @@ public class MainActivity extends Activity {
                 public void onClick(DialogInterface dialog, int which) {
                     String item = items[which];
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
-                    if ("Обновление приложения".equals(item)) {
+                    if ("Отчёт о совместимости".equals(item)) {
+                        showCompatibilityReport();
+                    } else if ("Обновление приложения".equals(item)) {
                         if (appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(MainActivity.this,
                             new AppUpdateDialog.SiteState() {
                                 @Override public boolean isBusy() {
@@ -1231,6 +1251,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_SAVE_COMPATIBILITY) {
+            finishCompatibilitySave(resultCode, data);
+            return;
+        }
         if (requestCode == ApkUpdateInstaller.REQUEST_SETTINGS || requestCode == ApkUpdateInstaller.REQUEST_INSTALL) {
             if (appUpdateDialog != null) appUpdateDialog.activityResult(requestCode);
             return;
@@ -1285,6 +1309,7 @@ public class MainActivity extends Activity {
 
         final File previousIndexFile = currentIndexFile;
         final boolean fastUpdate = updateMode == UPDATE_MODE_FAST && previousIndexFile != null && previousIndexFile.isFile();
+        final String compatibilityTicket = compatibilityCheck.beginImport("user", System.currentTimeMillis());
         showProgress(fastUpdate ? "Быстрое обновление сайта" : "Распаковка сайта", "Проверяю выбранный архив...");
 
         Thread worker = new Thread(new Runnable() {
@@ -1311,6 +1336,7 @@ public class MainActivity extends Activity {
                     context.archiveName = archiveName;
                     context.archiveSize = getContentSize(uri);
                     final int archiveType = detectArchiveType(uri, archiveName);
+                    compatibilityCheck.archive(compatibilityTicket, context.archiveSize, archiveType == ARCHIVE_7Z ? "7z" : "ZIP");
                     final String archiveFormat = formatArchiveType(archiveType);
                     context.archiveFormat = archiveFormat;
                     context.setStage("STORAGE-SELECT", "выбор хранилища");
@@ -1444,6 +1470,7 @@ public class MainActivity extends Activity {
                     final int finalSkippedFiles = skippedFiles;
                     final boolean finalFastUpdate = fastUpdate;
                     context.outcome = "успешно";
+                    compatibilityCheck.imported(compatibilityTicket, compatibilityContentKey(), installedStats.files, totalDurationMs, fastUpdate);
 
                     mainHandler.post(new Runnable() {
                         @Override
@@ -1457,6 +1484,8 @@ public class MainActivity extends Activity {
                         }
                     });
                 } catch (final Exception e) {
+                    compatibilityCheck.fail(compatibilityTicket, "import", compatibilityImportError(e, context.stageCode),
+                        operationCancellationRequested || e instanceof OperationCancelledException, System.currentTimeMillis());
                     String report = buildInstallErrorDetails(e, context);
                     context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
@@ -1549,6 +1578,8 @@ public class MainActivity extends Activity {
         operationCancellationRequested = false;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         showProgress("Загрузка встроенного демо-сайта", "Подготавливаю встроенный архив demo.7z...");
+        final String compatibilityTicket = compatibilityCheck.beginImport("demo", System.currentTimeMillis());
+        compatibilityCheck.archive(compatibilityTicket, -1, "7z");
 
         Thread worker = new Thread(new Runnable() {
             @Override
@@ -1576,6 +1607,7 @@ public class MainActivity extends Activity {
                     File demoArchive = demoImportFile.file();
                     copyAssetToFile(BUILTIN_DEMO_ASSET_NAME, demoArchive);
                     context.archiveSize = demoArchive.length();
+                    compatibilityCheck.archive(compatibilityTicket, context.archiveSize, "7z");
 
                     context.setStage("STORAGE-SELECT", "выбор хранилища");
                     updateProgress("Выбираю хранилище для демо-сайта...");
@@ -1652,6 +1684,7 @@ public class MainActivity extends Activity {
                     final File finalIndex = index;
                     final int finalFiles = installedStats.files;
                     context.outcome = "успешно";
+                    compatibilityCheck.imported(compatibilityTicket, compatibilityContentKey(), installedStats.files, totalDurationMs, false);
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
@@ -1661,6 +1694,8 @@ public class MainActivity extends Activity {
                         }
                     });
                 } catch (final Exception e) {
+                    compatibilityCheck.fail(compatibilityTicket, "import", "DEMO-COPY".equals(context.stageCode) ? "demo" : compatibilityImportError(e, context.stageCode),
+                        operationCancellationRequested || e instanceof OperationCancelledException, System.currentTimeMillis());
                     String report = buildInstallErrorDetails(e, context);
                     context.statistics.phase("Завершение после ошибки");
                     final String finalBriefMessage = buildBriefErrorMessage(e);
@@ -2488,6 +2523,11 @@ public class MainActivity extends Activity {
     }
 
     private void recordRuntimeIssue(String code, Throwable error, String context, boolean reveal) {
+        if (compatibilityCheck != null && (code.startsWith("GAME-") || "WEBVIEW-RENDERER".equals(code))) {
+            boolean index = compatibilityPageUrl == null || compatibilityPageUrl.isEmpty() || isCurrentIndexUrl(compatibilityPageUrl);
+            compatibilityCheck.pageError(index, code.contains("SCRIPT") || code.contains("PROMISE") ? "script"
+                : code.contains("RESOURCE") ? "resource" : code.contains("TIMEOUT") ? "timeout" : "page");
+        }
         if (runtimeIssueCount++ >= 10) return;
         if (diagnosticJournal != null) diagnosticJournal.record(code + ": " + error.getMessage(), true);
         String report = saveLastErrorReport(buildRuntimeReport(code, error, context));
@@ -2500,6 +2540,94 @@ public class MainActivity extends Activity {
         String report = buildRuntimeReport("MANUAL", null, "Отчёт не заменяет сохранённую последнюю ошибку.");
         if (latest.length() > 0) report += "\nПоследняя сохранённая ошибка (возможно, более ранняя):\n" + latest.substring(0, Math.min(8000, latest.length()));
         showErrorDialog("Отчёт о проблеме", report);
+    }
+
+    private void initializeCompatibilityCheck() {
+        final SharedPreferences storage = getApplicationContext().getSharedPreferences(COMPATIBILITY_PREFS, MODE_PRIVATE);
+        String environment = getWebViewEnvironmentText(false);
+        if (compatibilityCheck == null) {
+            compatibilityCheck = new CompatibilityCheck(new CompatibilityCheck.Store() {
+                @Override public String load() { return storage.getString("observations", ""); }
+                @Override public boolean save(String text) { return storage.edit().putString("observations", text).commit(); }
+            }, getAppVersionName(), environment);
+        } else compatibilityCheck.bindEnvironment(environment);
+        compatibilityCheck.reconcileContent(compatibilityContentKey());
+    }
+
+    private String compatibilityContentKey() {
+        SharedPreferences prefs = getPrefs();
+        String index = prefs.getString(PREF_INDEX_PATH, "");
+        return index != null && !index.isEmpty() && new File(index).isFile() ? index + ":" + prefs.getLong(PREF_INSTALLED_AT, 0) : "";
+    }
+
+    private static String compatibilityImportError(Throwable error, String stage) {
+        String code = DiagnosticReport.errorCode(error, stage);
+        if ("GS-NO-SPACE".equals(code)) return "space";
+        if ("GS-ACCESS".equals(code)) return "access";
+        if ("GS-INDEX-CHECK".equals(code)) return "index";
+        if ("GS-EXTRACT".equals(code) || "GS-ARCHIVE-OPEN".equals(code)) return "archive";
+        return "other";
+    }
+
+    private Map<String, Object> compatibilityInput() {
+        compatibilityCheck.bindEnvironment(getWebViewEnvironmentText(false));
+        compatibilityCheck.reconcileContent(compatibilityContentKey());
+        long now = System.currentTimeMillis();
+        Map<String, Object> input = compatibilityCheck.input(now, TimeZone.getDefault().getOffset(now) / 60000);
+        input.put("manufacturer", Build.MANUFACTURER); input.put("model", Build.MODEL);
+        input.put("baseOs", "Android"); input.put("baseOsVersion", Build.VERSION.RELEASE);
+        input.put("environmentName", "Android WebView");
+        String uaVersion = getWebViewVersionFromUserAgent();
+        input.put("environmentVersion", uaVersion.isEmpty() || uaVersion.matches("[0-9]+\\.0\\.0\\.0") ? null : uaVersion);
+        try {
+            if (Build.VERSION.SDK_INT >= 26) {
+                PackageInfo provider = WebView.getCurrentWebViewPackage();
+                if (provider != null) {
+                    input.put("environmentName", provider.packageName != null && provider.packageName.contains("chrome") ? "Google Chrome WebView" : "Android System WebView");
+                    input.put("environmentVersion", provider.versionName);
+                }
+            }
+        } catch (RuntimeException unavailable) { /* Unknown fields remain unknown. */ }
+        return input;
+    }
+
+    private void showCompatibilityReport() {
+        if (compatibilityCheck == null) initializeCompatibilityCheck();
+        if (compatibilityDialog == null) compatibilityDialog = new CompatibilityDialog(this, new CompatibilityDialog.Host() {
+            @Override public CompatibilityCheck check() { return compatibilityCheck; }
+            @Override public Map<String, Object> input() { return compatibilityInput(); }
+            @Override public boolean busy() { return MainActivity.this.busy || (appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()); }
+            @Override public void saveText(String text) { saveCompatibilityText(text); }
+        });
+        showHeldDialog(compatibilityDialog.create());
+        compatibilityDialog.shown();
+    }
+
+    private void saveCompatibilityText(String text) {
+        try {
+            if (!getSharedPreferences(COMPATIBILITY_PREFS, MODE_PRIVATE).edit().putString("pending_export", text).commit()) throw new IllegalStateException();
+            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            save.addCategory(Intent.CATEGORY_OPENABLE); save.setType("text/plain");
+            save.putExtra(Intent.EXTRA_TITLE, "GameSpace-compatibility.txt");
+            startActivityForResult(save, REQUEST_SAVE_COMPATIBILITY);
+        } catch (RuntimeException unavailable) { Toast.makeText(this, "Не удалось открыть сохранение. Используйте копирование текста.", Toast.LENGTH_LONG).show(); }
+    }
+
+    private void finishCompatibilitySave(int resultCode, Intent data) {
+        SharedPreferences prefs = getSharedPreferences(COMPATIBILITY_PREFS, MODE_PRIVATE);
+        final String report = prefs.getString("pending_export", "");
+        prefs.edit().remove("pending_export").apply();
+        if (resultCode != RESULT_OK || data == null || data.getData() == null || report == null || report.isEmpty()) return;
+        final Uri target = data.getData();
+        new Thread(new Runnable() { public void run() {
+            String message;
+            try (java.io.OutputStream output = getContentResolver().openOutputStream(target, "wt")) {
+                if (output == null) throw new IOException("No stream");
+                output.write(report.getBytes(StandardCharsets.UTF_8)); message = "Отчёт сохранён.";
+            } catch (Exception unavailable) { message = "Не удалось сохранить отчёт. Используйте копирование текста."; }
+            final String result = message;
+            mainHandler.post(new Runnable() { public void run() { Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show(); } });
+        } }, "compatibility-export").start();
     }
 
     private void saveArchiveStatistics(InstallContext context) {
@@ -3081,6 +3209,7 @@ public class MainActivity extends Activity {
 
     private void clearInstalledSite() {
         if (busy || appUpdateBlocksSite()) return;
+        if (compatibilityCheck != null) compatibilityCheck.reset("Начата очистка сайта. Для проверки потребуется новый импорт.");
         busy = true;
         showProgress("Очистка сайта", "Удаляю распакованные файлы...");
 
@@ -3668,10 +3797,12 @@ public class MainActivity extends Activity {
         public void onPageStarted(final WebView view, final String url, android.graphics.Bitmap favicon) {
             if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
             if (url == null || url.startsWith("about:")) return;
+            compatibilityPageUrl = url;
             diagnosticPage = diagnosticPagePath(url);
             if (diagnosticJournal != null) diagnosticJournal.record("Загрузка страницы: " + diagnosticPage, false);
             loadTimeout = new Runnable() { public void run() {
                 if (isFinishing() || isDestroyed() || (view != webView && view != homeWebView) || view.getVisibility() == View.GONE) return;
+                compatibilityPageUrl = url;
                 recordRuntimeIssue("GAME-LOAD-TIMEOUT", new IOException("Страница не завершила загрузку за 30 секунд. Загрузка могла продолжиться; это не доказательство зависания."), "Страница: " + diagnosticPagePath(url), false);
             } };
             mainHandler.postDelayed(loadTimeout, 30000);
@@ -3681,6 +3812,13 @@ public class MainActivity extends Activity {
         public void onPageFinished(WebView view, String url) {
             if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
             if (url == null || !localSiteRequestHandler.isInternalUrl(url)) return;
+            if (compatibilityCheck != null) {
+                try {
+                    File page = localSiteRequestHandler.fileForUrl(url);
+                    String path = page == null ? "" : page.getName().toLowerCase(Locale.ROOT);
+                    if (page != null && page.isFile() && (path.endsWith(".html") || path.endsWith(".htm"))) compatibilityCheck.pageLoaded(isCurrentIndexUrl(url));
+                } catch (Exception ignored) { compatibilityCheck.pageError(isCurrentIndexUrl(url), "page"); }
+            }
             if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
             // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
             view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
@@ -3690,6 +3828,7 @@ public class MainActivity extends Activity {
         @Override
         public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
             if (request == null || error == null) return;
+            compatibilityPageUrl = view.getUrl();
             if (request.isForMainFrame() && loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
             recordRuntimeIssue(request.isForMainFrame() ? "GAME-PAGE" : "GAME-RESOURCE", new IOException(String.valueOf(error.getDescription())),
                 "Код WebView: " + error.getErrorCode() + "; основной документ: " + request.isForMainFrame() + "; ресурс: " + diagnosticPagePath(request.getUrl().toString()), false);
@@ -3697,12 +3836,14 @@ public class MainActivity extends Activity {
 
         @Override
         public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+            compatibilityPageUrl = view.getUrl();
             if (request != null && response != null) recordRuntimeIssue("GAME-HTTP", new IOException("HTTP " + response.getStatusCode()),
                 "Основной документ: " + request.isForMainFrame() + "; ресурс: " + diagnosticPagePath(request.getUrl().toString()), false);
         }
 
         @Override
         public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+            compatibilityPageUrl = view.getUrl();
             if (loadTimeout != null) mainHandler.removeCallbacks(loadTimeout);
             recordRuntimeIssue("WEBVIEW-RENDERER", new IOException("Процесс WebView завершён; didCrash=" + detail.didCrash() + ". Причина нехватки памяти не установлена."), "Приоритет при завершении: " + detail.rendererPriorityAtExit(), false);
             cancelPendingContentLoadState();

@@ -35,6 +35,10 @@ import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-histo
 import { isAllowedExternalUrl } from "./navigation-policy.js";
 import { isAbortError } from "./abort.js";
 import { createScreenWakeLock } from "./screen-wake-lock.js";
+import { createCompatibilityCheck, compatibilityErrorCategory } from "./compatibility-check.js";
+import { createCompatibilityUI } from "./compatibility-ui.js";
+import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
+import { diagnosticErrorCode } from "./diagnostics.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -82,6 +86,37 @@ const APP_VERSION = "0.3.0";
 const RUNTIME_SCRIPT = "sw-runtime-v1.js";
 const DEMO_REVISION = "apk-demo-v1";
 let browserEnvironment = detectBrowserEnvironment();
+const compatibilityCheck = createCompatibilityCheck({ version: APP_VERSION });
+let compatibilityImportToken = null;
+let compatibilityPageUrl = "";
+const compatibilityEnvironment = withTimeout(readCompatibilityEnvironment(), 3000, "environment timeout").catch(() => ({}));
+void compatibilityEnvironment.then(environment => {
+  compatibilityCheck.bindEnvironment(`${environment.environmentName || "?"}|${environment.environmentVersion || "?"}|${realPwaLaunchMode()}`);
+});
+const compatibilityUI = createCompatibilityUI(elements, {
+  snapshot: () => compatibilityCheck.snapshot(),
+  isBusy: () => busy,
+  reset: () => compatibilityCheck.reset(),
+  launchMode: () => realPwaLaunchMode(),
+  async buildInput() {
+    const environment = await compatibilityEnvironment;
+    try { compatibilityCheck.reconcileContent(await readState()); }
+    catch { compatibilityCheck.reset("Не удалось проверить установленное содержимое. Ранее выполненные шаги пока не подтверждены."); }
+    const data = compatibilityCheck.snapshot().data;
+    const date = new Date();
+    const storageMode = await withTimeout(readCompatibilityStorage(), 2000, "storage timeout").catch(() => null);
+    return { ...data, ...environment, launchMode: realPwaLaunchMode(), storageMode,
+      formedAtMs: date.getTime(), utcOffsetMinutes: -date.getTimezoneOffset() };
+  },
+});
+
+function compatibilityPageFailure(category) {
+  if (!state?.activeRevision || compatibilityCheck.snapshot().pending) return;
+  compatibilityCheck.reconcileContent(state);
+  const isIndex = !compatibilityPageUrl || new URL(compatibilityPageUrl, location.href).pathname === new URL(contentIndexUrl()).pathname;
+  compatibilityCheck.fail(isIndex ? "storefront" : "game", category);
+  compatibilityUI.refresh();
+}
 
 function renderRuntimeEnvironment() {
   elements.runtimeEnvironment.textContent = `Среда запуска: ${formatBrowserEnvironment(browserEnvironment)}`;
@@ -154,6 +189,10 @@ function currentDiagnosticPage() {
 }
 
 function saveBackgroundIssue(error, context = {}) {
+  if (context.stage?.startsWith("game-")) {
+    compatibilityPageFailure(context.stage === "game-script" || context.stage === "game-promise" ? "script"
+      : context.stage === "game-resource" ? "resource" : context.stage === "game-load-timeout" ? "timeout" : "page");
+  }
   if (backgroundIssueCount >= 10) return;
   backgroundIssueCount += 1;
   diagnosticSession.record("Сбой / предупреждение", `${context.stage || "runtime"}: ${errorMessage(error)}`, true);
@@ -162,6 +201,7 @@ function saveBackgroundIssue(error, context = {}) {
 }
 
 function beginGameLoad(url) {
+  compatibilityPageUrl = url;
   clearTimeout(gameLoadTimer);
   diagnosticSession.record("Открытие страницы", diagnosticPagePath(url), true);
   gameLoadTimer = setTimeout(() => {
@@ -206,7 +246,7 @@ function setBusy(value) {
   document.body.classList.toggle("is-busy", value);
   for (const button of document.querySelectorAll("button")) {
     if (button === elements.progressCancelButton) continue;
-    if (button.closest("#viewer, #diagnosticDialog") || button.classList.contains("diagnostic-trigger")) continue;
+    if (button.closest("#viewer, #diagnosticDialog, #compatibilityDialog") || button.classList.contains("diagnostic-trigger") || button.classList.contains("compatibility-trigger")) continue;
     button.disabled = value || button.dataset.fixedDisabled === "true";
   }
   elements.archiveInput.disabled = value;
@@ -214,6 +254,7 @@ function setBusy(value) {
   renderState();
   elements.rollbackPwaButton.disabled = value || !runtimeState?.previousVersion;
   refreshArchiveStatistics();
+  compatibilityUI.refresh();
 }
 
 function renderLicenseDocumentList() {
@@ -336,7 +377,7 @@ function showError(error, context = {}) {
     operation: "операция приложения", stage: "operation", stageLabel: "Операция приложения",
     previousSite: state ? "установлен" : "не установлен",
     ...context,
-  });
+  }, { reveal: !elements.compatibilityDialog.open });
 }
 
 function showRateEstimate(estimate, unit) {
@@ -353,6 +394,7 @@ function showRateEstimate(estimate, unit) {
 
 function handleImportEvent(event) {
   if (!event) return;
+  if (event.type === "archive-format") compatibilityCheck.archiveFormat(compatibilityImportToken, event.format);
   archiveStatistics?.observe(event);
   diagnosticSession.observe(event);
   if (event.type === "cleanup-warning") {
@@ -405,14 +447,15 @@ async function chooseArchive(mode) {
 }
 
 async function importSelectedFile(file, source = "локальный архив") {
-  if (!file || busy) return;
+  if (!file || busy) return false;
   const isUpdate = pendingMode === "fast";
   const confirmed = window.confirm(isUpdate
     ? `Применить локальное обновление «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Изменённые файлы будут защищены журналом отката.`
     : state
       ? `Полностью заменить установленный сайт архивом «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Новая версия станет активной только после успешной проверки.`
       : `Установить сайт из архива «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Сам GameSpace не отправляет архив в сеть.`);
-  if (!confirmed) return;
+  if (!confirmed) return false;
+  compatibilityImportToken = compatibilityCheck.beginImport({ source: source === "демо" ? "demo" : "user", bytes: file.size });
   const diagnosticContext = {
     operation: isUpdate ? "быстрое обновление" : source === "демо" ? "встроенное демо" : "полная установка",
     previousSite: state ? (state.archiveName?.startsWith("Встроенный демо-сайт") ? "встроенное демо" : "пользовательский сайт") : "не установлен",
@@ -433,6 +476,7 @@ async function importSelectedFile(file, source = "локальный архив"
       ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal })
       : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal });
     diagnosticSession.site(state);
+    compatibilityCheck.finishImport(compatibilityImportToken, state, isUpdate);
     diagnosticContext.stage = "interface-refresh";
     diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
     archiveStatistics.nextPhase(diagnosticContext.stageLabel);
@@ -444,6 +488,9 @@ async function importSelectedFile(file, source = "локальный архив"
     setTimeout(hideProgress, 1600);
     outcome = "успешно";
   } catch (error) {
+    compatibilityCheck.fail("import", compatibilityErrorCategory(error, diagnosticErrorCode(error, error?.diagnosticContext?.stage)), {
+      token: compatibilityImportToken, interrupted: isAbortError(error),
+    });
     if (isAbortError(error)) {
       outcome = "отменено";
       elements.progressPhase.textContent = "Операция отменена";
@@ -495,6 +542,7 @@ function showViewerToolbar() {
 
 async function openViewer() {
   if (!state) return false;
+  compatibilityPageUrl = contentIndexUrl();
   try {
     await ensureServiceWorker();
     if (!navigator.serviceWorker.controller) {
@@ -517,6 +565,7 @@ async function openViewer() {
     showViewerToolbar();
     return true;
   } catch (error) {
+    compatibilityPageFailure("page");
     showError(error, { operation: "открытие сайта", stage: "viewer-open", stageLabel: "Подготовка автономного просмотра" });
     setStatus("Локальный сайт пока не открыт", "bad");
     return false;
@@ -547,10 +596,20 @@ function attachFrameGuards() {
     diagnosticSession.record("Страница загружена", diagnosticPagePath(frameWindow.location.href));
     detachGameDiagnostics = observeGameWindow(frameWindow, (error, context) => saveBackgroundIssue(error, { operation: "просмотр игры", ...context }));
     const checkedUrl = frameWindow.location.href;
+    compatibilityPageUrl = checkedUrl;
     if (new URL(checkedUrl).origin === location.origin) {
       void withTimeout(fetch(checkedUrl, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка страницы не завершилась за 15 секунд.").then((response) => {
+        if (elements.viewer.hidden || frameWindow.location.href !== checkedUrl) return;
         if (!response.ok) saveBackgroundIssue(new Error(`Страница вернула HTTP ${response.status}.`), { operation: "просмотр игры", stage: "game-page", stageLabel: "Загрузка страницы игры", page: diagnosticPagePath(checkedUrl), httpStatus: response.status });
-      }).catch((error) => saveBackgroundIssue(error, { stage: "game-page-check", page: diagnosticPagePath(checkedUrl) }));
+        else if (frameDocument?.contentType === "text/html" && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
+          compatibilityCheck.pageLoaded(new URL(checkedUrl).pathname === new URL(contentIndexUrl()).pathname, state);
+          compatibilityUI.refresh();
+        }
+      }).catch((error) => {
+        try { if (elements.viewer.hidden || frameWindow.location.href !== checkedUrl) return; }
+        catch { return; }
+        saveBackgroundIssue(error, { stage: "game-page-check", page: diagnosticPagePath(checkedUrl) });
+      });
     }
     frameDocument?.addEventListener("click", (event) => {
       const link = event.target.closest?.("a[href]");
@@ -1065,6 +1124,7 @@ async function initialize() {
       throw error;
     }
     state = await readInstalledSiteState();
+    compatibilityCheck.reconcileContent(state);
     diagnosticSession.site(state);
     if (state && !state.storageVerifiedAt) {
       const result = await refreshInstalledSiteStatistics();
@@ -1109,6 +1169,7 @@ for (const button of [elements.manualReportButton, elements.landingReportButton]
 }
 async function installBuiltinDemoSite() {
   if (busy) return;
+  const demoCheckToken = compatibilityCheck.beginImport({ source: "demo", format: "7z" });
   const startedAt = Date.now();
   setBusy(true);
   try {
@@ -1121,11 +1182,13 @@ async function installBuiltinDemoSite() {
     pendingMode = "full";
     diagnosticSession.finish("демо получено");
     setBusy(false);
-    await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
+    const accepted = await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
       type: "application/x-7z-compressed",
       lastModified: Date.now(),
     }), "демо");
+    if (accepted === false) compatibilityCheck.reset("Установка демо отменена. Можно начать проверку позже.");
   } catch (error) {
+    compatibilityCheck.fail("import", "demo", { token: demoCheckToken });
     showError(error, { operation: "встроенное демо", stage: "demo-read", stageLabel: "Получение встроенного demo.7z", startedAt });
   } finally {
     diagnosticSession.finish("получение демо остановлено");
@@ -1202,6 +1265,7 @@ elements.removeSiteButton.addEventListener("click", async () => {
     diagnosticSession.begin("удаление сайта");
     diagnosticSession.site(null);
     await removeInstalledSite();
+    compatibilityCheck.reset("Установленный сайт удалён. Начните новую проверку с импорта архива.");
     await synchronizeSiteInterface({ reloadState: true });
     scheduleSiteInterfaceRefresh();
     setStatus("Сайт удалён", "neutral");
