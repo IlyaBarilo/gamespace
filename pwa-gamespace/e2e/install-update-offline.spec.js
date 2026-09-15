@@ -48,12 +48,24 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
   await page.locator("#diagnosticClose").click();
 
-  // On a small screen the collapsed control must still open the menu directly.
+  // Hiding the toolbar leaves no shortcut; returning to the app reveals it.
   await page.setViewportSize({ width: 360, height: 800 });
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
-  await expect(page.locator("#viewerMenuToggle")).toBeVisible();
-  await page.locator("#viewerMenuToggle").click();
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
+  await expect(page.locator("#viewerMenuToggle")).toHaveCount(0);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { configurable: true, value: false });
+    document.dispatchEvent(new Event("visibilitychange"));
+    delete document.hidden;
+  });
+  await expect(page.locator("#viewerToolbar")).not.toHaveClass(/is-hidden/);
+  await page.locator("#viewerClose").click();
   await expect(page.locator("#viewer")).toBeHidden();
   await page.locator("#manualReportButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);

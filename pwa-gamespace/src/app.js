@@ -527,7 +527,6 @@ function contentIndexUrl() {
 }
 
 function showViewerToolbar() {
-  elements.viewerMenuToggle.hidden = true;
   elements.viewerToolbar.classList.remove("is-hidden");
   elements.viewerToolbar.classList.remove("is-counting");
   void elements.viewerToolbar.offsetWidth;
@@ -536,7 +535,6 @@ function showViewerToolbar() {
   toolbarTimer = setTimeout(() => {
     elements.viewerToolbar.classList.remove("is-counting");
     elements.viewerToolbar.classList.add("is-hidden");
-    elements.viewerMenuToggle.hidden = false;
   }, 5000);
 }
 
@@ -1237,7 +1235,6 @@ elements.archiveInput.addEventListener("change", () => importSelectedFile(elemen
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerClose.addEventListener("click", closeViewer);
-elements.viewerMenuToggle.addEventListener("click", closeViewer);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;
