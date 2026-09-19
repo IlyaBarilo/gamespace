@@ -3725,15 +3725,35 @@ public class MainActivity extends Activity {
         if (url == null || busy) {
             return;
         }
-        if (diagnosticJournal != null) diagnosticJournal.record("Открытие игры: " + diagnosticPagePath(url), true);
+        String contentUrl = withGameUiMode(url);
+        if (diagnosticJournal != null) diagnosticJournal.record("Открытие игры: " + diagnosticPagePath(contentUrl), true);
 
         emptyPanel.setVisibility(View.GONE);
         progressPanel.setVisibility(View.GONE);
         webView.stopLoading();
         webView.clearHistory();
         clearContentHistoryAfterLoad = true;
-        beginPendingContentLoad(url);
-        webView.loadUrl(url);
+        beginPendingContentLoad(contentUrl);
+        webView.loadUrl(contentUrl);
+    }
+
+    private String withGameUiMode(String url) {
+        try {
+            Uri parsed = Uri.parse(url);
+            if (parsed.getQueryParameter("ui") != null) {
+                return url;
+            }
+            android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+            float density = Math.max(1f, metrics.density);
+            float widthDp = metrics.widthPixels / density;
+            float heightDp = metrics.heightPixels / density;
+            float shortSide = Math.min(widthDp, heightDp);
+            float longSide = Math.max(widthDp, heightDp);
+            String mode = shortSide >= 1000f && longSide >= 1700f ? "tv" : "mobile";
+            return parsed.buildUpon().appendQueryParameter("ui", mode).build().toString();
+        } catch (RuntimeException ignored) {
+            return url;
+        }
     }
 
     private boolean openExternalUrl(String url) {

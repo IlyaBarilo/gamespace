@@ -39,6 +39,7 @@ import { createCompatibilityCheck, compatibilityErrorCategory } from "./compatib
 import { createCompatibilityUI } from "./compatibility-ui.js";
 import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
 import { diagnosticErrorCode } from "./diagnostics.js";
+import { detectGameUiMode, normalizeGameUiMode } from "./game-ui-mode.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -109,6 +110,7 @@ let browserEnvironment = detectBrowserEnvironment();
 const compatibilityCheck = createCompatibilityCheck({ version: APP_VERSION });
 let compatibilityImportToken = null;
 let compatibilityPageUrl = "";
+let viewerIndexUrl = "";
 const compatibilityEnvironment = withTimeout(readCompatibilityEnvironment(), 3000, "environment timeout").catch(() => ({}));
 void compatibilityEnvironment.then(environment => {
   compatibilityCheck.bindEnvironment(`${environment.environmentName || "?"}|${environment.environmentVersion || "?"}|${realPwaLaunchMode()}`);
@@ -133,7 +135,7 @@ const compatibilityUI = createCompatibilityUI(elements, {
 function compatibilityPageFailure(category) {
   if (!state?.activeRevision || compatibilityCheck.snapshot().pending) return;
   compatibilityCheck.reconcileContent(state);
-  const isIndex = !compatibilityPageUrl || new URL(compatibilityPageUrl, location.href).pathname === new URL(contentIndexUrl()).pathname;
+  const isIndex = !compatibilityPageUrl || new URL(compatibilityPageUrl, location.href).pathname === contentIndexPathname();
   compatibilityCheck.fail(isIndex ? "storefront" : "game", category);
   compatibilityUI.refresh();
 }
@@ -539,9 +541,25 @@ async function importSelectedFile(file, source = "локальный архив"
   }
 }
 
+function contentIndexPathname() {
+  return new URL(`./__gamespace_content__/${encodeURIComponent(state.indexName || "index.html")}`, location.href).pathname;
+}
+
+function currentGameUiMode() {
+  const viewport = window.visualViewport;
+  return detectGameUiMode({
+    width: viewport?.width || window.innerWidth,
+    height: viewport?.height || window.innerHeight,
+    coarsePointer: window.matchMedia?.("(pointer: coarse)").matches === true,
+    requested: normalizeGameUiMode(new URLSearchParams(location.search).get("ui")),
+  });
+}
+
 function contentIndexUrl() {
   const url = new URL(`./__gamespace_content__/${encodeURIComponent(state.indexName || "index.html")}`, location.href);
   url.searchParams.set("app", "");
+  const uiMode = currentGameUiMode();
+  if (uiMode) url.searchParams.set("ui", uiMode);
   url.searchParams.set("gamespaceIndexSession", `${Date.now().toString(36)}-${crypto.randomUUID?.() || Math.random().toString(36).slice(2)}`);
   return url.href;
 }
@@ -562,13 +580,14 @@ function showViewerToolbar() {
 
 async function openViewer() {
   if (!state) return false;
-  compatibilityPageUrl = contentIndexUrl();
   try {
     await ensureServiceWorker();
     if (!navigator.serviceWorker.controller) {
       throw new Error("Локальный сайт нельзя открыть до активации Service Worker.");
     }
     const url = contentIndexUrl();
+    viewerIndexUrl = url;
+    compatibilityPageUrl = url;
     const response = await withTimeout(fetch(url, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка входной страницы не завершилась за 15 секунд.");
     if (!response.ok) {
       const error = new Error(`Входная страница установленного сайта недоступна: HTTP ${response.status}. Данные не удалялись автоматически.`);
@@ -605,6 +624,25 @@ function closeViewer() {
   clearTimeout(toolbarTimer);
 }
 
+function handleViewerMessage(event) {
+  if (elements.viewer.hidden
+    || event.source !== elements.siteFrame.contentWindow
+    || event.origin !== location.origin
+    || event.data?.type !== "gameExit"
+    || !viewerIndexUrl) return;
+
+  try {
+    if (elements.siteFrame.contentWindow.location.pathname === new URL(viewerIndexUrl).pathname) return;
+  } catch {
+    return;
+  }
+
+  diagnosticSession.record("Возврат из игры в каталог", "gameExit");
+  beginGameLoad(viewerIndexUrl);
+  try { elements.siteFrame.contentWindow.location.replace(viewerIndexUrl); }
+  catch { elements.siteFrame.src = viewerIndexUrl; }
+}
+
 function attachFrameGuards() {
   clearTimeout(gameLoadTimer);
   elements.viewerLoading.hidden = true;
@@ -623,7 +661,7 @@ function attachFrameGuards() {
         if (elements.viewer.hidden || frameWindow.location.href !== checkedUrl) return;
         if (!response.ok) saveBackgroundIssue(new Error(`Страница вернула HTTP ${response.status}.`), { operation: "просмотр игры", stage: "game-page", stageLabel: "Загрузка страницы игры", page: diagnosticPagePath(checkedUrl), httpStatus: response.status });
         else if (frameDocument?.contentType === "text/html" && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
-          compatibilityCheck.pageLoaded(new URL(checkedUrl).pathname === new URL(contentIndexUrl()).pathname, state);
+          compatibilityCheck.pageLoaded(new URL(checkedUrl).pathname === contentIndexPathname(), state);
           compatibilityUI.refresh();
         }
       }).catch((error) => {
@@ -1272,6 +1310,7 @@ elements.progressCancelButton.addEventListener("click", () => {
   activeImportController.abort(new DOMException("Операция отменена пользователем.", "AbortError"));
 });
 elements.siteFrame.addEventListener("load", attachFrameGuards);
+window.addEventListener("message", handleViewerMessage);
 window.addEventListener("pagehide", () => {
   runtimeHistoryState = runtimeHistoryStore.observe(browserEnvironment);
 });

@@ -38,6 +38,13 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   ]);
   expect(await gameFrame.evaluate(() => localStorage.getItem("gamespace-e2e-save"))).toBe("saved");
 
+  await gameFrame.evaluate(() => {
+    location.href = new URL("smallgames/bashnya-oblakov.html", location.href).href;
+  });
+  await expect.poll(() => gameFrame.url()).toContain("smallgames/bashnya-oblakov.html");
+  await gameFrame.locator("#exitButton").click();
+  await expect.poll(() => new URL(gameFrame.url()).pathname).toContain("/__gamespace_content__/site/index.html");
+
   // Reports remain accessible through the menu after removing the viewer shortcut.
   await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
     message: "Viewer menu diagnostic fixture", error: new Error("Viewer menu diagnostic fixture"),
@@ -55,6 +62,12 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
+  const mobileFrame = page.frames().find((frame) => frame.url().includes("/__gamespace_content__/"));
+  expect(new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
+  await mobileFrame.locator(".game-card").first().click();
+  await expect.poll(() => new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
+  await mobileFrame.evaluate(() => window.parent.postMessage({ type: "gameExit" }, "*"));
+  await expect.poll(() => new URL(mobileFrame.url()).pathname).toContain("/__gamespace_content__/site/index.html");
   await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
   await expect(page.locator("#viewerMenuTab")).toBeVisible();
   await page.locator("#viewerMenuTab").click();

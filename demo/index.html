@@ -1006,7 +1006,8 @@
                 }
                 return '';
             };
-            const PRELOAD_IMAGES = hasQueryParam('app') || hasQueryParam('tv');
+            const UI_MODE = ['mobile', 'tv'].includes(getQueryParam('ui')) ? getQueryParam('ui') : '';
+            const PRELOAD_IMAGES = hasQueryParam('app') || hasQueryParam('tv') || UI_MODE === 'tv';
             const AUTHOR_MODE = hasQueryParam('author');
             const INDEX_STATE_SCOPE = getQueryParam('gamespaceIndexSession') || 'default';
             const INDEX_STATE_KEY = `gamespace:index-state:${window.location.pathname}:${INDEX_STATE_SCOPE}`;
@@ -1024,6 +1025,14 @@
             };
 
             const indexStateStorage = getIndexStateStorage();
+
+            const withGameUiMode = (link) => {
+                if (!link || !UI_MODE) return link;
+                const url = new URL(link, window.location.href);
+                if (url.origin !== window.location.origin || url.searchParams.has('ui')) return url.href;
+                url.searchParams.set('ui', UI_MODE);
+                return url.href;
+            };
 
             const getScrollTop = () => {
                 const scrollEl = document.scrollingElement || document.documentElement || document.body;
@@ -1198,14 +1207,14 @@
                     if (e.target.closest('a, button')) return;
                     if (game.link) {
                         saveIndexState();
-                        window.location.href = game.link;
+                        window.location.href = withGameUiMode(game.link);
                     }
                 });
                 cardLink.addEventListener('keydown', (e) => {
                     if ((e.key === 'Enter' || e.key === ' ') && game.link) {
                         e.preventDefault();
                         saveIndexState();
-                        window.location.href = game.link;
+                        window.location.href = withGameUiMode(game.link);
                     }
                 });
 
