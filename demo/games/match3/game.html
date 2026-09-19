@@ -99,13 +99,14 @@
             width: 100%;
             height: 100%;
             padding: 2px;
+            touch-action: none;
         }
 
         .cell {
             display: flex;
             justify-content: center;
             align-items: center;
-            cursor: pointer;
+            cursor: grab;
             transition: transform 0.2s;
             border-radius: 5px;
             /* background-color: white; */
@@ -191,14 +192,6 @@
             background-color: #083fa5;
         } */
 
-        .selected {
-            position: relative;
-            z-index: 10;
-            box-shadow: 0 0 0 3px var(--button-bg);
-            background-color: var(--button-bg);
-            transform:scale(0.75);
-        }
-
         .message {
             position: absolute;
             top: 0;
@@ -261,18 +254,15 @@
             pointer-events: none; /* Важно сохранить */
         }
 
-        .cell.touched {
-            transform: scale(0.95);
-            box-shadow: 0 0 15px rgba(0,0,0,0.2);
-            transition: transform 0.1s ease;
-        }
-
-        .cell.swiping {
+        .cell.dragging {
+            cursor: grabbing;
+            position: relative;
             z-index: 100;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
             transition: none;
         }
 
-        .cell.touched::after {
+        .cell.dragging::after {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -860,12 +850,60 @@
                 return `rgba(${r}, ${g}, ${b}, ${opacity})`;
             }
 
+            function parseCssColor(color) {
+                const values = color.match(/[\d.]+/g);
+                if (!values || values.length < 3) {
+                    return { r: 255, g: 255, b: 255, a: 1 };
+                }
+
+                return {
+                    r: Number(values[0]),
+                    g: Number(values[1]),
+                    b: Number(values[2]),
+                    a: values.length > 3 ? Number(values[3]) : 1
+                };
+            }
+
+            function compositeColors(foreground, background) {
+                const alpha = foreground.a + background.a * (1 - foreground.a);
+                if (alpha === 0) {
+                    return { r: 0, g: 0, b: 0, a: 0 };
+                }
+
+                return {
+                    r: (foreground.r * foreground.a + background.r * background.a * (1 - foreground.a)) / alpha,
+                    g: (foreground.g * foreground.a + background.g * background.a * (1 - foreground.a)) / alpha,
+                    b: (foreground.b * foreground.a + background.b * background.a * (1 - foreground.a)) / alpha,
+                    a: alpha
+                };
+            }
+
+            function getBoardUnderlayColor() {
+                const whiteCanvas = { r: 255, g: 255, b: 255, a: 1 };
+                const bodyColor = parseCssColor(getComputedStyle(document.body).backgroundColor);
+                const opaqueBodyColor = compositeColors(bodyColor, whiteCanvas);
+                const container = document.getElementById('board-container');
+                const containerColor = parseCssColor(getComputedStyle(container).backgroundColor);
+                return compositeColors(containerColor, opaqueBodyColor);
+            }
+
+            function getOpaqueCellColor(baseColor, opacity) {
+                const translucentCellColor = parseCssColor(hexToRgba(baseColor, opacity));
+                const opaqueCellColor = compositeColors(translucentCellColor, boardUnderlayColor);
+                return `rgb(${Math.round(opaqueCellColor.r)}, ${Math.round(opaqueCellColor.g)}, ${Math.round(opaqueCellColor.b)})`;
+            }
+
+
+            let boardUnderlayColor = { r: 255, g: 255, b: 255, a: 1 };
+            let activeDrag = null;
+            const dragAxisLockDistance = 6;
 
             // Отрисовка игрового поля
             function renderBoard() {
                 boardElement.innerHTML = '';
                 boardElement.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
                 boardElement.style.gridTemplateRows = `repeat(${config.rows}, 1fr)`;
+                boardUnderlayColor = getBoardUnderlayColor();
 
                 // Рассчитываем размер шрифта в зависимости от размера поля
                 //const cellSize = Math.min(
@@ -889,71 +927,121 @@
 
                         updateCellAppearance(cell, row, col);
 
-                        cell.addEventListener('click', () => handleCellClick(row, col));
+                        cell.addEventListener('pointerdown', (event) => startTileDrag(event, row, col));
+                        cell.addEventListener('pointermove', updateTileDrag);
+                        cell.addEventListener('pointerup', (event) => finishTileDrag(event, false));
+                        cell.addEventListener('pointercancel', (event) => finishTileDrag(event, true));
+                        cell.addEventListener('lostpointercapture', (event) => finishTileDrag(event, true));
                         boardElement.appendChild(cell);
-
-
-
-
-                        let touchStartX, touchStartY, touchStartCell;
-
-                        cell.addEventListener('touchstart', function(e) {
-                            e.preventDefault();
-                            const touch = e.touches[0];
-                            touchStartX = touch.clientX;
-                            touchStartY = touch.clientY;
-                            touchStartCell = { row, col };
-                            this.classList.add('touched');
-                        });
-
-                        cell.addEventListener('touchmove', function(e) {
-                            e.preventDefault();
-                            const touch = e.touches[0];
-                            const dx = touch.clientX - touchStartX;
-                            const dy = touch.clientY - touchStartY;
-
-                            // Определяем направление свайпа
-                            if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                                this.classList.remove('touched');
-                                handleSwipe(touchStartCell, dx, dy);
-                            }
-                        });
-
-                        cell.addEventListener('touchend', function() {
-                            this.classList.remove('touched');
-                        });
                     }
                 }
             }
 
-            function handleSwipe(startCell, dx, dy) {
-                if (state.isAnimating || state.gameOver) return;
-
-                let endCell = { ...startCell };
-                const absDx = Math.abs(dx);
-                const absDy = Math.abs(dy);
-
-                // Определяем направление свайпа
-                if (absDx > absDy) {
-                    // Горизонтальный свайп
-                    endCell.col += dx > 0 ? 1 : -1;
-                } else {
-                    // Вертикальный свайп
-                    endCell.row += dy > 0 ? 1 : -1;
+            function startTileDrag(event, row, col) {
+                if (state.isAnimating || state.gameOver || activeDrag ||
+                    (event.pointerType === 'mouse' && event.button !== 0)) {
+                    return;
                 }
 
-                // Проверяем границы поля
+                event.preventDefault();
+                activeDrag = {
+                    pointerId: event.pointerId,
+                    row,
+                    col,
+                    startX: event.clientX,
+                    startY: event.clientY,
+                    dx: 0,
+                    dy: 0,
+                    axis: null,
+                    cell: event.currentTarget
+                };
+
+                activeDrag.cell.classList.add('dragging');
+                activeDrag.cell.style.transform = 'translate(0, 0)';
+                if (activeDrag.cell.setPointerCapture) {
+                    activeDrag.cell.setPointerCapture(event.pointerId);
+                }
+            }
+
+            function updateTileDrag(event) {
+                if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+
+                event.preventDefault();
+                activeDrag.dx = event.clientX - activeDrag.startX;
+                activeDrag.dy = event.clientY - activeDrag.startY;
+
+                if (!activeDrag.axis) {
+                    if (Math.max(Math.abs(activeDrag.dx), Math.abs(activeDrag.dy)) < dragAxisLockDistance) {
+                        return;
+                    }
+                    activeDrag.axis = Math.abs(activeDrag.dx) >= Math.abs(activeDrag.dy)
+                        ? 'horizontal'
+                        : 'vertical';
+                }
+
+                const isHorizontal = activeDrag.axis === 'horizontal';
+                const rawDistance = isHorizontal ? activeDrag.dx : activeDrag.dy;
+                const direction = rawDistance >= 0 ? 1 : -1;
+                const canMove = isHorizontal
+                    ? activeDrag.col + direction >= 0 && activeDrag.col + direction < config.cols
+                    : activeDrag.row + direction >= 0 && activeDrag.row + direction < config.rows;
+                const cellDistance = isHorizontal
+                    ? activeDrag.cell.offsetWidth + 2
+                    : activeDrag.cell.offsetHeight + 2;
+                const distance = canMove
+                    ? Math.max(-cellDistance, Math.min(cellDistance, rawDistance))
+                    : 0;
+
+                activeDrag.cell.style.transform = isHorizontal
+                    ? `translateX(${distance}px)`
+                    : `translateY(${distance}px)`;
+            }
+
+            function finishTileDrag(event, cancelled) {
+                if (!activeDrag || activeDrag.pointerId !== event.pointerId) return;
+
+                if (!cancelled) {
+                    updateTileDrag(event);
+                }
+
+                const drag = activeDrag;
+                activeDrag = null;
+                drag.cell.classList.remove('dragging');
+                drag.cell.style.transform = '';
+
+                if (drag.cell.hasPointerCapture && drag.cell.hasPointerCapture(event.pointerId)) {
+                    drag.cell.releasePointerCapture(event.pointerId);
+                }
+
+                if (cancelled || !drag.axis) return;
+
+                const isHorizontal = drag.axis === 'horizontal';
+                const distance = isHorizontal ? drag.dx : drag.dy;
+                const cellDistance = isHorizontal ? drag.cell.offsetWidth + 2 : drag.cell.offsetHeight + 2;
+                const moveThreshold = Math.min(30, Math.max(10, cellDistance * 0.2));
+                if (Math.abs(distance) < moveThreshold) return;
+
+                const direction = distance > 0 ? 1 : -1;
+                const endCell = {
+                    row: drag.row + (isHorizontal ? 0 : direction),
+                    col: drag.col + (isHorizontal ? direction : 0)
+                };
+
                 if (endCell.row < 0 || endCell.row >= config.rows ||
                     endCell.col < 0 || endCell.col >= config.cols) {
                     return;
                 }
 
-                // Выполняем обмен
+                moveTileToNeighbour({ row: drag.row, col: drag.col }, endCell);
+            }
+
+            function moveTileToNeighbour(startCell, endCell) {
+                if (state.isAnimating || state.gameOver) return;
+
                 swapCells(startCell.row, startCell.col, endCell.row, endCell.col, () => {
                     const matches = findMatches();
                     if (matches.length > 0) {
                         processMatches(matches);
-
                         state.movesLeft--;
                         updateUI();
 
@@ -967,72 +1055,11 @@
                 });
 
                 gameStats.totalSwipes++;
-                if (absDx > absDy) {
-                    gameStats.directions[dx > 0 ? 'right' : 'left']++;
+                if (startCell.col !== endCell.col) {
+                    gameStats.directions[endCell.col > startCell.col ? 'right' : 'left']++;
                 } else {
-                    gameStats.directions[dy > 0 ? 'down' : 'up']++;
+                    gameStats.directions[endCell.row > startCell.row ? 'down' : 'up']++;
                 }
-            }
-
-
-            // Обработка клика по ячейке
-            function handleCellClick(row, col) {
-                if (state.isAnimating || state.gameOver) return;
-
-                const cellElement = boardElement.children[row * config.cols + col];
-
-                // Если ячейка уже выбрана
-                if (state.selected && state.selected.row === row && state.selected.col === col) {
-                    cellElement.classList.remove('selected');
-                    state.selected = null;
-                    return;
-                }
-
-                // Если есть выбранная ячейка и она соседняя
-                if (state.selected && isAdjacent(state.selected, { row, col })) {
-                    const prevSelected = state.selected;
-                    cellElement.classList.remove('selected');
-
-                    // Поменять местами
-                    swapCells(prevSelected.row, prevSelected.col, row, col, () => {
-                        const matches = findMatches();
-
-                        if (matches.length > 0) {
-                            processMatches(matches);
-                            state.movesLeft--;
-                            updateUI();
-
-                            if (state.movesLeft <= 0) {
-                                endGame(false);
-                            }
-                        } else {
-                            // Если нет совпадений, вернуть обратно
-                            swapCells(row, col, prevSelected.row, prevSelected.col);
-                        }
-                    });
-
-                    // Снять выделение
-                    boardElement.children[prevSelected.row * config.cols + prevSelected.col].classList.remove('selected');
-                    state.selected = null;
-                } else {
-                    // Снять выделение с предыдущей ячейки
-                    if (state.selected) {
-                        const prevIndex = state.selected.row * config.cols + state.selected.col;
-                        boardElement.children[prevIndex].classList.remove('selected');
-                    }
-
-                    // Выделить новую ячейку
-                    cellElement.classList.add('selected');
-                    state.selected = { row, col };
-                }
-            }
-
-            // Проверка, являются ли ячейки соседями
-            function isAdjacent(cell1, cell2) {
-                return (
-                    (Math.abs(cell1.row - cell2.row) === 1 && cell1.col === cell2.col) ||
-                    (Math.abs(cell1.col - cell2.col) === 1 && cell1.row === cell2.row)
-                );
             }
 
             // Поменять ячейки местами
@@ -1107,14 +1134,14 @@
                 const { symbol, type } = state.board[row][col];
                 const baseColor = elementColors[type] || '#CCCCCC';
 
-                // Настройки прозрачности (можно менять)
-                const bgOpacity = 0.5; // 25% прозрачности фона
+                // Сохраняем прежний визуальный цвет плитки, но делаем фон непрозрачным.
+                const bgOpacity = 0.5;
                 const borderOpacity = 0.5; // 50% прозрачности границы
 
                 // Применяем стили
                 cell.textContent = symbol;
                 cell.style.color = baseColor; // Непрозрачный текст
-                cell.style.backgroundColor = hexToRgba(baseColor, bgOpacity);
+                cell.style.backgroundColor = getOpaqueCellColor(baseColor, bgOpacity);
                 cell.style.border = `1px solid ${hexToRgba(baseColor, borderOpacity)}`;
                 cell.style.boxShadow = `0 2px 4px ${hexToRgba(baseColor, 0.2)}`;
                 cell.setAttribute('data-type', type);
