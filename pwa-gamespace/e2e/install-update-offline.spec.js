@@ -48,24 +48,16 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
   await page.locator("#diagnosticClose").click();
 
-  // Hiding the toolbar leaves no shortcut; returning to the app reveals it.
+  // The optional tab is disabled by default and opens the menu directly when enabled.
   await page.setViewportSize({ width: 360, height: 800 });
+  await expect(page.locator("#viewerMenuTabSetting")).not.toBeChecked();
+  await page.locator("#viewerMenuTabSetting").check();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
   await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
-  await expect(page.locator("#viewerMenuToggle")).toHaveCount(0);
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, value: true });
-    document.dispatchEvent(new Event("visibilitychange"));
-  });
-  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
-  await page.evaluate(() => {
-    Object.defineProperty(document, "hidden", { configurable: true, value: false });
-    document.dispatchEvent(new Event("visibilitychange"));
-    delete document.hidden;
-  });
-  await expect(page.locator("#viewerToolbar")).not.toHaveClass(/is-hidden/);
-  await page.locator("#viewerClose").click();
+  await expect(page.locator("#viewerMenuTab")).toBeVisible();
+  await page.locator("#viewerMenuTab").click();
   await expect(page.locator("#viewer")).toBeHidden();
   await page.locator("#manualReportButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);

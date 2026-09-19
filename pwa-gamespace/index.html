@@ -240,6 +240,18 @@
         <button id="openSiteButton" class="primary-button launch-button" type="button">Открыть GameSpace</button>
       </section>
 
+      <section class="panel viewer-settings-panel" aria-labelledby="viewerSettingsTitle">
+        <div>
+          <p class="section-kicker">ПРОСМОТР САЙТА</p>
+          <h2 id="viewerSettingsTitle">Вкладка быстрого меню</h2>
+          <p>После скрытия верхней панели небольшая вкладка <strong>•••</strong> может оставаться вверху экрана и сразу открывать это меню.</p>
+        </div>
+        <label class="viewer-tab-setting" for="viewerMenuTabSetting">
+          <input id="viewerMenuTabSetting" type="checkbox">
+          <span>Показывать вкладку <strong>•••</strong></span>
+        </label>
+      </section>
+
       <section id="progressPanel" class="progress-card" aria-live="polite" hidden>
         <div class="progress-heading">
           <div class="pulse" aria-hidden="true"></div>
@@ -474,6 +486,7 @@
         <strong id="viewerToolbarTitle" class="viewer-toolbar-title">GameSpace PWA</strong>
         <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>
       </div>
+      <button id="viewerMenuTab" class="viewer-menu-tab" type="button" aria-label="Открыть настройки и архивы" hidden>•••</button>
       <div id="viewerLoading" class="viewer-loading">
         <div class="loader-orbit" aria-hidden="true"><span></span></div>
         <strong>Открываю локальный сайт…</strong>

@@ -14,6 +14,7 @@ import android.content.pm.PackageInfo;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -82,6 +83,7 @@ public class MainActivity extends Activity {
     private static final String DIAGNOSTIC_PREFS = "gamespace_diagnostics";
     private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
+    private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
     private volatile String lastArchiveStatistics;
     private static final String PREF_BASE_PATH = "base_path";
     private static final String PREF_INDEX_PATH = "index_path";
@@ -135,6 +137,7 @@ public class MainActivity extends Activity {
     private TextView progressTitle;
     private TextView progressDetails;
     private Button menuButton;
+    private Button menuTabButton;
     private Button chooseButton;
     private Button demoButton;
     private Button cancelOperationButton;
@@ -419,7 +422,37 @@ public class MainActivity extends Activity {
             Gravity.TOP
         ));
 
+        menuTabButton = createMenuTabButton();
+        FrameLayout.LayoutParams menuTabParams = new FrameLayout.LayoutParams(
+            dp(62),
+            dp(28),
+            Gravity.TOP | Gravity.CENTER_HORIZONTAL
+        );
+        rootFrame.addView(menuTabButton, menuTabParams);
+
         setContentView(rootFrame);
+    }
+
+    private Button createMenuTabButton() {
+        Button button = createToolbarIconButton("•••", "Открыть настройки и архивы");
+        button.setTextColor(Color.WHITE);
+        button.setTextSize(16);
+        button.setIncludeFontPadding(false);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.argb(220, 31, 38, 45));
+        float radius = dp(14);
+        background.setCornerRadii(new float[] {0, 0, 0, 0, radius, radius, radius, radius});
+        button.setBackground(background);
+        button.setElevation(dp(4));
+        button.setVisibility(View.GONE);
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                menuTabButton.setVisibility(View.GONE);
+                showAppMenu();
+            }
+        });
+        return button;
     }
 
     private Button createToolbarIconButton(String text, String description) {
@@ -600,6 +633,7 @@ public class MainActivity extends Activity {
         }
 
         topBarContainer.setVisibility(View.VISIBLE);
+        hideMenuTab();
 
         if (shouldAutoHideTopBar()) {
             startTopBarCountdown();
@@ -614,6 +648,7 @@ public class MainActivity extends Activity {
         }
 
         topBarContainer.setVisibility(View.VISIBLE);
+        hideMenuTab();
         cancelTopBarCountdown();
     }
 
@@ -623,6 +658,7 @@ public class MainActivity extends Activity {
         }
 
         topBarContainer.setVisibility(View.VISIBLE);
+        hideMenuTab();
 
         if (!shouldAutoHideTopBar()) {
             cancelTopBarCountdown();
@@ -654,6 +690,27 @@ public class MainActivity extends Activity {
         if (topBarContainer != null) {
             topBarContainer.setVisibility(View.GONE);
         }
+        updateMenuTabVisibility();
+    }
+
+    private void hideMenuTab() {
+        if (menuTabButton != null) {
+            menuTabButton.setVisibility(View.GONE);
+        }
+    }
+
+    private boolean isMenuTabEnabled() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SHOW_MENU_TAB, false);
+    }
+
+    private void updateMenuTabVisibility() {
+        if (menuTabButton == null) {
+            return;
+        }
+        boolean topBarHidden = topBarContainer != null && topBarContainer.getVisibility() != View.VISIBLE;
+        menuTabButton.setVisibility(isMenuTabEnabled() && topBarHidden && shouldAutoHideTopBar()
+            ? View.VISIBLE
+            : View.GONE);
     }
 
     private boolean shouldAutoHideTopBar() {
@@ -1160,10 +1217,11 @@ public class MainActivity extends Activity {
     private void showAppMenu() {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
+        final String menuTabItem = "Вкладка ••• после скрытия: " + (isMenuTabEnabled() ? "включена" : "выключена");
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("GameSpace APK " + getAppVersionName())
@@ -1191,6 +1249,13 @@ public class MainActivity extends Activity {
                         openZipPicker();
                     } else if ("Перезагрузить сайт".equals(item)) {
                         reloadSite();
+                    } else if (menuTabItem.equals(item)) {
+                        boolean enabled = !isMenuTabEnabled();
+                        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_SHOW_MENU_TAB, enabled).apply();
+                        updateMenuTabVisibility();
+                        Toast.makeText(MainActivity.this,
+                            enabled ? "Вкладка ••• будет показана после скрытия панели" : "Вкладка ••• отключена",
+                            Toast.LENGTH_SHORT).show();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
                     } else if (runtimeEnvironmentItem.equals(item)) {

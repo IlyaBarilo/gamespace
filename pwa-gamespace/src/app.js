@@ -69,9 +69,29 @@ let gameLoadTimer = null;
 let backgroundIssueCount = 0;
 let archiveStatistics = null;
 let activeImportController = null;
+const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
 const archiveStatisticsStore = createArchiveStatisticsStore();
 const runtimeHistoryStore = createRuntimeHistoryStore();
 let runtimeHistoryState = runtimeHistoryStore.load();
+
+function readViewerMenuTabSetting() {
+  try { return localStorage.getItem(VIEWER_MENU_TAB_KEY) === "1"; }
+  catch { return false; }
+}
+
+function writeViewerMenuTabSetting(enabled) {
+  try { localStorage.setItem(VIEWER_MENU_TAB_KEY, enabled ? "1" : "0"); }
+  catch { /* The current session still uses the selected value. */ }
+}
+
+let viewerMenuTabEnabled = readViewerMenuTabSetting();
+elements.viewerMenuTabSetting.checked = viewerMenuTabEnabled;
+
+function refreshViewerMenuTab() {
+  elements.viewerMenuTab.hidden = !viewerMenuTabEnabled
+    || elements.viewer.hidden
+    || !elements.viewerToolbar.classList.contains("is-hidden");
+}
 
 function refreshArchiveStatistics() {
   const { report, warning } = archiveStatisticsStore.load();
@@ -527,6 +547,7 @@ function contentIndexUrl() {
 }
 
 function showViewerToolbar() {
+  elements.viewerMenuTab.hidden = true;
   elements.viewerToolbar.classList.remove("is-hidden");
   elements.viewerToolbar.classList.remove("is-counting");
   void elements.viewerToolbar.offsetWidth;
@@ -535,6 +556,7 @@ function showViewerToolbar() {
   toolbarTimer = setTimeout(() => {
     elements.viewerToolbar.classList.remove("is-counting");
     elements.viewerToolbar.classList.add("is-hidden");
+    refreshViewerMenuTab();
   }, 5000);
 }
 
@@ -575,6 +597,7 @@ function closeViewer() {
   detachGameDiagnostics?.();
   detachGameDiagnostics = null;
   diagnosticSession.record("Закрытие просмотра");
+  elements.viewerMenuTab.hidden = true;
   elements.viewer.hidden = true;
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
@@ -1235,6 +1258,12 @@ elements.archiveInput.addEventListener("change", () => importSelectedFile(elemen
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerClose.addEventListener("click", closeViewer);
+elements.viewerMenuTab.addEventListener("click", closeViewer);
+elements.viewerMenuTabSetting.addEventListener("change", () => {
+  viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
+  writeViewerMenuTabSetting(viewerMenuTabEnabled);
+  refreshViewerMenuTab();
+});
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;
