@@ -1483,20 +1483,52 @@ body.is-busy button:not(#errorClose):not(#diagnosticDialog button):not(.diagnost
   pointer-events: none;
 }
 
+html.is-viewing-site,
+body.is-viewing-site {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 /* Local site viewer */
 .viewer {
   position: fixed;
   z-index: 50;
   inset: 0;
   overflow: hidden;
-  background: #071a36;
+  background: #000;
+}
+
+.viewer-content-frame {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  transform: translateX(-50%);
 }
 
 .viewer iframe {
+  display: block;
   width: 100%;
   height: 100%;
   border: 0;
   background: #fff;
+}
+
+@media (orientation: landscape) {
+  .viewer-content-frame {
+    width: min(100%, 62.5vh);
+  }
+}
+
+@supports (height: 100dvh) {
+  @media (orientation: landscape) {
+    .viewer-content-frame {
+      width: min(100%, 62.5dvh);
+    }
+  }
 }
 
 .viewer-loading {

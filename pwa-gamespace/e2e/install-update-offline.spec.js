@@ -13,6 +13,28 @@ async function getSiteFrame(page) {
   return frameElement.contentFrame();
 }
 
+async function expectViewerFrameGeometry(page, landscape) {
+  const geometry = await page.locator(".viewer-content-frame").evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      width: rect.width,
+      height: rect.height,
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+    };
+  });
+
+  expect(Math.abs(geometry.height - geometry.windowHeight)).toBeLessThanOrEqual(1);
+  if (landscape) {
+    expect(Math.abs(geometry.width - geometry.height * 10 / 16)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.left - (geometry.windowWidth - geometry.width) / 2)).toBeLessThanOrEqual(1);
+  } else {
+    expect(Math.abs(geometry.width - geometry.windowWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.left)).toBeLessThanOrEqual(1);
+  }
+}
+
 test("installs demo, applies update and opens the site offline", async ({ page, context }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
@@ -40,6 +62,11 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#viewer")).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("#siteFrame")).toBeVisible();
   await expect(page.locator("#viewerLoading")).toBeHidden();
+  await expect(page.locator("html")).toHaveClass(/is-viewing-site/);
+  await expect(page.locator("body")).toHaveClass(/is-viewing-site/);
+  await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
+  await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+  await expectViewerFrameGeometry(page, true);
 
   const gameFrame = await getSiteFrame(page);
   const catalogPath = new URL(gameFrame.url()).pathname;
@@ -64,6 +91,8 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   })));
   await page.locator("#viewerClose").click();
   await expect(page.locator("#viewer")).toBeHidden();
+  await expect(page.locator("html")).not.toHaveClass(/is-viewing-site/);
+  await expect(page.locator("body")).not.toHaveClass(/is-viewing-site/);
   await page.locator("#lastErrorButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
   await page.locator("#diagnosticClose").click();
@@ -75,6 +104,7 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
+  await expectViewerFrameGeometry(page, false);
   const mobileFrame = await getSiteFrame(page);
   const mobileCatalogPath = new URL(mobileFrame.url()).pathname;
   expect(new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");

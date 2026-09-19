@@ -578,6 +578,11 @@ function showViewerToolbar() {
   }, 5000);
 }
 
+function setViewerScrollLock(enabled) {
+  document.documentElement.classList.toggle("is-viewing-site", enabled);
+  document.body.classList.toggle("is-viewing-site", enabled);
+}
+
 async function openViewer() {
   if (!state) return false;
   try {
@@ -596,6 +601,7 @@ async function openViewer() {
       throw error;
     }
     elements.viewer.hidden = false;
+    setViewerScrollLock(true);
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.appShell.inert = true;
     beginGameLoad(url);
@@ -618,6 +624,7 @@ function closeViewer() {
   diagnosticSession.record("Закрытие просмотра");
   elements.viewerMenuTab.hidden = true;
   elements.viewer.hidden = true;
+  setViewerScrollLock(false);
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
   elements.siteFrame.src = "about:blank";

@@ -1,4 +1,4 @@
-﻿param([string]$JdkBin = "")
+param([string]$JdkBin = "")
 
 $ErrorActionPreference = "Stop"
 $apkRoot = Split-Path -Parent $PSScriptRoot
@@ -100,6 +100,9 @@ $checks = @{
     "menu tab appears only after toolbar hides" = 'hideTopBar\(\)[\s\S]*?updateMenuTabVisibility\(\);'
     "menu tab setting is persisted" = 'putBoolean\(PREF_SHOW_MENU_TAB, enabled\)\.apply\(\)'
     "game UI mode is passed in URL" = 'withGameUiMode\(String url\)[\s\S]*?appendQueryParameter\("ui", mode\)'
+    "site viewport is centered in the app shell" = 'siteViewportFrame[\s\S]*?new FrameLayout\.LayoutParams\([\s\S]*?Gravity\.CENTER'
+    "site viewport is limited to 10 by 16 in landscape" = 'availableWidth > availableHeight[\s\S]*?availableHeight \* 10f / 16f'
+    "site WebViews belong to the limited viewport" = 'siteViewportFrame\.addView\(homeWebView[\s\S]*?siteViewportFrame\.addView\(webView'
     "operation cancellation" = 'ensureOperationNotCancelled\(\)'
     "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
     "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'

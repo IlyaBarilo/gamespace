@@ -487,11 +487,13 @@
         <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>
       </div>
       <button id="viewerMenuTab" class="viewer-menu-tab" type="button" aria-label="Открыть настройки и архивы" hidden>•••</button>
-      <div id="viewerLoading" class="viewer-loading">
-        <div class="loader-orbit" aria-hidden="true"><span></span></div>
-        <strong>Открываю локальный сайт…</strong>
+      <div class="viewer-content-frame">
+        <div id="viewerLoading" class="viewer-loading">
+          <div class="loader-orbit" aria-hidden="true"><span></span></div>
+          <strong>Открываю локальный сайт…</strong>
+        </div>
+        <iframe id="siteFrame" title="Локальный сайт GameSpace"></iframe>
       </div>
-      <iframe id="siteFrame" title="Локальный сайт GameSpace"></iframe>
     </section>
 
     <script type="module" src="/src/app.js"></script>

@@ -125,6 +125,7 @@ public class MainActivity extends Activity {
     private AppUpdateDialog appUpdateDialog;
     private AlertDialog externalLinkDialog;
     private FrameLayout contentFrame;
+    private FrameLayout siteViewportFrame;
     private LinearLayout topBarContainer;
     private ProgressBar topBarCountdown;
     private FrameLayout pageLoadingOverlay;
@@ -376,11 +377,36 @@ public class MainActivity extends Activity {
         ));
 
         contentFrame = new FrameLayout(this);
+        contentFrame.setBackgroundColor(Color.BLACK);
+
+        siteViewportFrame = new FrameLayout(this);
+        siteViewportFrame.setBackgroundColor(Color.WHITE);
+        contentFrame.addView(siteViewportFrame, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            Gravity.CENTER
+        ));
+        contentFrame.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(
+                View view,
+                int left,
+                int top,
+                int right,
+                int bottom,
+                int oldLeft,
+                int oldTop,
+                int oldRight,
+                int oldBottom
+            ) {
+                updateSiteViewportFrameLayout(right - left, bottom - top);
+            }
+        });
 
         homeWebView = new WebView(this);
         homeWebView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         homeWebView.setVisibility(View.GONE);
-        contentFrame.addView(homeWebView, new FrameLayout.LayoutParams(
+        siteViewportFrame.addView(homeWebView, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
@@ -388,7 +414,7 @@ public class MainActivity extends Activity {
         webView = new WebView(this);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
         webView.setVisibility(View.GONE);
-        contentFrame.addView(webView, new FrameLayout.LayoutParams(
+        siteViewportFrame.addView(webView, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
@@ -407,7 +433,7 @@ public class MainActivity extends Activity {
 
         pageLoadingOverlay = createPageLoadingOverlay();
         pageLoadingOverlay.setVisibility(View.GONE);
-        contentFrame.addView(pageLoadingOverlay, new FrameLayout.LayoutParams(
+        siteViewportFrame.addView(pageLoadingOverlay, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
@@ -431,6 +457,26 @@ public class MainActivity extends Activity {
         rootFrame.addView(menuTabButton, menuTabParams);
 
         setContentView(rootFrame);
+    }
+
+    private void updateSiteViewportFrameLayout(int availableWidth, int availableHeight) {
+        if (siteViewportFrame == null || availableWidth <= 0 || availableHeight <= 0) {
+            return;
+        }
+
+        int viewportWidth = availableWidth;
+        if (availableWidth > availableHeight) {
+            viewportWidth = Math.min(availableWidth, Math.round(availableHeight * 10f / 16f));
+        }
+
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) siteViewportFrame.getLayoutParams();
+        if (params.width == viewportWidth && params.height == availableHeight && params.gravity == Gravity.CENTER) {
+            return;
+        }
+        params.width = viewportWidth;
+        params.height = availableHeight;
+        params.gravity = Gravity.CENTER;
+        siteViewportFrame.setLayoutParams(params);
     }
 
     private Button createMenuTabButton() {
