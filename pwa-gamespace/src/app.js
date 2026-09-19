@@ -71,6 +71,7 @@ let backgroundIssueCount = 0;
 let archiveStatistics = null;
 let activeImportController = null;
 const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
+const viewerLandscapeQuery = window.matchMedia("(orientation: landscape)");
 const archiveStatisticsStore = createArchiveStatisticsStore();
 const runtimeHistoryStore = createRuntimeHistoryStore();
 let runtimeHistoryState = runtimeHistoryStore.load();
@@ -91,6 +92,7 @@ elements.viewerMenuTabSetting.checked = viewerMenuTabEnabled;
 function refreshViewerMenuTab() {
   elements.viewerMenuTab.hidden = !viewerMenuTabEnabled
     || elements.viewer.hidden
+    || viewerLandscapeQuery.matches
     || !elements.viewerToolbar.classList.contains("is-hidden");
 }
 
@@ -595,7 +597,9 @@ function viewerIsAtIndex() {
 }
 
 function refreshViewerBackButton() {
-  elements.viewerBack.disabled = viewerIsAtIndex();
+  const disabled = viewerIsAtIndex();
+  elements.viewerBack.disabled = disabled;
+  elements.viewerSideBack.disabled = disabled;
 }
 
 function returnViewerToIndex(source) {
@@ -605,6 +609,7 @@ function returnViewerToIndex(source) {
   try { elements.siteFrame.contentWindow.location.replace(viewerIndexUrl); }
   catch { elements.siteFrame.src = viewerIndexUrl; }
   elements.viewerBack.disabled = true;
+  elements.viewerSideBack.disabled = true;
   return true;
 }
 
@@ -628,6 +633,7 @@ async function openViewer() {
     elements.viewer.hidden = false;
     setViewerScrollLock(true);
     elements.viewerBack.disabled = true;
+    elements.viewerSideBack.disabled = true;
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.appShell.inert = true;
     beginGameLoad(url);
@@ -651,6 +657,7 @@ function closeViewer() {
   elements.viewerMenuTab.hidden = true;
   elements.viewer.hidden = true;
   elements.viewerBack.disabled = true;
+  elements.viewerSideBack.disabled = true;
   setViewerScrollLock(false);
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
@@ -1331,13 +1338,17 @@ elements.viewerBack.addEventListener("click", () => {
   returnViewerToIndex("toolbarBack");
   showViewerToolbar();
 });
+elements.viewerSideBack.addEventListener("click", () => returnViewerToIndex("sideBack"));
 elements.viewerClose.addEventListener("click", closeViewer);
+elements.viewerSideMenu.addEventListener("click", closeViewer);
 elements.viewerMenuTab.addEventListener("click", closeViewer);
 elements.viewerMenuTabSetting.addEventListener("change", () => {
   viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
   writeViewerMenuTabSetting(viewerMenuTabEnabled);
   refreshViewerMenuTab();
 });
+if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", refreshViewerMenuTab);
+else viewerLandscapeQuery.addListener(refreshViewerMenuTab);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;

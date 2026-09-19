@@ -1615,7 +1615,8 @@ body.is-viewing-site {
   line-height: 1.2;
 }
 
-.viewer-toolbar button {
+.viewer-toolbar button,
+.viewer-side-controls button {
   display: grid;
   width: 42px;
   height: 42px;
@@ -1633,11 +1634,13 @@ body.is-viewing-site {
   font-weight: 700;
 }
 
-.viewer-toolbar button:active {
+.viewer-toolbar button:active,
+.viewer-side-controls button:active {
   background: #c6c6c6;
 }
 
-.viewer-toolbar button:disabled {
+.viewer-toolbar button:disabled,
+.viewer-side-controls button:disabled {
   opacity: 0.45;
 }
 
@@ -1645,6 +1648,21 @@ body.is-viewing-site {
   pointer-events: none;
   opacity: 0;
   transform: translateY(-100%);
+}
+
+.viewer-side-controls {
+  position: fixed;
+  z-index: 70;
+  top: calc(8px + env(safe-area-inset-top));
+  right: calc(8px + env(safe-area-inset-right));
+  display: none;
+  gap: 2px;
+}
+
+@media (orientation: landscape) {
+  .viewer-toolbar.is-hidden + .viewer-side-controls {
+    display: flex;
+  }
 }
 
 .viewer-settings-panel {

@@ -91,12 +91,21 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await page.locator("#viewerBack").click();
   await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
   await expect(page.locator("#viewerBack")).toBeDisabled();
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/, { timeout: 7_000 });
+  await expect(page.locator("#viewerSideControls")).toBeVisible();
+  await expect(page.locator("#viewerMenuTab")).toBeHidden();
+  await expect(page.locator("#viewerSideBack")).toBeDisabled();
+  await gameFrame.locator(".game-card").first().click();
+  await expect(page.locator("#viewerSideBack")).toBeEnabled();
+  await page.locator("#viewerSideBack").click();
+  await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
+  await expect(page.locator("#viewerSideBack")).toBeDisabled();
 
   // Reports remain accessible through the menu after removing the viewer shortcut.
   await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
     message: "Viewer menu diagnostic fixture", error: new Error("Viewer menu diagnostic fixture"),
   })));
-  await page.locator("#viewerClose").click();
+  await page.locator("#viewerSideMenu").click();
   await expect(page.locator("#viewer")).toBeHidden();
   await expect(page.locator("html")).not.toHaveClass(/is-viewing-site/);
   await expect(page.locator("body")).not.toHaveClass(/is-viewing-site/);
