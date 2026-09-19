@@ -92,7 +92,7 @@ elements.viewerMenuTabSetting.checked = viewerMenuTabEnabled;
 function refreshViewerMenuTab() {
   elements.viewerMenuTab.hidden = !viewerMenuTabEnabled
     || elements.viewer.hidden
-    || viewerLandscapeQuery.matches
+    || elements.viewer.classList.contains("is-portrait-frame-mode")
     || !elements.viewerToolbar.classList.contains("is-hidden");
 }
 
@@ -570,14 +570,28 @@ function showViewerToolbar() {
   elements.viewerMenuTab.hidden = true;
   elements.viewerToolbar.classList.remove("is-hidden");
   elements.viewerToolbar.classList.remove("is-counting");
+  clearTimeout(toolbarTimer);
+  if (elements.viewer.classList.contains("is-portrait-frame-mode")) {
+    refreshViewerMenuTab();
+    return;
+  }
   void elements.viewerToolbar.offsetWidth;
   elements.viewerToolbar.classList.add("is-counting");
-  clearTimeout(toolbarTimer);
   toolbarTimer = setTimeout(() => {
     elements.viewerToolbar.classList.remove("is-counting");
     elements.viewerToolbar.classList.add("is-hidden");
     refreshViewerMenuTab();
   }, 5000);
+}
+
+function updateViewerLayoutMode() {
+  const enabled = !elements.viewer.hidden && viewerLandscapeQuery.matches;
+  elements.viewer.classList.toggle("is-portrait-frame-mode", enabled);
+  if (elements.viewer.hidden) {
+    refreshViewerMenuTab();
+    return;
+  }
+  showViewerToolbar();
 }
 
 function setViewerScrollLock(enabled) {
@@ -597,9 +611,7 @@ function viewerIsAtIndex() {
 }
 
 function refreshViewerBackButton() {
-  const disabled = viewerIsAtIndex();
-  elements.viewerBack.disabled = disabled;
-  elements.viewerSideBack.disabled = disabled;
+  elements.viewerBack.disabled = viewerIsAtIndex();
 }
 
 function returnViewerToIndex(source) {
@@ -609,7 +621,6 @@ function returnViewerToIndex(source) {
   try { elements.siteFrame.contentWindow.location.replace(viewerIndexUrl); }
   catch { elements.siteFrame.src = viewerIndexUrl; }
   elements.viewerBack.disabled = true;
-  elements.viewerSideBack.disabled = true;
   return true;
 }
 
@@ -631,9 +642,9 @@ async function openViewer() {
       throw error;
     }
     elements.viewer.hidden = false;
+    updateViewerLayoutMode();
     setViewerScrollLock(true);
     elements.viewerBack.disabled = true;
-    elements.viewerSideBack.disabled = true;
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.appShell.inert = true;
     beginGameLoad(url);
@@ -656,8 +667,8 @@ function closeViewer() {
   diagnosticSession.record("Закрытие просмотра");
   elements.viewerMenuTab.hidden = true;
   elements.viewer.hidden = true;
+  elements.viewer.classList.remove("is-portrait-frame-mode");
   elements.viewerBack.disabled = true;
-  elements.viewerSideBack.disabled = true;
   setViewerScrollLock(false);
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
@@ -1338,17 +1349,15 @@ elements.viewerBack.addEventListener("click", () => {
   returnViewerToIndex("toolbarBack");
   showViewerToolbar();
 });
-elements.viewerSideBack.addEventListener("click", () => returnViewerToIndex("sideBack"));
 elements.viewerClose.addEventListener("click", closeViewer);
-elements.viewerSideMenu.addEventListener("click", closeViewer);
 elements.viewerMenuTab.addEventListener("click", closeViewer);
 elements.viewerMenuTabSetting.addEventListener("change", () => {
   viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
   writeViewerMenuTabSetting(viewerMenuTabEnabled);
   refreshViewerMenuTab();
 });
-if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", refreshViewerMenuTab);
-else viewerLandscapeQuery.addListener(refreshViewerMenuTab);
+if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", updateViewerLayoutMode);
+else viewerLandscapeQuery.addListener(updateViewerLayoutMode);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;

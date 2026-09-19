@@ -67,6 +67,9 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
   await expect(page.locator("#viewerBack")).toBeDisabled();
+  await expect(page.locator("#viewer")).toHaveClass(/is-portrait-frame-mode/);
+  await expect(page.locator("#viewerToolbarTitle")).toBeHidden();
+  await expect(page.locator("#viewerToolbar")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expectViewerFrameGeometry(page, true);
 
   const gameFrame = await getSiteFrame(page);
@@ -91,21 +94,21 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await page.locator("#viewerBack").click();
   await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
   await expect(page.locator("#viewerBack")).toBeDisabled();
-  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/, { timeout: 7_000 });
-  await expect(page.locator("#viewerSideControls")).toBeVisible();
+  await page.waitForTimeout(5_500);
+  await expect(page.locator("#viewerToolbar")).toBeVisible();
+  await expect(page.locator("#viewerToolbar")).not.toHaveClass(/is-hidden/);
   await expect(page.locator("#viewerMenuTab")).toBeHidden();
-  await expect(page.locator("#viewerSideBack")).toBeDisabled();
   await gameFrame.locator(".game-card").first().click();
-  await expect(page.locator("#viewerSideBack")).toBeEnabled();
-  await page.locator("#viewerSideBack").click();
+  await expect(page.locator("#viewerBack")).toBeEnabled();
+  await page.locator("#viewerBack").click();
   await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
-  await expect(page.locator("#viewerSideBack")).toBeDisabled();
+  await expect(page.locator("#viewerBack")).toBeDisabled();
 
   // Reports remain accessible through the menu after removing the viewer shortcut.
   await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
     message: "Viewer menu diagnostic fixture", error: new Error("Viewer menu diagnostic fixture"),
   })));
-  await page.locator("#viewerSideMenu").click();
+  await page.locator("#viewerClose").click();
   await expect(page.locator("#viewer")).toBeHidden();
   await expect(page.locator("html")).not.toHaveClass(/is-viewing-site/);
   await expect(page.locator("body")).not.toHaveClass(/is-viewing-site/);
@@ -120,6 +123,7 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
+  await expect(page.locator("#viewer")).not.toHaveClass(/is-portrait-frame-mode/);
   await expectViewerFrameGeometry(page, false);
   const mobileFrame = await getSiteFrame(page);
   const mobileCatalogPath = new URL(mobileFrame.url()).pathname;
