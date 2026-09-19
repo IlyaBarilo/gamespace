@@ -1637,6 +1637,10 @@ body.is-viewing-site {
   background: #c6c6c6;
 }
 
+.viewer-toolbar button:disabled {
+  opacity: 0.45;
+}
+
 .viewer-toolbar.is-hidden {
   pointer-events: none;
   opacity: 0;

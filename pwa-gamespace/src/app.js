@@ -583,6 +583,31 @@ function setViewerScrollLock(enabled) {
   document.body.classList.toggle("is-viewing-site", enabled);
 }
 
+function viewerIsAtIndex() {
+  if (!viewerIndexUrl || elements.viewer.hidden) return true;
+  try {
+    const frameUrl = elements.siteFrame.contentWindow.location.href;
+    return frameUrl === "about:blank"
+      || new URL(frameUrl).pathname === new URL(viewerIndexUrl).pathname;
+  } catch {
+    return true;
+  }
+}
+
+function refreshViewerBackButton() {
+  elements.viewerBack.disabled = viewerIsAtIndex();
+}
+
+function returnViewerToIndex(source) {
+  if (!viewerIndexUrl || viewerIsAtIndex()) return false;
+  diagnosticSession.record("Возврат из игры в каталог", source);
+  beginGameLoad(viewerIndexUrl);
+  try { elements.siteFrame.contentWindow.location.replace(viewerIndexUrl); }
+  catch { elements.siteFrame.src = viewerIndexUrl; }
+  elements.viewerBack.disabled = true;
+  return true;
+}
+
 async function openViewer() {
   if (!state) return false;
   try {
@@ -602,6 +627,7 @@ async function openViewer() {
     }
     elements.viewer.hidden = false;
     setViewerScrollLock(true);
+    elements.viewerBack.disabled = true;
     elements.appShell.setAttribute("aria-hidden", "true");
     elements.appShell.inert = true;
     beginGameLoad(url);
@@ -624,6 +650,7 @@ function closeViewer() {
   diagnosticSession.record("Закрытие просмотра");
   elements.viewerMenuTab.hidden = true;
   elements.viewer.hidden = true;
+  elements.viewerBack.disabled = true;
   setViewerScrollLock(false);
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
@@ -644,10 +671,7 @@ function handleViewerMessage(event) {
     return;
   }
 
-  diagnosticSession.record("Возврат из игры в каталог", "gameExit");
-  beginGameLoad(viewerIndexUrl);
-  try { elements.siteFrame.contentWindow.location.replace(viewerIndexUrl); }
-  catch { elements.siteFrame.src = viewerIndexUrl; }
+  returnViewerToIndex("gameExit");
 }
 
 function attachFrameGuards() {
@@ -659,6 +683,7 @@ function attachFrameGuards() {
     detachGameDiagnostics?.();
     detachGameDiagnostics = null;
     if (frameWindow?.location.href === "about:blank") return;
+    refreshViewerBackButton();
     diagnosticSession.record("Страница загружена", diagnosticPagePath(frameWindow.location.href));
     detachGameDiagnostics = observeGameWindow(frameWindow, (error, context) => saveBackgroundIssue(error, { operation: "просмотр игры", ...context }));
     const checkedUrl = frameWindow.location.href;
@@ -1302,6 +1327,10 @@ elements.archiveStatisticsButton.addEventListener("click", () => {
 elements.archiveInput.addEventListener("change", () => importSelectedFile(elements.archiveInput.files?.[0]));
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
+elements.viewerBack.addEventListener("click", () => {
+  returnViewerToIndex("toolbarBack");
+  showViewerToolbar();
+});
 elements.viewerClose.addEventListener("click", closeViewer);
 elements.viewerMenuTab.addEventListener("click", closeViewer);
 elements.viewerMenuTabSetting.addEventListener("change", () => {

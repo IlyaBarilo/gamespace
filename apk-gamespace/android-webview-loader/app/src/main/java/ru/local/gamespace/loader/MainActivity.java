@@ -137,6 +137,7 @@ public class MainActivity extends Activity {
     private TextView emptyDetails;
     private TextView progressTitle;
     private TextView progressDetails;
+    private Button backButton;
     private Button menuButton;
     private Button menuTabButton;
     private Button chooseButton;
@@ -352,6 +353,17 @@ public class MainActivity extends Activity {
         title.setTextSize(18);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+        backButton = createToolbarIconButton("←", "Назад");
+        backButton.setEnabled(false);
+        backButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                navigateBackWithinSite();
+                updateSystemBackCallbackRegistration();
+            }
+        });
+        toolbar.addView(backButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
 
         menuButton = createToolbarIconButton("⚙", "Настройки");
         menuButton.setOnClickListener(new View.OnClickListener() {
@@ -3726,9 +3738,24 @@ public class MainActivity extends Activity {
     }
 
     private void updateSystemBackCallbackRegistration() {
+        if (backButton != null) {
+            backButton.setEnabled(canNavigateBackWithinSite());
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && api33BackNavigationHandler != null) {
             api33BackNavigationHandler.setEnabled(shouldInterceptSystemBack());
         }
+    }
+
+    private boolean canNavigateBackWithinSite() {
+        if (contentLoadPending) {
+            return true;
+        }
+        if (webView != null && webView.getVisibility() == View.VISIBLE) {
+            return true;
+        }
+        return homeWebView != null
+            && homeWebView.getVisibility() == View.VISIBLE
+            && homeWebView.canGoBack();
     }
 
     private void handleApi33SystemBack() {

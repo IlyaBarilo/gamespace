@@ -66,6 +66,7 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("body")).toHaveClass(/is-viewing-site/);
   await expect(page.locator("html")).toHaveCSS("overflow", "hidden");
   await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+  await expect(page.locator("#viewerBack")).toBeDisabled();
   await expectViewerFrameGeometry(page, true);
 
   const gameFrame = await getSiteFrame(page);
@@ -84,6 +85,12 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await gameFrame.locator("#exitButton").click();
   await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
   await expect(gameFrame.locator(".game-card").first()).toBeVisible();
+  await expect(page.locator("#viewerBack")).toBeDisabled();
+  await gameFrame.locator(".game-card").first().click();
+  await expect(page.locator("#viewerBack")).toBeEnabled();
+  await page.locator("#viewerBack").click();
+  await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
+  await expect(page.locator("#viewerBack")).toBeDisabled();
 
   // Reports remain accessible through the menu after removing the viewer shortcut.
   await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
