@@ -7,7 +7,7 @@
 <title>Подводная экспедиция</title>
 <style>
 :root{--scale:1;--text-size:clamp(16px,2.2vmin,28px);--hud-size:clamp(18px,2.8vmin,36px);--control-size:clamp(48px,7vmin,88px)}
-html[data-ui-mode="mobile"]{--text-size:clamp(16px,3.8vw,22px);--hud-size:clamp(18px,4.8vw,28px);--control-size:clamp(48px,13vw,68px)}
+html[data-ui-mode="mobile"]{--text-size:clamp(14px,3.4vw,20px);--hud-size:clamp(16px,4.2vw,24px);--control-size:clamp(44px,11.5vw,62px)}
 html[data-ui-mode="tv"]{--text-size:clamp(24px,2.2vmin,40px);--hud-size:clamp(28px,3vmin,52px);--control-size:clamp(72px,7vmin,120px)}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#031923;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#f7fbff}
@@ -86,7 +86,7 @@ let scale=1,backing=1,last=performance.now(),fieldPointer=null,fieldActive=false
 const keys=new Set();
 const state={active:false,finished:false,score:0,timeLeft:CONFIG.time,lives:CONFIG.lives,runes:0,powerTimer:0,eatCombo:0,freeze:0,invuln:0,treasureOpen:false,maze:null,pellets:new Set(),runeCells:[],powerCells:[],chest:null,start:null,home:null,player:null,enemies:[],particles:[],floaters:[],audioCtx:null,master:null,hintTimer:7};
 
-function automaticUiMode(w,h){const shortSide=Math.min(w,h),longSide=Math.max(w,h),coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);return coarse&&shortSide>=1000&&longSide>=1700?'tv':!coarse&&shortSide>=1300&&longSide>=2200?'tv':coarse||shortSide<700?'mobile':'auto'}
+function automaticUiMode(w,h){const shortSide=Math.min(w,h),longSide=Math.max(w,h),coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);return coarse&&shortSide>=1000&&longSide>=1700?'tv':!coarse&&shortSide>=1300&&longSide>=2200?'tv':coarse||(shortSide<700&&longSide<1000)?'mobile':'auto'}
 function applyScale(){const w=window.visualViewport?.width||innerWidth,h=window.visualViewport?.height||innerHeight;scale=Math.min(w/BASE_W,h/BASE_H);document.documentElement.dataset.uiMode=REQUESTED_UI_MODE||automaticUiMode(w,h);document.documentElement.style.setProperty('--scale',scale.toFixed(5));const dpr=Math.max(1,devicePixelRatio||1);backing=Math.min(2.5,Math.max(1,dpr*scale));canvas.width=Math.round(BASE_W*backing);canvas.height=Math.round(BASE_H*backing);canvas.style.width=BASE_W+'px';canvas.style.height=BASE_H+'px';ctx.setTransform(backing,0,0,backing,0,0)}
 function isUiTarget(t){return !!(t&&t.closest&&t.closest('.ui,[data-ui="true"]'))}
 function isEditable(t){return !!(t&&t.closest&&t.closest('input,textarea,select,[contenteditable="true"]'))}

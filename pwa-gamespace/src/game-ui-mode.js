@@ -5,6 +5,19 @@ export function normalizeGameUiMode(value) {
   return UI_MODES.has(mode) ? mode : "";
 }
 
+export function gameContentViewport({ width, height, portraitFrame = false }) {
+  const viewportWidth = Math.max(0, Number(width) || 0);
+  const viewportHeight = Math.max(0, Number(height) || 0);
+  if (!portraitFrame || viewportWidth <= viewportHeight) {
+    return { width: viewportWidth, height: viewportHeight };
+  }
+
+  return {
+    width: Math.min(viewportWidth, viewportHeight * 10 / 16),
+    height: viewportHeight,
+  };
+}
+
 export function detectGameUiMode({ width, height, coarsePointer = false, requested = "" }) {
   const override = normalizeGameUiMode(requested);
   if (override) return override;
@@ -16,6 +29,6 @@ export function detectGameUiMode({ width, height, coarsePointer = false, request
 
   if (coarsePointer && shortSide >= 1000 && longSide >= 1700) return "tv";
   if (!coarsePointer && shortSide >= 1300 && longSide >= 2200) return "tv";
-  if (coarsePointer || shortSide < 700) return "mobile";
+  if (coarsePointer || (shortSide < 700 && longSide < 1000)) return "mobile";
   return "";
 }

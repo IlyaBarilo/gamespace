@@ -614,22 +614,45 @@
         /* GameSpace UI mode adjusts typography only. The original media queries
            keep the established grid, card geometry, spacing and controls. */
         html[data-ui-mode="mobile"] {
-            --header-title-size: clamp(24px, 6vw, 34px);
-            --section-title-size: clamp(22px, 5.5vw, 30px);
-            --section-description-size: clamp(16px, 3.8vw, 20px);
-            --font-size-title: clamp(18px, 6cqw, 24px);
-            --font-size-genre: clamp(16px, 4.8cqw, 18px);
-            --font-size-desc: clamp(16px, 4.8cqw, 18px);
-            --show-more-font-size: clamp(16px, 5cqw, 20px);
+            --header-title-size: clamp(22px, 5.4vw, 30px);
+            --section-title-size: clamp(20px, 4.8vw, 26px);
+            --section-description-size: clamp(14px, 3.2vw, 17px);
+            --font-size-title: clamp(16px, 5.2cqw, 21px);
+            --font-size-genre: clamp(11px, 3.5cqw, 14px);
+            --font-size-desc: clamp(13px, 3.8cqw, 15px);
+            --show-more-font-size: clamp(14px, 4.2cqw, 17px);
         }
 
         html[data-ui-mode="mobile"] .game-count,
         html[data-ui-mode="mobile"] footer {
-            font-size: clamp(16px, 3.8vw, 18px);
+            font-size: clamp(14px, 3.4vw, 16px);
         }
 
         html[data-ui-mode="mobile"] .difficulty-btn {
-            font-size: clamp(17px, 5.5cqw, 20px);
+            font-size: clamp(15px, 4.8cqw, 18px);
+        }
+
+        /* A 10:16 desktop content window is viewed up close. Keep the
+           established columns while making text comfortably readable. */
+        @media (min-width: 600px) and (min-height: 1000px) and (orientation: portrait) and (pointer: fine) {
+            :root {
+                --header-title-size: clamp(30px, 4.8vw, 44px);
+                --section-title-size: clamp(26px, 3.5cqw, 32px);
+                --section-description-size: clamp(15px, 2cqw, 18px);
+                --font-size-title: clamp(18px, 6.5cqw, 22px);
+                --font-size-genre: clamp(12px, 4cqw, 14px);
+                --font-size-desc: clamp(14px, 5cqw, 16px);
+                --show-more-font-size: clamp(15px, 5cqw, 18px);
+            }
+
+            .game-count,
+            footer {
+                font-size: clamp(14px, 2.4vw, 16px);
+            }
+
+            .difficulty-btn {
+                font-size: clamp(16px, 5cqw, 19px);
+            }
         }
 
         html[data-ui-mode="tv"] {
@@ -1056,7 +1079,7 @@
                 const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches === true;
                 if (coarsePointer && shortSide >= 1000 && longSide >= 1700) return 'tv';
                 if (!coarsePointer && shortSide >= 1300 && longSide >= 2200) return 'tv';
-                if (coarsePointer || shortSide < 700) return 'mobile';
+                if (coarsePointer || (shortSide < 700 && longSide < 1000)) return 'mobile';
                 return 'auto';
             };
             let UI_MODE = '';

@@ -39,7 +39,7 @@ import { createCompatibilityCheck, compatibilityErrorCategory } from "./compatib
 import { createCompatibilityUI } from "./compatibility-ui.js";
 import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
 import { diagnosticErrorCode } from "./diagnostics.js";
-import { detectGameUiMode, normalizeGameUiMode } from "./game-ui-mode.js";
+import { detectGameUiMode, gameContentViewport, normalizeGameUiMode } from "./game-ui-mode.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -549,9 +549,14 @@ function contentIndexPathname() {
 
 function currentGameUiMode() {
   const viewport = window.visualViewport;
-  return detectGameUiMode({
+  const contentViewport = gameContentViewport({
     width: viewport?.width || window.innerWidth,
     height: viewport?.height || window.innerHeight,
+    portraitFrame: viewerLandscapeQuery.matches,
+  });
+  return detectGameUiMode({
+    width: contentViewport.width,
+    height: contentViewport.height,
     coarsePointer: window.matchMedia?.("(pointer: coarse)").matches === true,
     requested: normalizeGameUiMode(new URLSearchParams(location.search).get("ui")),
   });
