@@ -6,31 +6,33 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Подводная экспедиция</title>
 <style>
-:root{--scale:1}
+:root{--scale:1;--text-size:clamp(16px,2.2vmin,28px);--hud-size:clamp(18px,2.8vmin,36px);--control-size:clamp(48px,7vmin,88px)}
+html[data-ui-mode="mobile"]{--text-size:clamp(16px,3.8vw,22px);--hud-size:clamp(18px,4.8vw,28px);--control-size:clamp(48px,13vw,68px)}
+html[data-ui-mode="tv"]{--text-size:clamp(24px,2.2vmin,40px);--hud-size:clamp(28px,3vmin,52px);--control-size:clamp(72px,7vmin,120px)}
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#031923;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;color:#f7fbff}
 button{font:inherit}
 #root{position:relative;width:100%;height:100%;overflow:hidden;touch-action:none;background:radial-gradient(circle at 50% 32%,#16829a 0,#0a5063 38%,#042b3a 68%,#02141d 100%)}
 #frame{position:absolute;left:50%;top:50%;width:810px;height:1440px;transform:translate(-50%,-50%) scale(var(--scale));transform-origin:center center;overflow:hidden;background:linear-gradient(180deg,#11677d,#073b4a 52%,#042733 100%);touch-action:none}
 #gameCanvas{position:absolute;inset:0;width:810px;height:1440px;display:block;touch-action:none}
-#ui{position:absolute;inset:0;z-index:20;pointer-events:none}
+#ui{position:absolute;inset:0;z-index:20;pointer-events:none;font-size:var(--text-size)}
 .ui{pointer-events:auto}
-#hud{position:absolute;left:22px;right:22px;top:18px;display:grid;grid-template-columns:1fr 210px 1fr;align-items:start;gap:12px;pointer-events:none}
+#hud{position:absolute;left:max(12px,env(safe-area-inset-left));right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start;gap:8px;pointer-events:none}
 .card{padding:10px 15px;border-radius:20px;border:1px solid rgba(255,255,255,.12);background:rgba(3,34,43,.76);backdrop-filter:blur(8px);min-width:0}
-.card.center{text-align:center}.card.right{text-align:right;min-height:82px}
-.label{font-size:16px;font-weight:800;letter-spacing:.05em;color:#acd8db}.value{margin-top:2px;font-size:32px;font-weight:950;line-height:1}
-#scoreValue{color:#ffe69a}#runesValue{color:#9ff5e1}#livesValue{display:block;margin-top:5px;font-size:15px;line-height:1;letter-spacing:.16em;white-space:nowrap;color:#ffb985}
-#goal{position:absolute;top:108px;left:50%;transform:translateX(-50%);width:650px;text-align:center;font-size:22px;font-weight:850;color:#ecf6ff;text-shadow:0 2px 9px rgba(0,0,0,.65);pointer-events:none}
-#hint{position:absolute;left:50%;bottom:66px;transform:translateX(-50%);width:675px;padding:9px 16px;border-radius:20px;background:rgba(2,31,41,.72);border:1px solid rgba(255,255,255,.11);font-size:19px;line-height:1.22;text-align:center;font-weight:700;pointer-events:none;transition:opacity .45s ease}
-#powerBar{position:absolute;left:50%;top:137px;transform:translateX(-50%);width:330px;height:13px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);overflow:hidden;opacity:0;transition:opacity .15s}
+.card.center{text-align:center}.card.right{text-align:right}
+.label{font-size:var(--text-size);font-weight:800;letter-spacing:.03em;color:#acd8db}.value{margin-top:2px;font-size:var(--hud-size);font-weight:950;line-height:1}
+#scoreValue{color:#ffe69a}#runesValue{color:#9ff5e1}#livesValue{display:block;margin-top:5px;font-size:var(--text-size);line-height:1;letter-spacing:.08em;white-space:nowrap;color:#ffb985}
+#goal{position:absolute;top:105px;left:12px;right:12px;text-align:center;font-size:var(--hud-size);font-weight:850;color:#ecf6ff;text-shadow:0 2px 9px rgba(0,0,0,.65);pointer-events:none}
+#hint{position:absolute;left:12px;right:12px;bottom:calc(var(--control-size) + max(24px,env(safe-area-inset-bottom)));padding:9px 16px;border-radius:20px;background:rgba(2,31,41,.72);border:1px solid rgba(255,255,255,.11);font-size:var(--text-size);line-height:1.22;text-align:center;font-weight:700;pointer-events:none;transition:opacity .45s ease}
+#powerBar{position:absolute;left:50%;top:148px;transform:translateX(-50%);width:min(330px,calc(100% - 48px));height:13px;border-radius:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);overflow:hidden;opacity:0;transition:opacity .15s}
 #powerFill{height:100%;width:0;background:linear-gradient(90deg,#77f2ff,#d8fbff);box-shadow:0 0 16px rgba(110,238,255,.8)}
 #powerBar.show{opacity:1}
-#exitButton{position:absolute;right:20px;bottom:16px;height:48px;padding:0 17px;border-radius:24px;border:1px solid rgba(255,255,255,.14);background:rgba(3,34,43,.72);color:#dfe9f5;font-size:17px;font-weight:800;cursor:pointer}
-#finishOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(2,6,13,.72);backdrop-filter:blur(8px);pointer-events:auto}
+#exitButton{position:absolute;right:max(12px,env(safe-area-inset-right));bottom:max(12px,env(safe-area-inset-bottom));min-height:var(--control-size);padding:0 17px;border-radius:24px;border:1px solid rgba(255,255,255,.14);background:rgba(3,34,43,.72);color:#dfe9f5;font-size:var(--text-size);font-weight:800;cursor:pointer}
+#finishOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:12px;background:rgba(2,6,13,.72);backdrop-filter:blur(8px);pointer-events:auto}
 #finishOverlay.hidden{display:none}
-#finishPanel{width:650px;padding:44px 38px;border-radius:42px;background:linear-gradient(180deg,rgba(12,82,92,.97),rgba(4,30,39,.98));border:1px solid rgba(255,255,255,.17);text-align:center;box-shadow:0 24px 90px rgba(0,0,0,.48)}
-#finishKicker{font-size:19px;font-weight:900;letter-spacing:.16em;color:#9eefff}#finishTitle{margin-top:10px;font-size:48px;font-weight:950;line-height:1.02}#finishScore{margin-top:25px;font-size:82px;font-weight:1000;line-height:1;color:#ffe28b;text-shadow:0 0 28px rgba(255,219,111,.28)}#finishText{margin-top:18px;font-size:23px;line-height:1.4;color:#cdd9e8}
-#restartButton{margin-top:30px;min-width:350px;height:82px;border:0;border-radius:41px;background:linear-gradient(180deg,#fff0a9,#f4bd57);color:#49320a;font-size:27px;font-weight:950;cursor:pointer;box-shadow:0 10px 30px rgba(241,184,70,.24)}
+#finishPanel{width:min(650px,100%);max-height:calc(100% - 24px);overflow:auto;padding:clamp(24px,5vmin,44px) clamp(20px,5vmin,38px);border-radius:clamp(24px,5vmin,42px);background:linear-gradient(180deg,rgba(12,82,92,.97),rgba(4,30,39,.98));border:1px solid rgba(255,255,255,.17);text-align:center;box-shadow:0 24px 90px rgba(0,0,0,.48)}
+#finishKicker{font-size:var(--text-size);font-weight:900;letter-spacing:.12em;color:#9eefff}#finishTitle{margin-top:10px;font-size:clamp(28px,7vmin,52px);font-weight:950;line-height:1.02}#finishScore{margin-top:20px;font-size:clamp(54px,14vmin,92px);font-weight:1000;line-height:1;color:#ffe28b;text-shadow:0 0 28px rgba(255,219,111,.28)}#finishText{margin-top:18px;font-size:var(--text-size);line-height:1.4;color:#cdd9e8}
+#restartButton{margin-top:24px;width:100%;min-height:var(--control-size);border:0;border-radius:clamp(24px,5vmin,44px);background:linear-gradient(180deg,#fff0a9,#f4bd57);color:#49320a;font-size:var(--hud-size);font-weight:950;cursor:pointer;box-shadow:0 10px 30px rgba(241,184,70,.24)}
 .hidden{display:none!important}
 </style>
 </head>
@@ -38,7 +40,8 @@ button{font:inherit}
 <div id="root">
   <div id="frame">
     <canvas id="gameCanvas" aria-label="Игра Подводная экспедиция"></canvas>
-    <div id="ui">
+  </div>
+  <div id="ui">
       <div id="hud">
         <div class="card"><div class="label">СЧЁТ</div><div id="scoreValue" class="value">0</div></div>
         <div class="card center"><div class="label">ОБРАЗЦЫ</div><div id="runesValue" class="value">0 / 4</div></div>
@@ -57,7 +60,6 @@ button{font:inherit}
           <button id="restartButton" class="ui" data-ui="true" type="button">Играть ещё раз</button>
         </div>
       </div>
-    </div>
   </div>
 </div>
 <script>
@@ -67,6 +69,8 @@ const BASE_W=810,BASE_H=1440,COLS=17,ROWS=25,TILE=43,OX=39.5,OY=148,HAS_POINTER=
 const DIRS={NONE:{x:0,y:0,n:'NONE'},UP:{x:0,y:-1,n:'UP'},DOWN:{x:0,y:1,n:'DOWN'},LEFT:{x:-1,y:0,n:'LEFT'},RIGHT:{x:1,y:0,n:'RIGHT'}};
 const OPP={UP:'DOWN',DOWN:'UP',LEFT:'RIGHT',RIGHT:'LEFT',NONE:'NONE'};
 function readDifficulty(){const raw=new URLSearchParams(window.location.search).get('diff');const v=Number(raw);return Number.isInteger(v)&&v>=1&&v<=5?v:3}
+function readUiMode(){const value=new URLSearchParams(window.location.search).get('ui');return value==='mobile'||value==='tv'?value:''}
+const REQUESTED_UI_MODE=readUiMode();
 const TABLE={
  1:{time:75,enemies:2,enemySpeed:2.05,power:9.0,lives:4,playerSpeed:4.79},
  2:{time:68,enemies:3,enemySpeed:2.28,power:8.0,lives:4,playerSpeed:4.84},
@@ -82,7 +86,8 @@ let scale=1,backing=1,last=performance.now(),fieldPointer=null,fieldActive=false
 const keys=new Set();
 const state={active:false,finished:false,score:0,timeLeft:CONFIG.time,lives:CONFIG.lives,runes:0,powerTimer:0,eatCombo:0,freeze:0,invuln:0,treasureOpen:false,maze:null,pellets:new Set(),runeCells:[],powerCells:[],chest:null,start:null,home:null,player:null,enemies:[],particles:[],floaters:[],audioCtx:null,master:null,hintTimer:7};
 
-function applyScale(){const w=innerWidth,h=innerHeight;scale=Math.min(w/BASE_W,h/BASE_H);document.documentElement.style.setProperty('--scale',scale.toFixed(5));const dpr=Math.max(1,devicePixelRatio||1);backing=Math.min(2.5,Math.max(1,dpr*scale));canvas.width=Math.round(BASE_W*backing);canvas.height=Math.round(BASE_H*backing);canvas.style.width=BASE_W+'px';canvas.style.height=BASE_H+'px';ctx.setTransform(backing,0,0,backing,0,0)}
+function automaticUiMode(w,h){const shortSide=Math.min(w,h),longSide=Math.max(w,h),coarse=!!(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);return coarse&&shortSide>=1000&&longSide>=1700?'tv':!coarse&&shortSide>=1300&&longSide>=2200?'tv':coarse||shortSide<700?'mobile':'auto'}
+function applyScale(){const w=window.visualViewport?.width||innerWidth,h=window.visualViewport?.height||innerHeight;scale=Math.min(w/BASE_W,h/BASE_H);document.documentElement.dataset.uiMode=REQUESTED_UI_MODE||automaticUiMode(w,h);document.documentElement.style.setProperty('--scale',scale.toFixed(5));const dpr=Math.max(1,devicePixelRatio||1);backing=Math.min(2.5,Math.max(1,dpr*scale));canvas.width=Math.round(BASE_W*backing);canvas.height=Math.round(BASE_H*backing);canvas.style.width=BASE_W+'px';canvas.style.height=BASE_H+'px';ctx.setTransform(backing,0,0,backing,0,0)}
 function isUiTarget(t){return !!(t&&t.closest&&t.closest('.ui,[data-ui="true"]'))}
 function isEditable(t){return !!(t&&t.closest&&t.closest('input,textarea,select,[contenteditable="true"]'))}
 function clearInput(){keys.clear();fieldActive=false;fieldPointer=null}
