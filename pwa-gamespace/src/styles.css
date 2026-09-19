@@ -1621,24 +1621,43 @@ body.is-viewing-site {
   height: 42px;
   flex: 0 0 42px;
   place-items: center;
-  margin-left: 2px;
+  margin-left: 7px;
   padding: 0;
-  border: 0;
-  border-radius: 2px;
-  color: #202124;
-  background: linear-gradient(#f5f5f5, #d7d7d7);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
-  font-family: Arial, sans-serif;
-  font-size: 20px;
-  font-weight: 700;
+  border: 1px solid rgba(124, 211, 255, 0.38);
+  border-radius: 13px;
+  color: #eaf8ff;
+  background: linear-gradient(145deg, rgba(22, 67, 98, 0.88), rgba(8, 29, 48, 0.9));
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.26), inset 0 1px rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  transition: transform 100ms ease, border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.viewer-control-icon {
+  width: 22px;
+  height: 22px;
+  overflow: visible;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.viewer-toolbar button:hover,
+.viewer-toolbar button:focus-visible {
+  border-color: rgba(135, 221, 255, 0.72);
+  background: linear-gradient(145deg, rgba(31, 87, 124, 0.94), rgba(10, 39, 64, 0.96));
+  box-shadow: 0 7px 20px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(85, 190, 239, 0.12), inset 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .viewer-toolbar button:active {
-  background: #c6c6c6;
+  transform: scale(0.94);
+  background: linear-gradient(145deg, rgba(18, 60, 89, 0.98), rgba(5, 24, 41, 0.98));
 }
 
 .viewer-toolbar button:disabled {
-  opacity: 0.45;
+  opacity: 0.38;
+  filter: saturate(0.5);
 }
 
 .viewer-toolbar.is-hidden {

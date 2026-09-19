@@ -484,8 +484,20 @@
     <section id="viewer" class="viewer" hidden>
       <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">
         <strong id="viewerToolbarTitle" class="viewer-toolbar-title">GameSpace PWA</strong>
-        <button id="viewerBack" type="button" aria-label="Назад" disabled>←</button>
-        <button id="viewerClose" type="button" aria-label="Настройки и архивы">⚙</button>
+        <button id="viewerBack" type="button" aria-label="Назад" disabled>
+          <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 5 3 12l7 7"></path>
+            <path d="M4 12h17"></path>
+          </svg>
+        </button>
+        <button id="viewerClose" type="button" aria-label="Настройки и архивы">
+          <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h4m4 0h8M4 12h10m4 0h2M4 17h2m4 0h10"></path>
+            <circle cx="10" cy="7" r="2"></circle>
+            <circle cx="16" cy="12" r="2"></circle>
+            <circle cx="8" cy="17" r="2"></circle>
+          </svg>
+        </button>
       </div>
       <button id="viewerMenuTab" class="viewer-menu-tab" type="button" aria-label="Открыть настройки и архивы" hidden>•••</button>
       <div class="viewer-content-frame">
