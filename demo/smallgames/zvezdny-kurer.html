@@ -960,9 +960,20 @@ function bindKeyboard(){
 }
 
 function bindUiButton(button,handler){
-  const stop=e=>{if(e.cancelable)e.preventDefault();e.stopPropagation();};
-  ['pointerdown','pointerup','touchstart','touchend','mousedown','mouseup'].forEach(t=>button.addEventListener(t,stop,{passive:false}));
-  button.addEventListener('click',e=>{stop(e);handler();});
+  let lastRun=-Infinity;
+  const isolate=e=>e.stopPropagation();
+  const run=e=>{if(e.cancelable)e.preventDefault();e.stopPropagation();if(performance.now()-lastRun<450)return;lastRun=performance.now();handler();};
+  if(HAS_POINTER_EVENTS){
+    button.addEventListener('pointerdown',isolate,{passive:false});
+    button.addEventListener('pointerup',run,{passive:false});
+    button.addEventListener('pointercancel',isolate,{passive:false});
+  }else{
+    button.addEventListener('mousedown',isolate,{passive:false});
+    button.addEventListener('mouseup',run,{passive:false});
+    button.addEventListener('touchstart',isolate,{passive:false});
+    button.addEventListener('touchend',run,{passive:false});
+  }
+  button.addEventListener('click',run);
 }
 function exitGame(){
   state.gameActive=false;state.aiming=false;state.landing=null;pressedKeys.clear();activePointerId=null;
