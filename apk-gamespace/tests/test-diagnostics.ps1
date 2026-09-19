@@ -1,4 +1,4 @@
-param([string]$JdkBin = "")
+﻿param([string]$JdkBin = "")
 
 $ErrorActionPreference = "Stop"
 $apkRoot = Split-Path -Parent $PSScriptRoot
@@ -99,7 +99,8 @@ $checks = @{
     "menu tab opens app menu directly" = 'createMenuTabButton\(\)[\s\S]*?showAppMenu\(\);'
     "menu tab appears only after toolbar hides" = 'hideTopBar\(\)[\s\S]*?updateMenuTabVisibility\(\);'
     "menu tab setting is persisted" = 'putBoolean\(PREF_SHOW_MENU_TAB, enabled\)\.apply\(\)'
-    "temporary toolbar has a back button before settings" = 'backButton = createToolbarIconButton\("←", "Назад"\)[\s\S]*?toolbar\.addView\(backButton[\s\S]*?menuButton = createToolbarIconButton'
+    "temporary toolbar has a back button before settings" = 'backButton = createToolbarIconButton\(R\.drawable\.ic_toolbar_back, "Назад"\)[\s\S]*?toolbar\.addView\(backButton[\s\S]*?menuButton = createToolbarIconButton\(R\.drawable\.ic_toolbar_sliders'
+    "temporary toolbar uses styled vector controls" = 'createToolbarIconButton\(int iconResource[\s\S]*?setCompoundDrawablesWithIntrinsicBounds\(iconResource[\s\S]*?createToolbarButtonBackground\(\)'
     "toolbar back button uses site navigation" = 'backButton\.setOnClickListener[\s\S]*?navigateBackWithinSite\(\);'
     "toolbar back button follows navigation state" = 'backButton\.setEnabled\(canNavigateBackWithinSite\(\)\)'
     "game UI mode is passed in URL" = 'withGameUiMode\(String url\)[\s\S]*?appendQueryParameter\("ui", mode\)'

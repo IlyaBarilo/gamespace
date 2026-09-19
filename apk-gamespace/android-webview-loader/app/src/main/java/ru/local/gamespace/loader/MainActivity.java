@@ -11,10 +11,12 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.res.ColorStateList;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -354,7 +356,7 @@ public class MainActivity extends Activity {
         title.setTypeface(Typeface.DEFAULT_BOLD);
         toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
-        backButton = createToolbarIconButton("←", "Назад");
+        backButton = createToolbarIconButton(R.drawable.ic_toolbar_back, "Назад");
         backButton.setEnabled(false);
         backButton.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -363,16 +365,20 @@ public class MainActivity extends Activity {
                 updateSystemBackCallbackRegistration();
             }
         });
-        toolbar.addView(backButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout.LayoutParams backButtonParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        backButtonParams.setMargins(dp(7), 0, 0, 0);
+        toolbar.addView(backButton, backButtonParams);
 
-        menuButton = createToolbarIconButton("⚙", "Настройки");
+        menuButton = createToolbarIconButton(R.drawable.ic_toolbar_sliders, "Настройки и архивы");
         menuButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 showAppMenu();
             }
         });
-        toolbar.addView(menuButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        LinearLayout.LayoutParams menuButtonParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        menuButtonParams.setMargins(dp(7), 0, 0, 0);
+        toolbar.addView(menuButton, menuButtonParams);
 
         topBarCountdown = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         topBarCountdown.setIndeterminate(false);
@@ -492,10 +498,19 @@ public class MainActivity extends Activity {
     }
 
     private Button createMenuTabButton() {
-        Button button = createToolbarIconButton("•••", "Открыть настройки и архивы");
+        Button button = new Button(this);
+        button.setText("•••");
+        button.setContentDescription("Открыть настройки и архивы");
+        button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
         button.setTextSize(16);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setIncludeFontPadding(false);
+        button.setPadding(0, 0, 0, 0);
+        button.setMinWidth(0);
+        button.setMinimumWidth(0);
+        button.setMinHeight(0);
+        button.setMinimumHeight(0);
         GradientDrawable background = new GradientDrawable();
         background.setColor(Color.argb(220, 31, 38, 45));
         float radius = dp(14);
@@ -513,19 +528,68 @@ public class MainActivity extends Activity {
         return button;
     }
 
-    private Button createToolbarIconButton(String text, String description) {
+    private Button createToolbarIconButton(int iconResource, String description) {
         Button button = new Button(this);
-        button.setText(text);
         button.setContentDescription(description);
-        button.setAllCaps(false);
-        button.setTextSize(20);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setPadding(0, 0, 0, 0);
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         button.setMinHeight(0);
         button.setMinimumHeight(0);
+        button.setGravity(Gravity.CENTER);
+        button.setCompoundDrawablesWithIntrinsicBounds(iconResource, 0, 0, 0);
+        button.setCompoundDrawableTintList(new ColorStateList(
+            new int[][] {
+                new int[] {-android.R.attr.state_enabled},
+                new int[] {}
+            },
+            new int[] {
+                Color.argb(97, 234, 248, 255),
+                Color.rgb(234, 248, 255)
+            }
+        ));
+        button.setBackground(createToolbarButtonBackground());
+        button.setStateListAnimator(null);
+        button.setElevation(dp(4));
         return button;
+    }
+
+    private StateListDrawable createToolbarButtonBackground() {
+        StateListDrawable states = new StateListDrawable();
+        states.addState(
+            new int[] {-android.R.attr.state_enabled},
+            createToolbarButtonShape(Color.rgb(13, 35, 52), Color.argb(38, 124, 211, 255))
+        );
+        states.addState(
+            new int[] {android.R.attr.state_pressed},
+            createToolbarButtonShape(Color.rgb(9, 38, 59), Color.argb(184, 135, 221, 255))
+        );
+        states.addState(
+            new int[] {android.R.attr.state_focused},
+            createToolbarButtonShape(Color.rgb(19, 61, 87), Color.argb(184, 135, 221, 255))
+        );
+        states.addState(
+            new int[] {},
+            createToolbarButtonShape(Color.rgb(12, 41, 62), Color.argb(97, 124, 211, 255))
+        );
+        return states;
+    }
+
+    private GradientDrawable createToolbarButtonShape(int color, int borderColor) {
+        GradientDrawable background = new GradientDrawable(
+            GradientDrawable.Orientation.TL_BR,
+            new int[] {lightenColor(color, 0.16f), color}
+        );
+        background.setCornerRadius(dp(13));
+        background.setStroke(dp(1), borderColor);
+        return background;
+    }
+
+    private int lightenColor(int color, float amount) {
+        int red = Math.min(255, Math.round(Color.red(color) + (255 - Color.red(color)) * amount));
+        int green = Math.min(255, Math.round(Color.green(color) + (255 - Color.green(color)) * amount));
+        int blue = Math.min(255, Math.round(Color.blue(color) + (255 - Color.blue(color)) * amount));
+        return Color.rgb(red, green, blue);
     }
 
     private LinearLayout createEmptyPanel() {
