@@ -64,12 +64,6 @@ if ($LASTEXITCODE -ne 0) { throw "APK update producer fixture failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.AppUpdateTest $updateFixture
 if ($LASTEXITCODE -ne 0) { throw "APK update client tests failed." }
 
-$downloadSources = @("ApkUpdateTransfer.java", "ApkUpdateFiles.java", "ApkUpdateIdentity.java") | ForEach-Object { Join-Path $sourceDirectory $_ }
-& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory $downloadSources (Join-Path $PSScriptRoot "ApkUpdateDownloadTest.java")
-if ($LASTEXITCODE -ne 0) { throw "APK download tests compilation failed." }
-& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ApkUpdateDownloadTest $outputDirectory
-if ($LASTEXITCODE -ne 0) { throw "APK download tests failed." }
-
 # Wiring checks supplement JVM tests; they do not replace Android device tests.
 $activity = Get-Content -LiteralPath (Join-Path $sourceDirectory "MainActivity.java") -Raw -Encoding UTF8
 $checks = @{
@@ -133,24 +127,12 @@ if ($appGradle -notmatch 'minSdk\s+23') {
 }
 Write-Host "Diagnostic wiring: $($checks.Count + 6) checks passed. Android UI still requires a device test."
 
-# Packaging/UI guards supplement the executable transfer tests, not device installation tests.
-[xml]$updateManifest = $manifest
-$androidNamespace = 'http://schemas.android.com/apk/res/android'
-$updateProviders = @($updateManifest.manifest.application.provider | Where-Object { $_.GetAttribute('name', $androidNamespace) -eq '.AppUpdateFileProvider' })
-if ($updateProviders.Count -ne 1 -or $updateProviders[0].GetAttribute('exported', $androidNamespace) -ne 'false' -or $updateProviders[0].GetAttribute('grantUriPermissions', $androidNamespace) -ne 'true') {
-    throw 'APK provider must be unique, private and use temporary URI grants.'
-}
-$installSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'ApkUpdateInstaller.java') -Raw -Encoding UTF8
-$providerSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'AppUpdateFileProvider.java') -Raw -Encoding UTF8
+# Update UI must remain informational and delegate APK handling to the browser.
 $dialogSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'AppUpdateDialog.java') -Raw -Encoding UTF8
-if ($manifest -notmatch 'android.permission.REQUEST_INSTALL_PACKAGES') { throw 'Missing installer permission.' }
-if ($installSource -notmatch 'FLAG_GRANT_READ_URI_PERMISSION' -or $installSource -match 'FLAG_GRANT_WRITE_URI_PERMISSION|Uri\.fromFile') { throw 'Installer must receive only a content URI read grant.' }
-if ($installSource -notmatch 'FLAG_SYSTEM' -or $installSource -notmatch 'setComponent\(') { throw 'Only an explicit system installer may receive the APK.' }
-if ($providerSource -notmatch 'MODE_READ_ONLY' -or $providerSource -notmatch '!"r"\.equals\(mode\)') { throw 'APK provider must reject write access.' }
-if ($dialogSource -notmatch 'resumed && dialog != null && dialog\.isShowing\(\) && !site\.isBusy\(\)') { throw 'Installing in background or during site operations is forbidden.' }
-if ($dialogSource -notmatch 'files\.verifyReady\(release, token\)' -or $dialogSource -notmatch 'installed\.code >= target') { throw 'APK must be reverified and installation observed from actual installed version.' }
-if ($activity -notmatch 'requestCode == ApkUpdateInstaller.REQUEST_SETTINGS' -or $activity -notmatch 'busy \|\| appUpdateBlocksSite\(\)') { throw 'Installer results and site-operation guards must be wired.' }
+if ($manifest -match 'android.permission.REQUEST_INSTALL_PACKAGES|android.intent.action.INSTALL_PACKAGE|AppUpdateFileProvider') { throw 'APK must not request or expose an in-app installer.' }
+if ($dialogSource -match 'ApkUpdateInstaller|ApkUpdateTransfer|ApkUpdateFiles|AndroidApkVerifier') { throw 'Update dialog must not download, verify or install APK files.' }
+if ($dialogSource -notmatch 'Intent\.ACTION_VIEW' -or $dialogSource -notmatch 'release\.releaseUrl') { throw 'Update dialog must open the official release page in a browser.' }
 $descriptionPosition = $dialogSource.IndexOf('text(latest.description.length()')
-$installPosition = $dialogSource.IndexOf('button("Установить"')
-if ($descriptionPosition -lt 0 -or $installPosition -le $descriptionPosition) { throw 'Release description must precede the installation button.' }
-Write-Host 'APK updater wiring: 9 checks passed. Actual Android permission and installer UI are not emulated.'
+$releasePosition = $dialogSource.IndexOf('button("Открыть официальный выпуск"')
+if ($descriptionPosition -lt 0 -or $releasePosition -le $descriptionPosition) { throw 'Release description must precede the release-page button.' }
+Write-Host 'APK update UI: 4 checks passed. Browser opening still requires a device test.'

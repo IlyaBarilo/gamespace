@@ -1,0 +1,982 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; worker-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Звёздный курьер</title>
+<style>
+  :root { --scale: 1; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; width: 100%; height: 100%; overflow: hidden;
+    background: #050816; touch-action: none; user-select: none;
+    -webkit-user-select: none; -webkit-touch-callout: none;
+    font-family: ui-rounded, "Arial Rounded MT Bold", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #gameRoot { position: relative; width: 100%; height: 100%; overflow: hidden; touch-action: none; background: #050816; }
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #uiRoot { position: absolute; inset: 0; z-index: 100; pointer-events: none; }
+  #uiInner {
+    position: absolute; left: 50%; top: 50%; width: 810px; height: 1440px;
+    transform: translate(-50%, -50%) scale(var(--scale)); transform-origin: center center;
+    pointer-events: none;
+  }
+  .ui { pointer-events: auto; }
+  .topbar {
+    position: absolute; left: 42px; right: 42px; top: 34px; height: 100px;
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px;
+    color: #f8fbff; text-shadow: 0 2px 10px rgba(0,0,0,.45);
+  }
+  .stat { min-width: 0; }
+  .stat.right { text-align: right; }
+  .stat .label { font-size: 20px; font-weight: 800; letter-spacing: .04em; opacity: .72; }
+  .stat .value { margin-top: 2px; font-size: 34px; font-weight: 900; line-height: 1; }
+  #deliveryDots { display: flex; gap: 12px; align-items: center; justify-content: center; }
+  .dot { width: 18px; height: 18px; border-radius: 50%; border: 3px solid rgba(255,255,255,.40); background: rgba(255,255,255,.08); }
+  .dot.on { background: #ffe08a; border-color: #fff3c6; box-shadow: 0 0 16px rgba(255,224,138,.8); }
+
+  #hint {
+    position: absolute; left: 78px; right: 78px; bottom: 62px;
+    min-height: 94px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 12px 22px; border-radius: 28px;
+    background: rgba(7, 12, 34, .72); border: 2px solid rgba(255,255,255,.13);
+    color: #fff; text-align: center; font-size: 27px; font-weight: 850; line-height: 1.18;
+    text-shadow: 0 2px 8px rgba(0,0,0,.5); backdrop-filter: blur(4px);
+    transition: opacity .5s ease;
+  }
+  #hint.soft { opacity: .72; }
+  #hint .hint-main { font-size: 28px; font-weight: 900; }
+  #hint .hint-sub { margin-top: 6px; font-size: 21px; font-weight: 750; opacity: .72; }
+
+  #exitButton {
+    position: absolute; right: 30px; top: 150px; width: 58px; height: 58px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,.16); background: rgba(7,12,34,.62);
+    color: rgba(255,255,255,.82); font-size: 28px; font-weight: 800; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  #exitButton:focus-visible, #restartButton:focus-visible { outline: 5px solid rgba(255,236,164,.8); outline-offset: 5px; }
+
+  #finishOverlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(2,5,18,.68); opacity: 1; transition: opacity .25s ease;
+  }
+  #finishOverlay.hidden { opacity: 0; pointer-events: none; }
+  #finishOverlay.hidden .panel { transform: translateY(28px) scale(.96); opacity: 0; }
+  .panel {
+    width: 650px; padding: 44px 44px 38px; border-radius: 46px;
+    background: linear-gradient(180deg, rgba(25,37,80,.94), rgba(8,14,38,.97));
+    border: 3px solid rgba(255,255,255,.16); box-shadow: 0 24px 80px rgba(0,0,0,.42);
+    text-align: center; color: white; transition: transform .28s ease, opacity .28s ease;
+  }
+  #finishTitle { font-size: 53px; line-height: 1.02; font-weight: 950; }
+  #finishText { margin-top: 20px; font-size: 28px; line-height: 1.25; font-weight: 750; opacity: .9; }
+  #finishStats { margin-top: 26px; font-size: 24px; line-height: 1.55; opacity: .8; }
+  #restartButton {
+    width: 100%; min-height: 94px; margin-top: 34px; border: 0; border-radius: 28px;
+    background: linear-gradient(180deg, #fff4be, #ffd466); color: #2e260c;
+    font-size: 31px; font-weight: 950; cursor: pointer; box-shadow: 0 9px 0 rgba(128,82,0,.28);
+  }
+  #restartButton:active { transform: translateY(5px); box-shadow: 0 4px 0 rgba(128,82,0,.28); }
+  .hidden { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) {
+    #hint, .panel, #finishOverlay { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div id="gameRoot">
+  <canvas id="gameCanvas" aria-label="Космическая игра Звёздный курьер"></canvas>
+  <div id="uiRoot">
+    <div id="uiInner">
+      <div class="topbar" data-ui="true">
+        <div class="stat">
+          <div class="label">ДОСТАВКИ</div>
+          <div class="value"><span id="deliveryCount">0</span>/<span id="deliveryTarget">5</span></div>
+        </div>
+        <div id="deliveryDots" aria-hidden="true"></div>
+        <div class="stat right">
+          <div class="label">ВРЕМЯ</div>
+          <div id="timeValue" class="value">00:50</div>
+        </div>
+      </div>
+
+      <button id="exitButton" class="ui" data-ui="true" type="button" aria-label="Завершить игру">×</button>
+      <div id="hint"><div class="hint-main">Доставь посылку на площадку</div><div class="hint-sub">Оттяни кораблик назад и отпусти</div></div>
+
+      <div id="finishOverlay" class="ui hidden" data-ui="true">
+        <div class="panel" data-ui="true">
+          <div id="finishTitle">Все посылки доставлены!</div>
+          <div id="finishText"></div>
+          <div id="finishStats"></div>
+          <button id="restartButton" type="button" data-ui="true">Играть ещё раз</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(() => {
+'use strict';
+
+const BASE_W = 810;
+const BASE_H = 1440;
+const TAU = Math.PI * 2;
+const HAS_POINTER_EVENTS = 'PointerEvent' in window;
+
+function readDifficulty() {
+  const raw = new URLSearchParams(window.location.search).get('diff');
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 1 && value <= 5 ? value : 3;
+}
+
+const DIFF = readDifficulty();
+const DIFF_TABLE = {
+  1: { roundTime: 150, landingR: 108, previewSteps: 220, gravity: 0.90, launchScale: 0.97, maxFlightTime: 9.0, stageTarget: 7 },
+  2: { roundTime: 135, landingR: 100, previewSteps: 210, gravity: 0.95, launchScale: 0.985, maxFlightTime: 8.5, stageTarget: 7 },
+  3: { roundTime: 120, landingR: 92, previewSteps: 200, gravity: 1.00, launchScale: 1.00, maxFlightTime: 8.0, stageTarget: 7 },
+  4: { roundTime: 105, landingR: 84, previewSteps: 185, gravity: 1.05, launchScale: 1.015, maxFlightTime: 7.5, stageTarget: 7 },
+  5: { roundTime: 90, landingR: 76, previewSteps: 170, gravity: 1.10, launchScale: 1.03, maxFlightTime: 7.0, stageTarget: 7 }
+};
+const D = DIFF_TABLE[DIFF];
+const CONFIG = {
+  difficulty: DIFF,
+  roundTime: D.roundTime,
+  targetDeliveries: D.stageTarget,
+  landingRadius: D.landingR,
+  gravityScale: D.gravity,
+  launchScale: D.launchScale,
+  previewSteps: D.previewSteps,
+  maxFlightTime: D.maxFlightTime,
+  slowFlightSpeed: 58,
+  slowFlightGrace: 1.25,
+  maxDrag: 390,
+  minDrag: 20,
+  shipRadius: 20,
+  simStep: 1 / 100,
+  retryDelay: 0.72,
+  landingDuration: 1.35
+};
+
+const root = document.getElementById('gameRoot');
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const uiInner = document.getElementById('uiInner');
+const timeValue = document.getElementById('timeValue');
+const deliveryCount = document.getElementById('deliveryCount');
+const deliveryTarget = document.getElementById('deliveryTarget');
+const deliveryDots = document.getElementById('deliveryDots');
+const hint = document.getElementById('hint');
+const finishOverlay = document.getElementById('finishOverlay');
+const finishTitle = document.getElementById('finishTitle');
+const finishText = document.getElementById('finishText');
+const finishStats = document.getElementById('finishStats');
+const restartButton = document.getElementById('restartButton');
+const exitButton = document.getElementById('exitButton');
+
+let view = { scale: 1, ox: 0, oy: 0, dpr: 1, cssW: 1, cssH: 1 };
+let lastNow = performance.now();
+let activePointerId = null;
+const pressedKeys = new Set();
+let audioCtx = null;
+let masterGain = null;
+
+const state = {
+  gameActive: false,
+  finished: false,
+  success: false,
+  timeLeft: CONFIG.roundTime,
+  deliveries: 0,
+  attempts: 0,
+  perfectShots: 0,
+  stageIndex: 0,
+  scene: null,
+  ship: null,
+  aiming: false,
+  dragX: 0,
+  dragY: 0,
+  retryTimer: 0,
+  landing: null,
+  stageTransition: 0,
+  nextStageTimer: 0,
+  finishDelay: 0,
+  flash: 0,
+  shake: 0,
+  hintFade: 0,
+  keyboardAngle: -0.8,
+  keyboardPower: 0.64,
+  flightTime: 0,
+  slowFlightTime: 0,
+  particles: [],
+  rings: [],
+  trail: [],
+  stars: [],
+  dust: []
+};
+
+const STAGES = [
+  // 1. Первая доставка: только управление, без заметной гравитации.
+  {
+    launch: { x: 155, y: 1120, r: 82, c1: '#6bb7ff', c2: '#234c9f' },
+    target: { x: 635, y: 475, r: 108, c1: '#ffd27b', c2: '#d66b45', padAngle: 2.20 },
+    parcel: { color: '#ffd86f', accent: '#fff1b1', symbol: 'star' },
+    gravity: [], landingScale: 1.25
+  },
+  // 2. Первое знакомство с притяжением: одна небольшая планета мягко изгибает путь.
+  {
+    launch: { x: 145, y: 1100, r: 78, c1: '#8c79ff', c2: '#40368a' },
+    target: { x: 655, y: 390, r: 100, c1: '#87f0c4', c2: '#287e74', padAngle: 2.18 },
+    parcel: { color: '#77dcff', accent: '#dff8ff', symbol: 'moon' },
+    gravity: [ { x: 405, y: 715, r: 48, mass: 650000, c1: '#ff9b7c', c2: '#7b3149' } ],
+    landingScale: 1.15
+  },
+  // 3. Облёт: прямой путь перекрывает крупная планета; нужна одна понятная дуга.
+  {
+    launch: { x: 660, y: 1110, r: 80, c1: '#64d4d1', c2: '#1c6c7f' },
+    target: { x: 150, y: 350, r: 92, c1: '#ffdd8c', c2: '#ac6241', padAngle: 0.88 },
+    parcel: { color: '#c49bff', accent: '#f0e5ff', symbol: 'diamond' },
+    gravity: [ { x: 455, y: 700, r: 88, mass: 4200000, c1: '#9a78ff', c2: '#44306f', ring: true } ],
+    landingScale: 1.00
+  },
+  // 4. Космическая змейка: две планеты стоят по разные стороны маршрута.
+  // Правильный путь сначала изгибается вправо, затем возвращается влево — заметная S-дуга.
+  {
+    launch: { x: 405, y: 1120, r: 80, c1: '#8be78f', c2: '#32765c' },
+    target: { x: 405, y: 170, r: 70, c1: '#ffe487', c2: '#c46652', padAngle: 1.5708 },
+    parcel: { color: '#ff9bc8', accent: '#ffe3f0', symbol: 'circle' },
+    gravity: [
+      { x: 590, y: 790, r: 60, mass: 5000000, c1: '#65b7ff', c2: '#2b4e91' },
+      { x: 330, y: 445, r: 56, mass: 13000000, c1: '#ff7fb0', c2: '#71345f' }
+    ],
+    landingScale: 0.70
+  },
+  // 5. Спутник у гиганта: площадка маленькая, а большая планета постоянно тянет кораблик в сторону.
+  {
+    launch: { x: 650, y: 1120, r: 76, c1: '#72d7ff', c2: '#27528f' },
+    target: { x: 185, y: 260, r: 54, c1: '#e9f3ff', c2: '#7b82a6', padAngle: 0.95 },
+    parcel: { color: '#91f0a5', accent: '#e0ffe6', symbol: 'bolt' },
+    gravity: [ { x: 365, y: 620, r: 126, mass: 5600000, c1: '#c083ff', c2: '#51356c', ring: true } ],
+    landingScale: 0.92
+  },
+  // 6. Гравитационные ворота: нужно пройти через промежуток между двумя планетами,
+  // после чего более сильная правая планета доворачивает путь к площадке.
+  {
+    launch: { x: 405, y: 1120, r: 78, c1: '#74d2ff', c2: '#294a89' },
+    target: { x: 675, y: 280, r: 76, c1: '#ffd98f', c2: '#b45c47', padAngle: 2.20 },
+    parcel: { color: '#ffb278', accent: '#fff0d9', symbol: 'star' },
+    gravity: [
+      { x: 260, y: 660, r: 72, mass: 3000000, c1: '#63c7ff', c2: '#254e86' },
+      { x: 550, y: 660, r: 72, mass: 4200000, c1: '#ff9f73', c2: '#7c3f4c' }
+    ],
+    landingScale: 0.82
+  },
+  // 7. Финал: посадочная площадка на дальней стороне гигантской планеты с кольцами.
+  // Прямой маршрут упирается в поверхность; нужно облететь планету по большой дуге.
+  {
+    launch: { x: 135, y: 1110, r: 78, c1: '#8be6d3', c2: '#2d706a' },
+    target: { x: 435, y: 560, r: 155, c1: '#d28bff', c2: '#50306f', padAngle: -0.25, mass: 10500000, ring: true },
+    parcel: { color: '#ffe17e', accent: '#fff8ce', symbol: 'diamond' },
+    gravity: [], landingScale: 0.78
+  }
+];
+
+const STAGE_HINTS = [
+  ['Доставь посылку на площадку', 'Оттяни кораблик назад и отпусти'],
+  ['Планеты притягивают кораблик', 'Пунктир показывает, как притяжение изменит путь'],
+  ['Облети планету', 'Прямой путь закрыт — найди дугу вокруг'],
+  ['Космическая змейка', 'Две планеты изгибают путь в разные стороны'],
+  ['Доставка на спутник', 'Целься с запасом: большая планета тянет кораблик'],
+  ['Пройди гравитационные ворота', 'Проведи пунктир между двумя планетами'],
+  ['Финальная доставка', 'Облети гиганта и зайди к площадке с другой стороны']
+];
+
+function isUiTarget(target) {
+  return !!(target && target.closest('.ui, .panel, [data-ui="true"]'));
+}
+function isEditableTarget(target) {
+  return !!(target && target.closest('input,textarea,select,[contenteditable="true"]'));
+}
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function rand(a, b) { return a + Math.random() * (b - a); }
+function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx*dx + dy*dy; }
+
+function setupStars() {
+  state.stars.length = 0;
+  state.dust.length = 0;
+  for (let i = 0; i < 155; i++) {
+    state.stars.push({ x: Math.random()*BASE_W, y: Math.random()*BASE_H, r: rand(.7,2.1), a: rand(.24,.9), tw: rand(.4,1.8), p: rand(0,TAU) });
+  }
+  for (let i = 0; i < 34; i++) {
+    state.dust.push({ x: Math.random()*BASE_W, y: Math.random()*BASE_H, r: rand(1,3.4), a: rand(.03,.14), vx: rand(-3,3), vy: rand(3,10) });
+  }
+}
+
+function resize() {
+  const rect = root.getBoundingClientRect();
+  view.cssW = rect.width;
+  view.cssH = rect.height;
+  view.scale = Math.min(rect.width / BASE_W, rect.height / BASE_H);
+  view.ox = (rect.width - BASE_W * view.scale) * 0.5;
+  view.oy = (rect.height - BASE_H * view.scale) * 0.5;
+  view.dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.max(1, Math.round(rect.width * view.dpr));
+  canvas.height = Math.max(1, Math.round(rect.height * view.dpr));
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(view.dpr,0,0,view.dpr,0,0);
+  document.documentElement.style.setProperty('--scale', view.scale.toFixed(5));
+}
+
+function toWorld(clientX, clientY) {
+  const rect = root.getBoundingClientRect();
+  return {
+    x: (clientX - rect.left - view.ox) / view.scale,
+    y: (clientY - rect.top - view.oy) / view.scale
+  };
+}
+
+function ensureAudio() {
+  if (audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+    return;
+  }
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    audioCtx = new AC();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.22;
+    masterGain.connect(audioCtx.destination);
+  } catch (_) {}
+}
+
+function tone(freq, dur=.12, type='sine', gain=.13, glide=0, delay=0) {
+  ensureAudio();
+  if (!audioCtx || !masterGain) return;
+  const t = audioCtx.currentTime + Math.max(0, delay);
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (glide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq + glide), t + dur);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(gain, t + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(masterGain); o.start(t); o.stop(t + dur + .03);
+}
+function noiseBurst(dur=.14, gain=.06) {
+  ensureAudio(); if (!audioCtx || !masterGain) return;
+  const n = Math.floor(audioCtx.sampleRate * dur);
+  const b = audioCtx.createBuffer(1,n,audioCtx.sampleRate);
+  const d = b.getChannelData(0);
+  for (let i=0;i<n;i++) d[i]=(Math.random()*2-1)*(1-i/n);
+  const s = audioCtx.createBufferSource(); const g = audioCtx.createGain();
+  s.buffer=b; g.gain.value=gain; s.connect(g); g.connect(masterGain); s.start();
+}
+
+function spawnParticles(x,y,count,kind='spark') {
+  for (let i=0;i<count;i++) {
+    const a = Math.random()*TAU;
+    const sp = kind==='delivery' ? rand(80,260) : rand(35,130);
+    state.particles.push({
+      x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp,
+      life:rand(.35,.95), max:0, r:rand(2,6), kind,
+      spin:rand(-4,4)
+    });
+    state.particles[state.particles.length-1].max = state.particles[state.particles.length-1].life;
+  }
+  if (state.particles.length > 420) state.particles.splice(0, state.particles.length-420);
+}
+function addRing(x,y,r=18,maxR=120,life=.5) { state.rings.push({x,y,r,maxR,life,max:life}); }
+
+function stageTemplate(index) {
+  const src = STAGES[index % STAGES.length];
+  const copyBody = b => ({...b});
+  return { ...src, launch:copyBody(src.launch), target:copyBody(src.target), parcel:{...src.parcel}, gravity:src.gravity.map(copyBody) };
+}
+
+function setStageHint(index) {
+  const pair = STAGE_HINTS[Math.max(0, Math.min(STAGE_HINTS.length - 1, index))];
+  hint.innerHTML = `<div class="hint-main">${pair[0]}</div><div class="hint-sub">${pair[1]}</div>`;
+  hint.classList.remove('soft');
+}
+
+function landingRadiusForScene(scene) {
+  return CONFIG.landingRadius * (scene && Number.isFinite(scene.landingScale) ? scene.landingScale : 1);
+}
+
+function prepareStage(index, first=false) {
+  state.stageIndex = index;
+  state.scene = stageTemplate(index);
+  const L = state.scene.launch;
+  state.ship = { x:L.x, y:L.y-88, vx:0, vy:0, r:CONFIG.shipRadius, flying:false, angle:0, rot:0 };
+  state.aiming = false;
+  state.landing = null;
+  state.dragX = state.ship.x;
+  state.dragY = state.ship.y;
+  state.retryTimer = 0;
+  state.flightTime = 0;
+  state.slowFlightTime = 0;
+  state.stageTransition = first ? 0 : .62;
+  state.trail.length = 0;
+  const land = getLanding(state.scene);
+  state.keyboardAngle = Math.atan2(land.captureY-state.ship.y, land.captureX-state.ship.x);
+  state.keyboardPower = .55;
+  setStageHint(index);
+}
+
+function resetRoundState() {
+  state.gameActive = true;
+  state.finished = false;
+  state.success = false;
+  state.timeLeft = CONFIG.roundTime;
+  state.deliveries = 0;
+  state.attempts = 0;
+  state.perfectShots = 0;
+  state.flash = 0;
+  state.shake = 0;
+  state.nextStageTimer = 0;
+  state.finishDelay = 0;
+  state.landing = null;
+  state.hintFade = 0;
+  state.flightTime = 0;
+  state.slowFlightTime = 0;
+  state.particles.length = 0;
+  state.rings.length = 0;
+  state.trail.length = 0;
+  activePointerId = null;
+  pressedKeys.clear();
+  finishOverlay.classList.add('hidden');
+  exitButton.disabled = false;
+  exitButton.textContent = '×';
+  deliveryTarget.textContent = CONFIG.targetDeliveries;
+  prepareStage(0, true);
+  updateHud();
+  rebuildDots();
+}
+function startNewRound() { resetRoundState(); lastNow = performance.now(); }
+
+function rebuildDots() {
+  deliveryDots.innerHTML='';
+  for (let i=0;i<CONFIG.targetDeliveries;i++) {
+    const el=document.createElement('div'); el.className='dot'+(i<state.deliveries?' on':''); deliveryDots.appendChild(el);
+  }
+}
+
+function updateHud() {
+  deliveryCount.textContent = String(state.deliveries);
+  const total = Math.max(0, Math.ceil(state.timeLeft));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  timeValue.textContent = `${minutes}:${String(seconds).padStart(2,'0')}`;
+}
+
+function endGame(success) {
+  if (state.finished) return;
+  state.gameActive = false;
+  state.finished = true;
+  state.success = success;
+  state.aiming = false;
+  state.landing = null;
+  activePointerId = null;
+  pressedKeys.clear();
+  finishTitle.textContent = success ? 'Все посылки доставлены!' : `${state.deliveries} из ${CONFIG.targetDeliveries} посылок доставлено`;
+  finishText.textContent = success ? 'Отличный полёт! Все получатели дождались своих посылок.' : (state.deliveries ? 'Отличный полёт! Попробуешь доставить все?' : 'Попробуй ещё раз — теперь маршрут уже знаком.');
+  finishStats.innerHTML = `Доставлено: <b>${state.deliveries}/${CONFIG.targetDeliveries}</b><br>Запусков: <b>${state.attempts}</b>`;
+  finishOverlay.classList.remove('hidden');
+  if (success) {
+    tone(523,.16,'sine',.14,100,0); tone(659,.2,'sine',.12,110,.11); tone(784,.28,'sine',.11,150,.23);
+  } else tone(210,.28,'triangle',.09,-55);
+}
+
+function gravityAt(x,y,scene) {
+  let ax=0, ay=0;
+  const bodies = scene.target && Number.isFinite(scene.target.mass)
+    ? [...scene.gravity, scene.target]
+    : scene.gravity;
+  for (const b of bodies) {
+    const dx=b.x-x, dy=b.y-y;
+    const d2=Math.max(3600,dx*dx+dy*dy);
+    const d=Math.sqrt(d2);
+    const a=(b.mass*CONFIG.gravityScale)/d2;
+    ax += dx/d*a; ay += dy/d*a;
+  }
+  return {x:ax,y:ay};
+}
+
+function collisionWithBody(x,y,r,body) {
+  const rr = r + body.r*0.84;
+  return dist2(x,y,body.x,body.y) < rr*rr;
+}
+
+function getLanding(scene) {
+  const T = scene.target;
+  const a = Number.isFinite(T.padAngle) ? T.padAngle : Math.atan2(scene.launch.y-T.y, scene.launch.x-T.x);
+  const nx = Math.cos(a), ny = Math.sin(a);
+  const tx = -ny, ty = nx;
+  const padX = T.x + nx*(T.r + 2);
+  const padY = T.y + ny*(T.r + 2);
+  const captureX = T.x + nx*(T.r + 60);
+  const captureY = T.y + ny*(T.r + 60);
+  return {
+    angle:a, nx, ny, tx, ty, padX, padY, captureX, captureY,
+    shipX:T.x + nx*(T.r + 34), shipY:T.y + ny*(T.r + 34),
+    shipRot:a + Math.PI/2,
+    terminalX:padX + tx*54 + nx*9, terminalY:padY + ty*54 + ny*9
+  };
+}
+
+function angleLerp(a,b,t) {
+  let d=(b-a+Math.PI)%(TAU)-Math.PI;
+  if(d<-Math.PI)d+=TAU;
+  return a+d*t;
+}
+
+function launchVectorFromDrag(dx,dy) {
+  const len=Math.hypot(dx,dy);
+  if (len < CONFIG.minDrag) return null;
+  const c=Math.min(len,CONFIG.maxDrag);
+  const nx=-dx/len, ny=-dy/len;
+  const raw=clamp((c-CONFIG.minDrag)/(CONFIG.maxDrag-CONFIG.minDrag),0,1);
+  // Плавная шкала: короткое оттягивание даёт действительно мягкий запуск,
+  // а максимальная скорость достигается только после длинного жеста.
+  const eased=raw*raw*(3-2*raw);
+  const speed=(90 + eased*440)*CONFIG.launchScale;
+  return {vx:nx*speed,vy:ny*speed,power:raw};
+}
+
+function launchShip(vx,vy) {
+  if (!state.gameActive || !state.ship || state.ship.flying || state.landing || state.stageTransition>0 || state.retryTimer>0) return;
+  state.ship.vx=vx; state.ship.vy=vy; state.ship.flying=true; state.aiming=false; state.attempts++;
+  state.flightTime=0; state.slowFlightTime=0;
+  state.trail.length=0;
+  spawnParticles(state.ship.x,state.ship.y,18,'launch');
+  addRing(state.ship.x,state.ship.y,14,80,.34);
+  state.shake=.16;
+  tone(330,.18,'sawtooth',.08,240);
+  if (state.deliveries>=1) { hint.classList.add('soft'); }
+}
+
+function retryShot() {
+  if (!state.scene) return;
+  const L=state.scene.launch;
+  state.ship.x=L.x; state.ship.y=L.y-82; state.ship.vx=0; state.ship.vy=0; state.ship.flying=false; state.ship.rot=0;
+  state.trail.length=0;
+  state.retryTimer=0;
+  state.landing=null;
+  state.flightTime=0; state.slowFlightTime=0;
+  state.shake=.08;
+  tone(180,.11,'triangle',.055,30);
+}
+
+function startLanding() {
+  if (!state.ship || state.landing || !state.gameActive) return;
+  const sh=state.ship, land=getLanding(state.scene);
+  sh.flying=false;
+  state.landing={
+    t:0, duration:CONFIG.landingDuration,
+    sx:sh.x, sy:sh.y, srot:sh.rot,
+    tx:land.shipX, ty:land.shipY, trot:land.shipRot,
+    land
+  };
+  tone(430,.18,'sine',.075,-80);
+  addRing(land.captureX,land.captureY,18,landingRadiusForScene(state.scene)*.95,.42);
+}
+
+function finishDelivery() {
+  if (!state.landing) return;
+  const land=state.landing.land;
+  state.landing=null;
+  state.deliveries++;
+  spawnParticles(land.padX,land.padY,52,'delivery');
+  addRing(land.padX,land.padY,16,120,.62);
+  state.flash=.38; state.shake=.16;
+  tone(620,.13,'sine',.14,130,0); tone(820,.18,'sine',.1,120,.095);
+  rebuildDots(); updateHud();
+  if (state.deliveries>=CONFIG.targetDeliveries) { state.finishDelay=1.35; spawnParticles(land.padX,land.padY,70,'delivery'); addRing(land.padX,land.padY,24,190,.95); }
+  else { state.stageTransition=.95; state.nextStageTimer=.55; }
+}
+
+function updateLanding(dt) {
+  const L=state.landing;
+  if(!L || !state.ship) return;
+  L.t += dt;
+  const u=clamp(L.t/L.duration,0,1);
+  const moveU=u*u*(3-2*u);
+  state.ship.x=lerp(L.sx,L.tx,moveU);
+  state.ship.y=lerp(L.sy,L.ty,moveU);
+  state.ship.rot=angleLerp(L.srot,L.trot,moveU);
+  if(u>=1) finishDelivery();
+}
+
+function updateShip(dt) {
+  const sh=state.ship;
+  if (!sh || !sh.flying) return;
+
+  state.flightTime += dt;
+  const speedNow=Math.hypot(sh.vx,sh.vy);
+  if (state.flightTime>1.2 && speedNow<CONFIG.slowFlightSpeed) state.slowFlightTime += dt;
+  else state.slowFlightTime = 0;
+
+  // Неудачная орбита не должна заставлять ребёнка долго ждать.
+  // Медленно "зависший" кораблик возвращается раньше, любой другой полёт — не позднее жёсткого лимита.
+  if (state.flightTime>=CONFIG.maxFlightTime || state.slowFlightTime>=CONFIG.slowFlightGrace) {
+    sh.flying=false;
+    state.retryTimer=CONFIG.retryDelay;
+    spawnParticles(sh.x,sh.y,14,'spark');
+    addRing(sh.x,sh.y,10,62,.28);
+    tone(190,.10,'triangle',.045,-25);
+    return;
+  }
+
+  let remaining=dt;
+  const maxStep=CONFIG.simStep;
+  while (remaining>0 && sh.flying) {
+    const step=Math.min(maxStep,remaining);
+    const g=gravityAt(sh.x,sh.y,state.scene);
+    sh.vx += g.x*step; sh.vy += g.y*step;
+    sh.x += sh.vx*step; sh.y += sh.vy*step;
+    sh.rot=Math.atan2(sh.vy,sh.vx);
+    remaining-=step;
+    const T=state.scene.target;
+    const land=getLanding(state.scene);
+    if (dist2(sh.x,sh.y,land.captureX,land.captureY) <= landingRadiusForScene(state.scene)**2) { startLanding(); break; }
+    let hit=collisionWithBody(sh.x,sh.y,sh.r,T);
+    if(!hit) for (const b of state.scene.gravity) if (collisionWithBody(sh.x,sh.y,sh.r,b)) { hit=true; break; }
+    if (hit) { sh.flying=false; state.retryTimer=CONFIG.retryDelay; noiseBurst(.12,.05); tone(130,.16,'triangle',.07,30); state.shake=.28; spawnParticles(sh.x,sh.y,22,'fail'); break; }
+    if (sh.x<-130 || sh.x>BASE_W+130 || sh.y<-160 || sh.y>BASE_H+160) { sh.flying=false; state.retryTimer=CONFIG.retryDelay; tone(170,.12,'triangle',.05,15); break; }
+  }
+  if (sh.flying) {
+    state.trail.push({x:sh.x,y:sh.y,a:1});
+    if (state.trail.length>48) state.trail.shift();
+  }
+}
+
+function updateParticles(dt) {
+  for (let i=state.particles.length-1;i>=0;i--) {
+    const p=state.particles[i]; p.life-=dt;
+    if (p.life<=0){state.particles.splice(i,1);continue;}
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=Math.pow(.985,dt*60); p.vy*=Math.pow(.985,dt*60);
+  }
+  for (let i=state.rings.length-1;i>=0;i--) {
+    const r=state.rings[i]; r.life-=dt;
+    if(r.life<=0){state.rings.splice(i,1);continue;}
+    const t=1-r.life/r.max; r.r=lerp(r.r,r.maxR,Math.min(1,t*.08+dt*2.6));
+  }
+}
+
+function update(dt) {
+  updateParticles(dt);
+  if (state.flash>0) state.flash=Math.max(0,state.flash-dt*1.7);
+  if (state.shake>0) state.shake=Math.max(0,state.shake-dt*1.9);
+  for (const d of state.dust) { d.y += d.vy*dt; d.x += d.vx*dt; if(d.y>BASE_H+10){d.y=-10;d.x=Math.random()*BASE_W;} if(d.x<0)d.x+=BASE_W;if(d.x>BASE_W)d.x-=BASE_W; }
+  if (!state.gameActive) return;
+  state.timeLeft=Math.max(0,state.timeLeft-dt);
+  if (state.stageTransition>0) state.stageTransition=Math.max(0,state.stageTransition-dt);
+  if (state.nextStageTimer>0) {
+    state.nextStageTimer-=dt;
+    if(state.nextStageTimer<=0 && state.gameActive && !state.finished && state.deliveries<CONFIG.targetDeliveries) prepareStage(state.deliveries,false);
+  }
+  if (state.finishDelay>0) {
+    state.finishDelay-=dt;
+    if(state.finishDelay<=0 && state.gameActive && !state.finished) { endGame(true); return; }
+  }
+  if (state.retryTimer>0) { state.retryTimer-=dt; if(state.retryTimer<=0) retryShot(); }
+  updateLanding(dt);
+  updateShip(dt);
+    updateHud();
+  if (state.timeLeft<=0 && !state.finished) endGame(state.deliveries>=CONFIG.targetDeliveries);
+
+  // Keyboard aiming is an alternative input, never required.
+  if (!state.ship.flying && !state.landing && state.stageTransition<=0 && state.retryTimer<=0) {
+    const turn=(pressedKeys.has('ArrowRight')||pressedKeys.has('KeyD')?1:0)-(pressedKeys.has('ArrowLeft')||pressedKeys.has('KeyA')?1:0);
+    const power=(pressedKeys.has('ArrowUp')||pressedKeys.has('KeyW')?1:0)-(pressedKeys.has('ArrowDown')||pressedKeys.has('KeyS')?1:0);
+    state.keyboardAngle += turn*1.75*dt;
+    state.keyboardPower = clamp(state.keyboardPower + power*.58*dt,.18,1);
+  }
+}
+
+function drawRoundedRect(x,y,w,h,r) {
+  ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function drawBackground(now) {
+  const g=ctx.createRadialGradient(380,680,90,405,700,790);
+  g.addColorStop(0,'#121f4b'); g.addColorStop(.42,'#090f2c'); g.addColorStop(1,'#030611');
+  ctx.fillStyle=g; ctx.fillRect(0,0,BASE_W,BASE_H);
+  const n1=ctx.createRadialGradient(155,440,0,155,440,360); n1.addColorStop(0,'rgba(120,72,210,.12)');n1.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=n1;ctx.fillRect(0,0,BASE_W,BASE_H);
+  const n2=ctx.createRadialGradient(665,820,0,665,820,330); n2.addColorStop(0,'rgba(41,156,177,.09)');n2.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=n2;ctx.fillRect(0,0,BASE_W,BASE_H);
+  for (const s of state.stars) {
+    const a=s.a*(.75+.25*Math.sin(now*.001*s.tw+s.p)); ctx.globalAlpha=a; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,TAU); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  for (const d of state.dust) {ctx.fillStyle=`rgba(196,221,255,${d.a})`;ctx.beginPath();ctx.arc(d.x,d.y,d.r,0,TAU);ctx.fill();}
+}
+
+function drawPlanet(p, target=false, now=0) {
+  if (p.ring) {
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(-.24);
+    ctx.strokeStyle='rgba(231,215,255,.26)';ctx.lineWidth=18;ctx.beginPath();ctx.ellipse(0,0,p.r*1.55,p.r*.45,0,0,TAU);ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,.17)';ctx.lineWidth=5;ctx.beginPath();ctx.ellipse(0,0,p.r*1.6,p.r*.49,0,0,TAU);ctx.stroke();ctx.restore();
+  }
+  if (target) {
+    const pulse=1+.05*Math.sin(now*.0045);
+    const gg=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*2.0*pulse);gg.addColorStop(0,'rgba(255,231,139,.34)');gg.addColorStop(.45,'rgba(255,188,89,.11)');gg.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=gg;ctx.beginPath();ctx.arc(p.x,p.y,p.r*2*pulse,0,TAU);ctx.fill();
+  }
+  const g=ctx.createRadialGradient(p.x-p.r*.32,p.y-p.r*.38,p.r*.1,p.x,p.y,p.r);
+  g.addColorStop(0,p.c1);g.addColorStop(.7,p.c2);g.addColorStop(1,'#14152d');ctx.fillStyle=g;ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.fill();
+  ctx.save();ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,TAU);ctx.clip();ctx.globalAlpha=.15;ctx.fillStyle='#fff';
+  for(let i=0;i<5;i++){
+    const s1=Math.sin((p.x*0.031+p.y*0.017+i*2.37));
+    const s2=Math.cos((p.x*0.019-p.y*0.027+i*1.73));
+    const ex=p.x+p.r*s1*.34, ey=p.y+p.r*s2*.46;
+    const ew=p.r*(.22+.18*((s1+1)*.5)), eh=p.r*(.06+.045*((s2+1)*.5));
+    ctx.beginPath();ctx.ellipse(ex,ey,ew,eh,s1*.28,0,TAU);ctx.fill();
+  }
+  ctx.restore();
+  ctx.strokeStyle='rgba(255,255,255,.24)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(p.x,p.y,p.r-2,Math.PI*.9,Math.PI*1.9);ctx.stroke();
+}
+
+function drawParcelSymbol(symbol, size=10) {
+  ctx.beginPath();
+  if(symbol==='star'){
+    for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5;const r=i%2===0?size:size*.45;const x=Math.cos(a)*r,y=Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.fill();
+  } else if(symbol==='moon'){
+    ctx.arc(0,0,size*.78,0,TAU);ctx.fill();ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(size*.38,-size*.18,size*.7,0,TAU);ctx.fill();ctx.globalCompositeOperation='source-over';
+  } else if(symbol==='diamond'){
+    ctx.moveTo(0,-size);ctx.lineTo(size*.78,0);ctx.lineTo(0,size);ctx.lineTo(-size*.78,0);ctx.closePath();ctx.fill();
+  } else if(symbol==='circle'){
+    ctx.arc(0,0,size*.72,0,TAU);ctx.fill();
+  } else {
+    ctx.moveTo(-size*.2,-size);ctx.lineTo(size*.45,-size*.2);ctx.lineTo(size*.05,-size*.2);ctx.lineTo(size*.28,size);ctx.lineTo(-size*.55,size*.08);ctx.lineTo(-size*.12,size*.08);ctx.closePath();ctx.fill();
+  }
+}
+function drawPackage(x,y,scale=1,parcel=null,alpha=1) {
+  const P=parcel||{color:'#ffd76e',accent:'#fff0b0',symbol:'star'};
+  ctx.save(); ctx.translate(x,y); ctx.scale(scale,scale); ctx.globalAlpha*=alpha;
+  ctx.fillStyle=P.color; drawRoundedRect(-18,-14,36,28,7);ctx.fill();
+  ctx.fillStyle=P.accent; ctx.fillRect(-3,-14,6,28);ctx.fillRect(-18,-3,36,6);
+  ctx.fillStyle='rgba(42,33,60,.72)'; ctx.save();ctx.translate(0,0);drawParcelSymbol(P.symbol,7);ctx.restore();
+  ctx.restore();
+}
+
+function drawShip(sh, ghost=false) {
+  ctx.save(); ctx.translate(sh.x,sh.y); ctx.rotate(sh.rot||state.keyboardAngle); if(ghost)ctx.globalAlpha=.28;
+  const glow=ctx.createRadialGradient(-15,0,2,-15,0,46);glow.addColorStop(0,'rgba(114,219,255,.46)');glow.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=glow;ctx.beginPath();ctx.arc(-12,0,44,0,TAU);ctx.fill();
+  ctx.fillStyle='#f6fbff';ctx.beginPath();ctx.moveTo(30,0);ctx.quadraticCurveTo(0,-21,-25,-15);ctx.lineTo(-15,0);ctx.lineTo(-25,15);ctx.quadraticCurveTo(0,21,30,0);ctx.fill();
+  ctx.fillStyle='#74c9ff';ctx.beginPath();ctx.moveTo(4,-13);ctx.lineTo(-8,-31);ctx.lineTo(-13,-11);ctx.closePath();ctx.fill();ctx.beginPath();ctx.moveTo(4,13);ctx.lineTo(-8,31);ctx.lineTo(-13,11);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#294675';ctx.beginPath();ctx.ellipse(6,-3,11,7,-.1,0,TAU);ctx.fill();
+  const landingU=state.landing?clamp(state.landing.t/state.landing.duration,0,1):0;
+  if(!state.landing || landingU<.58) drawPackage(-8,1,.62,state.scene&&state.scene.parcel);
+  if(sh.flying){const flame=rand(18,30);ctx.fillStyle='rgba(255,213,99,.9)';ctx.beginPath();ctx.moveTo(-18,-7);ctx.lineTo(-18-flame,0);ctx.lineTo(-18,7);ctx.fill();ctx.fillStyle='rgba(115,215,255,.75)';ctx.beginPath();ctx.moveTo(-17,-4);ctx.lineTo(-30-rand(2,12),0);ctx.lineTo(-17,4);ctx.fill();}
+  else if(state.landing&&landingU<.78){const f=8+7*Math.sin(landingU*28);ctx.fillStyle='rgba(115,215,255,.56)';ctx.beginPath();ctx.moveTo(-17,-3);ctx.lineTo(-17-f,0);ctx.lineTo(-17,3);ctx.fill();}
+  ctx.restore();
+}
+
+function previewPoints(vx,vy) {
+  const pts=[]; let x=state.ship.x,y=state.ship.y; let sx=vx,sy=vy; const dt=.022;
+  const T=state.scene.target, land=getLanding(state.scene);
+  let status='free', end={x,y};
+  for(let i=0;i<CONFIG.previewSteps;i++){
+    const g=gravityAt(x,y,state.scene);
+    sx+=g.x*dt; sy+=g.y*dt;
+    x+=sx*dt; y+=sy*dt; end={x,y};
+    pts.push({x,y});
+    if(dist2(x,y,land.captureX,land.captureY)<=landingRadiusForScene(state.scene)**2){status='land';break;}
+    let blocked=collisionWithBody(x,y,state.ship.r,T);
+    if(!blocked) for(const b of state.scene.gravity){ if(collisionWithBody(x,y,state.ship.r,b)){ blocked=true; break; } }
+    if(blocked){status='hit';break;}
+    if(x<-50||x>BASE_W+50||y<-60||y>BASE_H+60){status='out';break;}
+  }
+  return {pts,status,end,land};
+}
+
+function drawAim() {
+  if (!state.ship || state.ship.flying || state.stageTransition>0 || state.retryTimer>0 || !state.gameActive) return;
+  let vx,vy,dragEndX,dragEndY;
+  if (state.aiming) {
+    const dx=state.dragX-state.ship.x,dy=state.dragY-state.ship.y;
+    const vec=launchVectorFromDrag(dx,dy); if(!vec)return;
+    vx=vec.vx;vy=vec.vy;
+    const len=Math.max(.001,Math.hypot(dx,dy));
+    const visualLen=Math.min(len,CONFIG.maxDrag);
+    dragEndX=state.ship.x+dx/len*visualLen;
+    dragEndY=state.ship.y+dy/len*visualLen;
+  } else if (pressedKeys.size) {
+    const eased=state.keyboardPower*state.keyboardPower*(3-2*state.keyboardPower);
+    const speed=(90+eased*440)*CONFIG.launchScale;
+    vx=Math.cos(state.keyboardAngle)*speed;vy=Math.sin(state.keyboardAngle)*speed;
+    dragEndX=state.ship.x-Math.cos(state.keyboardAngle)*CONFIG.maxDrag*state.keyboardPower;
+    dragEndY=state.ship.y-Math.sin(state.keyboardAngle)*CONFIG.maxDrag*state.keyboardPower;
+  } else return;
+  ctx.save();
+  // Линию оттягивания специально не рисуем длинной прямой: ребёнок может
+  // принять её за путь кораблика. Направление полёта показывает только пунктир.
+  if(state.aiming){
+    const dx=dragEndX-state.ship.x, dy=dragEndY-state.ship.y;
+    const len=Math.max(1,Math.hypot(dx,dy));
+    const power=clamp(len/CONFIG.maxDrag,0,1);
+    ctx.strokeStyle=`rgba(121,199,255,${.18+.18*power})`;
+    ctx.lineWidth=4;
+    ctx.beginPath();
+    ctx.arc(state.ship.x,state.ship.y,42+power*14,Math.PI*.15,Math.PI*.85);
+    ctx.stroke();
+  }
+  const preview=previewPoints(vx,vy);
+  const pts=preview.pts;
+  for(let i=0;i<pts.length;i+=2){
+    const p=pts[i];const a=1-i/Math.max(1,pts.length);
+    ctx.fillStyle=`rgba(255,241,177,${.24+.70*a})`;
+    ctx.beginPath();ctx.arc(p.x,p.y,3.8+2.5*a,0,TAU);ctx.fill();
+  }
+  if(pts.length>8){
+    const ai=Math.min(14,pts.length-1), p=pts[ai], q=pts[Math.max(0,ai-3)];
+    const ang=Math.atan2(p.y-q.y,p.x-q.x);
+    ctx.save();ctx.translate(p.x,p.y);ctx.rotate(ang);
+    ctx.fillStyle='rgba(255,239,160,.92)';
+    ctx.beginPath();ctx.moveTo(13,0);ctx.lineTo(-7,-8);ctx.lineTo(-4,0);ctx.lineTo(-7,8);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  if(pts.length){
+    if(preview.status==='land'){
+      ctx.strokeStyle='rgba(154,255,184,.95)';ctx.lineWidth=7;ctx.beginPath();ctx.arc(preview.land.captureX,preview.land.captureY,landingRadiusForScene(state.scene),0,TAU);ctx.stroke();
+      ctx.fillStyle='rgba(190,255,205,.96)';ctx.font='900 34px system-ui,sans-serif';ctx.textAlign='center';ctx.fillText('✓',preview.land.captureX,preview.land.captureY+12);
+    } else if(preview.status==='hit'){
+      const e=preview.end;ctx.strokeStyle='rgba(255,137,124,.88)';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(e.x-10,e.y-10);ctx.lineTo(e.x+10,e.y+10);ctx.moveTo(e.x+10,e.y-10);ctx.lineTo(e.x-10,e.y+10);ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawTrail() {
+  if(state.trail.length<2)return;
+  for(let i=1;i<state.trail.length;i++){
+    const p0=state.trail[i-1],p1=state.trail[i];const a=i/state.trail.length;
+    ctx.strokeStyle=`rgba(117,213,255,${.05+.4*a})`;ctx.lineWidth=2+5*a;ctx.beginPath();ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.stroke();
+  }
+}
+
+function drawParticles() {
+  for(const p of state.particles){const a=clamp(p.life/p.max,0,1);ctx.globalAlpha=a;ctx.fillStyle=p.kind==='fail'?'#ff9a83':(p.kind==='delivery'?'#ffe189':'#9fe6ff');ctx.beginPath();ctx.arc(p.x,p.y,p.r*a,0,TAU);ctx.fill();}
+  ctx.globalAlpha=1;
+  for(const r of state.rings){const a=clamp(r.life/r.max,0,1);ctx.strokeStyle=`rgba(255,231,144,${a*.55})`;ctx.lineWidth=4*a;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,TAU);ctx.stroke();}
+}
+
+function drawDestinationMarker(x,y,parcel,scale=1) {
+  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+  const g=ctx.createRadialGradient(0,0,0,0,0,34);g.addColorStop(0,parcel.color);g.addColorStop(1,'rgba(0,0,0,0)');ctx.globalAlpha=.32;ctx.fillStyle=g;ctx.beginPath();ctx.arc(0,0,34,0,TAU);ctx.fill();ctx.globalAlpha=1;
+  ctx.fillStyle='rgba(8,17,39,.95)';ctx.beginPath();ctx.arc(0,0,18,0,TAU);ctx.fill();ctx.strokeStyle=parcel.accent;ctx.lineWidth=3;ctx.stroke();
+  ctx.fillStyle=parcel.color;drawParcelSymbol(parcel.symbol,9);
+  ctx.restore();
+}
+
+function drawLandingPad(scene, now) {
+  const T=scene.target, land=getLanding(scene), P=scene.parcel;
+  ctx.save();ctx.translate(land.padX,land.padY);ctx.rotate(land.angle+Math.PI/2);
+  const pulse=.55+.28*Math.sin(now*.005);
+  ctx.fillStyle='rgba(10,21,47,.94)';drawRoundedRect(-54,-12,108,24,10);ctx.fill();
+  ctx.strokeStyle=`rgba(255,240,176,${pulse})`;ctx.lineWidth=4;drawRoundedRect(-54,-12,108,24,10);ctx.stroke();
+  ctx.fillStyle=P.color;ctx.fillRect(-26,-3,52,6);
+  ctx.restore();
+  const landingR=landingRadiusForScene(scene);
+  const g=ctx.createRadialGradient(land.captureX,land.captureY,0,land.captureX,land.captureY,landingR*1.45);
+  g.addColorStop(0,'rgba(255,235,143,.15)');g.addColorStop(.7,'rgba(255,235,143,.04)');g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(land.captureX,land.captureY,landingR*1.45,0,TAU);ctx.fill();
+  ctx.strokeStyle='rgba(255,241,182,.48)';ctx.lineWidth=3;ctx.setLineDash([10,10]);ctx.beginPath();ctx.arc(land.captureX,land.captureY,landingR,0,TAU);ctx.stroke();ctx.setLineDash([]);
+  drawDestinationMarker(land.terminalX,land.terminalY,P,.92);
+}
+
+function drawLandingTransfer(scene) {
+  if(!state.landing) return;
+  const L=state.landing, u=clamp(L.t/L.duration,0,1);
+  if(u<.50) return;
+  const q=clamp((u-.50)/.42,0,1), e=q*q*(3-2*q);
+  const startX=state.ship.x + Math.cos(state.ship.rot)*(-8) - Math.sin(state.ship.rot)*1;
+  const startY=state.ship.y + Math.sin(state.ship.rot)*(-8) + Math.cos(state.ship.rot)*1;
+  const x=lerp(startX,L.land.terminalX,e), y=lerp(startY,L.land.terminalY,e)-Math.sin(Math.PI*e)*28;
+  drawPackage(x,y,.62,scene.parcel,1);
+}
+
+function render(now) {
+  ctx.setTransform(view.dpr,0,0,view.dpr,0,0);ctx.clearRect(0,0,view.cssW,view.cssH);
+  ctx.save();ctx.translate(view.ox,view.oy);ctx.scale(view.scale,view.scale);
+  if(state.shake>0){const m=state.shake*9;ctx.translate(rand(-m,m),rand(-m,m));}
+  drawBackground(now);
+  if(state.scene){
+    drawPlanet(state.scene.launch,false,now);
+    for(const b of state.scene.gravity) drawPlanet(b,false,now);
+    drawPlanet(state.scene.target,true,now);
+    drawLandingPad(state.scene,now);
+    drawAim(); drawTrail(); if(state.ship) drawShip(state.ship); drawLandingTransfer(state.scene); drawParticles();
+  }
+  if(state.stageTransition>0 && state.gameActive){const a=clamp(state.stageTransition/.8,0,1);ctx.fillStyle=`rgba(255,255,255,${a*.08})`;ctx.fillRect(0,0,BASE_W,BASE_H);}
+  if(state.flash>0){ctx.fillStyle=`rgba(255,240,174,${state.flash*.24})`;ctx.fillRect(0,0,BASE_W,BASE_H);}
+  ctx.restore();
+}
+
+function startAim(event, p) {
+  if(!state.gameActive||state.finished||!state.ship||state.ship.flying||state.landing||state.stageTransition>0||state.retryTimer>0)return;
+  const rr=78; if(dist2(p.x,p.y,state.ship.x,state.ship.y)>rr*rr)return;
+  ensureAudio(); state.aiming=true;state.dragX=p.x;state.dragY=p.y;activePointerId=event.pointerId??null;
+  if(HAS_POINTER_EVENTS&&event.pointerId!=null&&root.setPointerCapture){try{root.setPointerCapture(event.pointerId);}catch(_){}}
+  if(event.cancelable)event.preventDefault();
+}
+function moveAim(event,p){if(!state.aiming||!state.gameActive)return;state.dragX=p.x;state.dragY=p.y;if(event.cancelable)event.preventDefault();}
+function endAim(event){
+  if(!state.aiming)return; const dx=state.dragX-state.ship.x,dy=state.dragY-state.ship.y; const vec=launchVectorFromDrag(dx,dy); state.aiming=false;
+  if(HAS_POINTER_EVENTS&&event&&event.pointerId!=null&&root.releasePointerCapture){try{if(root.hasPointerCapture&&root.hasPointerCapture(event.pointerId))root.releasePointerCapture(event.pointerId);}catch(_){}}
+  activePointerId=null; if(vec)launchShip(vec.vx,vec.vy); if(event&&event.cancelable)event.preventDefault();
+}
+
+function bindInput(){
+  if(HAS_POINTER_EVENTS){
+    root.addEventListener('pointerdown',e=>{if(isUiTarget(e.target))return;startAim(e,toWorld(e.clientX,e.clientY));},{passive:false});
+    root.addEventListener('pointermove',e=>{if(isUiTarget(e.target)&&!state.aiming)return;moveAim(e,toWorld(e.clientX,e.clientY));},{passive:false});
+    root.addEventListener('pointerup',e=>endAim(e),{passive:false});root.addEventListener('pointercancel',e=>endAim(e),{passive:false});
+  } else {
+    let mouse=false;
+    root.addEventListener('mousedown',e=>{if(isUiTarget(e.target))return;mouse=true;startAim(e,toWorld(e.clientX,e.clientY));},{passive:false});
+    window.addEventListener('mousemove',e=>{if(mouse)moveAim(e,toWorld(e.clientX,e.clientY));},{passive:false});
+    window.addEventListener('mouseup',e=>{if(mouse){mouse=false;endAim(e);}},{passive:false});
+    root.addEventListener('touchstart',e=>{if(isUiTarget(e.target))return;const t=e.changedTouches[0];if(t)startAim(e,toWorld(t.clientX,t.clientY));},{passive:false});
+    root.addEventListener('touchmove',e=>{const t=e.changedTouches[0];if(t)moveAim(e,toWorld(t.clientX,t.clientY));},{passive:false});
+    root.addEventListener('touchend',e=>endAim(e),{passive:false});root.addEventListener('touchcancel',e=>endAim(e),{passive:false});
+  }
+}
+
+function isGameKey(code){return ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','KeyA','KeyD','KeyW','KeyS','Space','Enter'].includes(code);}
+function bindKeyboard(){
+  window.addEventListener('keydown',e=>{
+    if(!state.gameActive||isEditableTarget(e.target)||isUiTarget(e.target)||!isGameKey(e.code))return;
+    if(e.cancelable)e.preventDefault();
+    if(['Space','Enter'].includes(e.code)){
+      if(!e.repeat&&state.ship&&!state.ship.flying&&!state.landing&&state.stageTransition<=0&&state.retryTimer<=0){ensureAudio();const eased=state.keyboardPower*state.keyboardPower*(3-2*state.keyboardPower);const speed=(90+eased*440)*CONFIG.launchScale;launchShip(Math.cos(state.keyboardAngle)*speed,Math.sin(state.keyboardAngle)*speed);}return;
+    }
+    pressedKeys.add(e.code);
+  },{passive:false});
+  window.addEventListener('keyup',e=>{if(!isGameKey(e.code))return;pressedKeys.delete(e.code);if(state.gameActive&&!isEditableTarget(e.target)&&!isUiTarget(e.target)&&e.cancelable)e.preventDefault();},{passive:false});
+  window.addEventListener('blur',()=>pressedKeys.clear());document.addEventListener('visibilitychange',()=>{if(document.hidden)pressedKeys.clear();});
+}
+
+function bindUiButton(button,handler){
+  const stop=e=>{if(e.cancelable)e.preventDefault();e.stopPropagation();};
+  ['pointerdown','pointerup','touchstart','touchend','mousedown','mouseup'].forEach(t=>button.addEventListener(t,stop,{passive:false}));
+  button.addEventListener('click',e=>{stop(e);handler();});
+}
+function exitGame(){
+  state.gameActive=false;state.aiming=false;state.landing=null;pressedKeys.clear();activePointerId=null;
+  if(window.self!==window.top){window.parent.postMessage({type:'gameExit'},'*');return;}
+  if(window.history.length>1){window.history.back();return;}
+  exitButton.disabled=true;exitButton.textContent='—';
+}
+
+window.addEventListener('contextmenu',e=>{if(root.contains(e.target))e.preventDefault();});
+window.addEventListener('resize',resize);
+bindUiButton(restartButton,startNewRound);bindUiButton(exitButton,exitGame);bindInput();bindKeyboard();setupStars();resize();startNewRound();
+
+function frame(now){const dt=Math.min((now-lastNow)/1000,.05);lastNow=now;update(dt);render(now);requestAnimationFrame(frame);}requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -2,14 +2,6 @@
     package="ru.local.gamespace.loader">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
-
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.INSTALL_PACKAGE" />
-            <data android:scheme="content" android:mimeType="application/vnd.android.package-archive" />
-        </intent>
-    </queries>
 
     <application
         android:allowBackup="false"
@@ -21,11 +13,6 @@
         android:supportsRtl="true"
         android:usesCleartextTraffic="false"
         android:theme="@style/AppTheme">
-        <provider
-            android:name=".AppUpdateFileProvider"
-            android:authorities="ru.local.gamespace.loader.updates"
-            android:exported="false"
-            android:grantUriPermissions="true" />
         <activity
             android:name=".MainActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"

@@ -682,11 +682,84 @@
             // БАЗА ДАННЫХ ИГР — СПИСОК ОБЪЕКТОВ
             // ================================================================
             const games = [
+
+
                 {
-                    header: "Головоломки и игры",
-                    description: "Небольшие игры с уровнями сложности и быстрым запуском.",
+                    header: "Аркады и платформеры",
+                    description: "Прыгай, собирай, управляй и проверяй свою ловкость",
                     creator: "teacher"
                 },
+    {
+        title: "Змейка 3D: Фруктовый сад",
+        genre: "3D-аркада",
+        description: "Собирай фрукты и комбо в 3D-саду от первого лица!",
+        imageUrl: "smallgames/snake_2026_bonus_garden-small.jpg",
+        link: "smallgames/snake_2026_bonus_garden.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/snake_2026_first_person.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/snake_2026_first_person.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/snake_2026_first_person.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/snake_2026_first_person.html?diff=5" }
+        }
+    },
+
+{
+        title: "Подводная экспедиция",
+        genre: "Аркада-лабиринт",
+        description: "Проведи подлодку по коралловому лабиринту, найди четыре редких образца и вернись на станцию!",
+        imageUrl: "smallgames/podvodnaya-ekspeditsiya-small.jpg",
+        link: "smallgames/podvodnaya-ekspeditsiya.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/podvodnaya-ekspeditsiya.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/podvodnaya-ekspeditsiya.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/podvodnaya-ekspeditsiya.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/podvodnaya-ekspeditsiya.html?diff=5" }
+        }
+    },
+
+ {
+        title: "Башня до облаков",
+        genre: "Аркада",
+        description: "Лови строительные блоки, отвози их к крану и построй башню до самых облаков за минуту!",
+        imageUrl: "smallgames/bashnya-do-oblakov-small.jpg",
+        link: "smallgames/bashnya-do-oblakov.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/bashnya-do-oblakov.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/bashnya-do-oblakov.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/bashnya-do-oblakov.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/bashnya-do-oblakov.html?diff=5" }
+        }
+    },
+
+{
+        title: "Башня облаков",
+        genre: "Платформер",
+        description: "Прыгай по облакам, собирай звёзды и поднимайся всё выше — впереди батуты и исчезающие платформы!",
+        imageUrl: "smallgames/bashnya-oblakov-small.jpg",
+        link: "smallgames/bashnya-oblakov.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/bashnya-oblakov.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/bashnya-oblakov.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/bashnya-oblakov.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/bashnya-oblakov.html?diff=5" }
+        }
+    },
+
+
+
+
+
+
+
+
+
+    
+                {
+                    header: "Головоломки и логика",
+                    description: "Продумывай ходы, находи слова и выбирай путь к цели",
+                    creator: "teacher"
+                },
+
 
                 {
                     title: "Крестики-нолики с сапером",
@@ -703,7 +776,36 @@
                     }
                 },
 
-                {
+
+    {
+        title: "Звёздный курьер",
+        genre: "Физическая головоломка",
+        description: "Выбирай траекторию, запускай кораблик и доставь посылки, используя притяжение планет!",
+        imageUrl: "smallgames/zvezdny-kurer-small.jpg",
+        link: "smallgames/zvezdny-kurer.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/zvezdny-kurer.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/zvezdny-kurer.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/zvezdny-kurer.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/zvezdny-kurer.html?diff=5" }
+        }
+    },
+
+    {
+        title: "Стая светлячков",
+        genre: "Головоломка",
+        description: "Проведи всех светлячков к Лунному цветку, огибая деревья, преодолевая ветер и спасая стаю из паутин!",
+        imageUrl: "smallgames/staya-svetlyachkov-small.jpg",
+        link: "smallgames/staya-svetlyachkov.html",
+        difficulties: {
+            1: { text: "🐣", link: "smallgames/staya-svetlyachkov.html?diff=1" },
+            3: { text: "🙂", link: "smallgames/staya-svetlyachkov.html?diff=3" },
+            4: { text: "🤔", link: "smallgames/staya-svetlyachkov.html?diff=4" },
+            5: { text: "🤔", link: "smallgames/staya-svetlyachkov.html?diff=5" }
+        }
+    },
+
+    {
                     title: "Алгоритмы",
                     genre: "Найди слова",
                     description: "",
@@ -719,37 +821,14 @@
                 },
 
 
-                {
-                    title: "Дед Мазай и зайцы",
-                    genre: "Match 3",
-                    description: "Собери одинаковых зайцев — помоги деду Мазаю спасти их от наводнения!",
-                    imageUrl: "games/ded_mazay_i_zayci_3/logo_small.jpg",
-                    link: "games/ded_mazay_i_zayci_3/game.html",
-                    difficulties: {
-                        1: { text: "🐣", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=small&stars=1" },
-                        3: { text: "🙂", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=medium&stars=3" },
-                        5: { text: "🤔", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=big&stars=5" }
-                    }
-                },
-                {
-                    title: "Колобок",
-                    genre: "Match 3",
-                    description: "",
-                    imageUrl: "games/match3/logo_small.jpg",
-                    link: "games/match3/game.html",
-                    difficulties: {
-                        1: { text: "🐣", link: "games/match3/game.html?game=kolobok&size=small&stars=1" },
-                        3: { text: "🙂", link: "games/match3/game.html?game=kolobok&size=medium&stars=3" },
-                        5: { text: "🤔", link: "games/match3/game.html?game=kolobok&size=big&stars=5" }
-                    }
-                },
-
 
                 {
-                    header: "Пазлы",
-                    description: "Собирай изображения на разных уровнях сложности.",
+                    header: "Пазлы и три в ряд",
+                    description: "Собирай картинки и находи удачные комбинации",
                     creator: "teacher"
                 },
+
+
 
                 {
                     title: "Пожарная каланча в аквариуме! (9 картинок)",
@@ -769,25 +848,55 @@
                 /* 👶🧒🧑👨‍🏫👨‍💻*/
 
 
+                
+
                 {
-                    header: "HTML-микроигры",
-                    description: "Небольшие автономные игры объёмом до 3 КБ, запускающиеся прямо в браузере."
+                    title: "Дед Мазай и зайцы",
+                    genre: "Match 3",
+                    description: "Собери одинаковых зайцев — помоги деду Мазаю спасти их от наводнения!",
+                    imageUrl: "games/ded_mazay_i_zayci_3/logo_small.jpg",
+                    link: "games/ded_mazay_i_zayci_3/game.html",
+                    difficulties: {
+                        1: { text: "🐣", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=small&stars=1" },
+                        3: { text: "🙂", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=medium&stars=3" },
+                        5: { text: "🤔", link: "games/ded_mazay_i_zayci_3/game.html?game=dedmazay&size=big&stars=5" }
+                    }
                 },
 
+                
+
+                
+
+                {
+                    title: "Колобок",
+                    genre: "Match 3",
+                    description: "",
+                    imageUrl: "games/match3/logo_small.jpg",
+                    link: "games/match3/game.html",
+                    difficulties: {
+                        1: { text: "🐣", link: "games/match3/game.html?game=kolobok&size=small&stars=1" },
+                        3: { text: "🙂", link: "games/match3/game.html?game=kolobok&size=medium&stars=3" },
+                        5: { text: "🤔", link: "games/match3/game.html?game=kolobok&size=big&stars=5" }
+                    }
+                },
+
+
+
+
+                {
+                    header: "HTML-микроигры",
+                    description: "Минимум кода — полноценная игра прямо в браузере",
+                    creator: "teacher"
+                },
+
+
+                
                 {
                     title: "Разбей блоки",
                     genre: "Микроигра",
                     imageUrl: "microgames/brick-breaker-poster-small.jpg",
                     imageUrlMobile: "microgames/brick-breaker-poster-small-mobile.jpg",
                     link: "microgames/brick-breaker.html"
-                },
-
-                {
-                    title: "Киберрефлекс",
-                    genre: "Микроигра",
-                    imageUrl: "microgames/cyber-reflex-poster-small.jpg",
-                    imageUrlMobile: "microgames/cyber-reflex-poster-small-mobile.jpg",
-                    link: "microgames/cyber-reflex.html"
                 },
 
                 {
@@ -799,12 +908,23 @@
                 },
 
                 {
+                    title: "Киберрефлекс",
+                    genre: "Микроигра",
+                    imageUrl: "microgames/cyber-reflex-poster-small.jpg",
+                    imageUrlMobile: "microgames/cyber-reflex-poster-small-mobile.jpg",
+                    link: "microgames/cyber-reflex.html"
+                },
+
+
+
+
+                {
                     header: "Праздничные игры",
-                    description: "Игры на темы праздников.",
+                    description: "Тематические игры и интерактивные поздравления",
                     creator: "teacher"
                 },
 
-                {
+                                {
                     title: "8 марта. Роботы",
                     genre: "Пазл",
                     description: "Собери пазл и скачай изображение!",
@@ -827,8 +947,13 @@
                     link: "8march/shariki/game.html"
                 },
 
+
+
+
                 {
-                    header: "Тестирование"
+                    header: "Инструменты",
+                    description: "",
+                    creator: "teacher"
                 },
 
                 {
@@ -839,6 +964,12 @@
                     link: "games/interactive-screen-benchmark/interactive-screen-benchmark.html",
                     creator: "teacher"
                 },
+
+
+                
+    
+
+
 
 
             ];

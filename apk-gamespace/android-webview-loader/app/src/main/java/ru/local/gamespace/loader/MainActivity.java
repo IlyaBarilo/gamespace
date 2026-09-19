@@ -294,7 +294,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (appUpdateDialog != null) appUpdateDialog.resumed();
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение открыто", false);
         if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
@@ -314,7 +313,6 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (appUpdateDialog != null) appUpdateDialog.paused();
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение скрыто", true);
         if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
@@ -1163,8 +1161,7 @@ public class MainActivity extends Activity {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
-            : appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()
-            ? new String[] {"Обновление приложения", "Информация", "Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"} : installed
+            : installed
             ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
@@ -1178,12 +1175,7 @@ public class MainActivity extends Activity {
                     if ("Отчёт о совместимости".equals(item)) {
                         showCompatibilityReport();
                     } else if ("Обновление приложения".equals(item)) {
-                        if (appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(MainActivity.this,
-                            new AppUpdateDialog.SiteState() {
-                                @Override public boolean isBusy() {
-                                    return busy || (siteTransactionManager != null && siteTransactionManager.hasPendingTransaction());
-                                }
-                            });
+                        if (appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(MainActivity.this);
                         showHeldDialog(appUpdateDialog.create());
                         appUpdateDialog.shown();
                     } else if ("Выбрать архив".equals(item)) {
@@ -1221,7 +1213,7 @@ public class MainActivity extends Activity {
     }
 
     private void openZipPicker() {
-        if (busy || appUpdateBlocksSite()) {
+        if (busy) {
             return;
         }
 
@@ -1250,10 +1242,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == ApkUpdateInstaller.REQUEST_SETTINGS || requestCode == ApkUpdateInstaller.REQUEST_INSTALL) {
-            if (appUpdateDialog != null) appUpdateDialog.activityResult(requestCode);
-            return;
-        }
         if (requestCode != REQUEST_OPEN_ZIP || resultCode != RESULT_OK || data == null || data.getData() == null) {
             pendingUpdateMode = UPDATE_MODE_FULL;
             return;
@@ -1293,7 +1281,7 @@ public class MainActivity extends Activity {
     }
 
     private void installFromZip(final Uri uri, final int updateMode) {
-        if (busy || appUpdateBlocksSite()) {
+        if (busy) {
             return;
         }
 
@@ -1545,7 +1533,7 @@ public class MainActivity extends Activity {
     }
 
     private void confirmInstallBuiltinDemoSite() {
-        if (busy || appUpdateBlocksSite()) return;
+        if (busy) return;
         if (currentIndexFile == null || !currentIndexFile.isFile()) {
             installBuiltinDemoSite();
             return;
@@ -1564,7 +1552,7 @@ public class MainActivity extends Activity {
     }
 
     private void installBuiltinDemoSite() {
-        if (busy || appUpdateBlocksSite()) {
+        if (busy) {
             return;
         }
 
@@ -2591,7 +2579,7 @@ public class MainActivity extends Activity {
         if (compatibilityDialog == null) compatibilityDialog = new CompatibilityDialog(this, new CompatibilityDialog.Host() {
             @Override public CompatibilityCheck check() { return compatibilityCheck; }
             @Override public Map<String, Object> input() { return compatibilityInput(); }
-            @Override public boolean busy() { return MainActivity.this.busy || (appUpdateDialog != null && appUpdateDialog.blocksSiteOperations()); }
+            @Override public boolean busy() { return MainActivity.this.busy; }
         });
         showHeldDialog(compatibilityDialog.create());
         compatibilityDialog.shown();
@@ -3156,7 +3144,7 @@ public class MainActivity extends Activity {
     }
 
     private void confirmClearSite() {
-        if (busy || appUpdateBlocksSite()) {
+        if (busy) {
             return;
         }
 
@@ -3175,7 +3163,7 @@ public class MainActivity extends Activity {
     }
 
     private void clearInstalledSite() {
-        if (busy || appUpdateBlocksSite()) return;
+        if (busy) return;
         if (compatibilityCheck != null) compatibilityCheck.reset("Начата очистка сайта. Для проверки потребуется новый импорт.");
         busy = true;
         showProgress("Очистка сайта", "Удаляю распакованные файлы...");
@@ -3681,12 +3669,6 @@ public class MainActivity extends Activity {
         clearContentHistoryAfterLoad = true;
         beginPendingContentLoad(url);
         webView.loadUrl(url);
-    }
-
-    private boolean appUpdateBlocksSite() {
-        if (appUpdateDialog == null || !appUpdateDialog.blocksSiteOperations()) return false;
-        Toast.makeText(this, "Сначала завершите или отмените операцию обновления APK.", Toast.LENGTH_LONG).show();
-        return true;
     }
 
     private boolean openExternalUrl(String url) {
