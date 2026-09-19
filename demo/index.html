@@ -610,6 +610,46 @@
             }
 
         }
+
+        /* GameSpace UI mode adjusts typography only. The original media queries
+           keep the established grid, card geometry, spacing and controls. */
+        html[data-ui-mode="mobile"] {
+            --header-title-size: clamp(24px, 6vw, 34px);
+            --section-title-size: clamp(22px, 5.5vw, 30px);
+            --section-description-size: clamp(16px, 3.8vw, 20px);
+            --font-size-title: clamp(18px, 6cqw, 24px);
+            --font-size-genre: clamp(16px, 4.8cqw, 18px);
+            --font-size-desc: clamp(16px, 4.8cqw, 18px);
+            --show-more-font-size: clamp(16px, 5cqw, 20px);
+        }
+
+        html[data-ui-mode="mobile"] .game-count,
+        html[data-ui-mode="mobile"] footer {
+            font-size: clamp(16px, 3.8vw, 18px);
+        }
+
+        html[data-ui-mode="mobile"] .difficulty-btn {
+            font-size: clamp(17px, 5.5cqw, 20px);
+        }
+
+        html[data-ui-mode="tv"] {
+            --header-title-size: clamp(56px, 4vw, 84px);
+            --section-title-size: clamp(38px, 2.6vw, 56px);
+            --section-description-size: clamp(24px, 1.5vw, 34px);
+            --font-size-title: clamp(34px, 5.2cqw, 52px);
+            --font-size-genre: clamp(24px, 3.2cqw, 32px);
+            --font-size-desc: clamp(24px, 3.5cqw, 34px);
+            --show-more-font-size: clamp(24px, 4cqw, 32px);
+        }
+
+        html[data-ui-mode="tv"] .game-count,
+        html[data-ui-mode="tv"] footer {
+            font-size: clamp(24px, 1.5vw, 32px);
+        }
+
+        html[data-ui-mode="tv"] .difficulty-btn {
+            font-size: clamp(26px, 4cqw, 34px);
+        }
     </style>
 </head>
 <body>
@@ -658,7 +698,8 @@
             const selectImageUrl = (desktopUrl, mobileUrl) => {
                 const desktopImage = (desktopUrl || '').trim();
                 const mobileImage = (mobileUrl || '').trim();
-                return phoneImageQuery.matches && mobileImage ? mobileImage : desktopImage;
+                const mobileLayout = document.documentElement.dataset.uiMode === 'mobile' || phoneImageQuery.matches;
+                return mobileLayout && mobileImage ? mobileImage : desktopImage;
             };
 
             const setCardImage = (imageDiv, imageUrl) => {
@@ -1006,7 +1047,27 @@
                 }
                 return '';
             };
-            const UI_MODE = ['mobile', 'tv'].includes(getQueryParam('ui')) ? getQueryParam('ui') : '';
+            const REQUESTED_UI_MODE = ['mobile', 'tv'].includes(getQueryParam('ui')) ? getQueryParam('ui') : '';
+            const automaticUiMode = () => {
+                const width = window.visualViewport?.width || window.innerWidth;
+                const height = window.visualViewport?.height || window.innerHeight;
+                const shortSide = Math.min(width, height);
+                const longSide = Math.max(width, height);
+                const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches === true;
+                if (coarsePointer && shortSide >= 1000 && longSide >= 1700) return 'tv';
+                if (!coarsePointer && shortSide >= 1300 && longSide >= 2200) return 'tv';
+                if (coarsePointer || shortSide < 700) return 'mobile';
+                return 'auto';
+            };
+            let UI_MODE = '';
+            const applyUiMode = () => {
+                const nextMode = REQUESTED_UI_MODE || automaticUiMode();
+                const changed = nextMode !== UI_MODE;
+                UI_MODE = nextMode;
+                document.documentElement.dataset.uiMode = UI_MODE;
+                return changed;
+            };
+            applyUiMode();
             const PRELOAD_IMAGES = hasQueryParam('app') || hasQueryParam('tv') || UI_MODE === 'tv';
             const AUTHOR_MODE = hasQueryParam('author');
             const INDEX_STATE_SCOPE = getQueryParam('gamespaceIndexSession') || 'default';
@@ -1027,7 +1088,7 @@
             const indexStateStorage = getIndexStateStorage();
 
             const withGameUiMode = (link) => {
-                if (!link || !UI_MODE) return link;
+                if (!link || !['mobile', 'tv'].includes(UI_MODE)) return link;
                 const url = new URL(link, window.location.href);
                 if (url.origin !== window.location.origin || url.searchParams.has('ui')) return url.href;
                 url.searchParams.set('ui', UI_MODE);
@@ -1256,7 +1317,7 @@
                         const difficulty = game.difficulties[level];
                         if (difficulty && difficulty.text && difficulty.link) {
                             const btn = document.createElement('a');
-                            btn.href = difficulty.link;
+                            btn.href = withGameUiMode(difficulty.link);
                             btn.className = 'difficulty-btn';
                             btn.textContent = difficulty.text;
                             btn.target = '_self';
@@ -1387,6 +1448,7 @@
 
             const renderSectionsKeepingScroll = () => {
                 const scrollTop = getScrollTop();
+                applyUiMode();
                 renderSections();
                 restoreScrollTop(scrollTop);
                 saveIndexState();
@@ -1408,6 +1470,7 @@
                 const scrollTop = getScrollTop();
                 window.clearTimeout(resizeTimer);
                 resizeTimer = window.setTimeout(() => {
+                    applyUiMode();
                     renderSections();
                     restoreScrollTop(scrollTop);
                     saveIndexState();
