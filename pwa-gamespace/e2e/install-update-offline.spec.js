@@ -1,6 +1,18 @@
 import { test, expect } from "@playwright/test";
 import { fileURLToPath } from "node:url";
 
+async function getSiteFrame(page) {
+  await expect.poll(async () => {
+    const frameElement = await page.locator("#siteFrame").elementHandle();
+    if (!frameElement) return "";
+    const frame = await frameElement.contentFrame();
+    return frame?.url() ?? "";
+  }, { timeout: 30_000 }).toContain("/__gamespace_content__/");
+
+  const frameElement = await page.locator("#siteFrame").elementHandle();
+  return frameElement.contentFrame();
+}
+
 test("installs demo, applies update and opens the site offline", async ({ page, context }) => {
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
@@ -29,8 +41,8 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#siteFrame")).toBeVisible();
   await expect(page.locator("#viewerLoading")).toBeHidden();
 
-  const gameFrame = page.frames().find((frame) => frame.url().includes("/__gamespace_content__/"));
-  expect(gameFrame).toBeTruthy();
+  const gameFrame = await getSiteFrame(page);
+  const catalogPath = new URL(gameFrame.url()).pathname;
   await gameFrame.evaluate(() => localStorage.setItem("gamespace-e2e-save", "saved"));
   await Promise.all([
     gameFrame.waitForNavigation(),
@@ -43,7 +55,8 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   });
   await expect.poll(() => gameFrame.url()).toContain("smallgames/bashnya-oblakov.html");
   await gameFrame.locator("#exitButton").click();
-  await expect.poll(() => new URL(gameFrame.url()).pathname).toContain("/__gamespace_content__/site/index.html");
+  await expect.poll(() => new URL(gameFrame.url()).pathname).toBe(catalogPath);
+  await expect(gameFrame.locator(".game-card").first()).toBeVisible();
 
   // Reports remain accessible through the menu after removing the viewer shortcut.
   await gameFrame.evaluate(() => window.dispatchEvent(new ErrorEvent("error", {
@@ -62,12 +75,14 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewerLoading")).toBeHidden();
-  const mobileFrame = page.frames().find((frame) => frame.url().includes("/__gamespace_content__/"));
+  const mobileFrame = await getSiteFrame(page);
+  const mobileCatalogPath = new URL(mobileFrame.url()).pathname;
   expect(new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
   await mobileFrame.locator(".game-card").first().click();
   await expect.poll(() => new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
   await mobileFrame.evaluate(() => window.parent.postMessage({ type: "gameExit" }, "*"));
-  await expect.poll(() => new URL(mobileFrame.url()).pathname).toContain("/__gamespace_content__/site/index.html");
+  await expect.poll(() => new URL(mobileFrame.url()).pathname).toBe(mobileCatalogPath);
+  await expect(mobileFrame.locator(".game-card").first()).toBeVisible();
   await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
   await expect(page.locator("#viewerMenuTab")).toBeVisible();
   await page.locator("#viewerMenuTab").click();
