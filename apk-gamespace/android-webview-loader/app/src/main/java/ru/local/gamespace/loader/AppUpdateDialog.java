@@ -2,17 +2,27 @@ package ru.local.gamespace.loader;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -23,12 +33,22 @@ import java.util.Date;
 
 /** Native update check only: APK downloads and installation are handled outside GameSpace. */
 final class AppUpdateDialog {
+    private static final int BACKDROP = Color.rgb(2, 9, 22);
+    private static final int SURFACE = Color.rgb(6, 24, 47);
+    private static final int CARD = Color.rgb(10, 38, 71);
+    private static final int CARD_PRESSED = Color.rgb(15, 54, 96);
+    private static final int BORDER = Color.rgb(31, 83, 128);
+    private static final int TEXT = Color.rgb(230, 244, 255);
+    private static final int MUTED = Color.rgb(168, 199, 224);
+    private static final int ACCENT = Color.rgb(91, 203, 245);
+
     private final Activity activity;
     private final SharedPreferences prefs;
     private final AppUpdateRepository repository;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private AlertDialog dialog;
     private LinearLayout content;
+    private Button checkButton;
     private Thread worker;
     private boolean checking;
     private String error = "", notice = "";
@@ -49,13 +69,46 @@ final class AppUpdateDialog {
     }
 
     AlertDialog create() {
+        FrameLayout backdrop = new FrameLayout(activity);
+        backdrop.setBackgroundColor(BACKDROP);
+
+        LinearLayout page = new LinearLayout(activity);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setBackgroundColor(SURFACE);
+        int pageWidth = Math.min(activity.getResources().getDisplayMetrics().widthPixels, dp(760));
+        backdrop.addView(page, new FrameLayout.LayoutParams(pageWidth,
+            ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL));
+        page.addView(header(), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         ScrollView scroll = new ScrollView(activity);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(dp(16), dp(8), dp(16), dp(8));
         content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(20), dp(8), dp(20), dp(8));
-        scroll.addView(content);
-        dialog = new AlertDialog.Builder(activity).setTitle("Обновление приложения")
-            .setView(scroll).setPositiveButton("Проверить обновления", null).setNegativeButton("Закрыть", null).create();
+        content.setPadding(dp(18), dp(14), dp(18), dp(18));
+        content.setBackground(round(CARD, BORDER, 18));
+        scroll.addView(content, new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        page.addView(scroll, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        checkButton = styledButton("Проверить обновления", true);
+        checkButton.setContentDescription("Проверить официальные выпуски GameSpace на GitHub");
+        checkButton.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { check(); }
+        });
+        LinearLayout footer = new LinearLayout(activity);
+        footer.setPadding(dp(16), dp(8), dp(16), dp(18));
+        footer.addView(checkButton, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(52)));
+        page.addView(footer);
+
+        dialog = new AlertDialog.Builder(activity).setView(backdrop).create();
+        dialog.setOnShowListener(new DialogInterface.OnShowListener() {
+            @Override public void onShow(DialogInterface unused) { styleWindow(); }
+        });
         render();
         return dialog;
     }
@@ -81,10 +134,37 @@ final class AppUpdateDialog {
     }
 
     void shown() {
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new android.view.View.OnClickListener() {
-            @Override public void onClick(android.view.View view) { check(); }
-        });
         render();
+    }
+
+    private View header() {
+        LinearLayout row = new LinearLayout(activity);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(20), dp(17), dp(12), dp(15));
+
+        LinearLayout copy = new LinearLayout(activity);
+        copy.setOrientation(LinearLayout.VERTICAL);
+        TextView kicker = label("ПРИЛОЖЕНИЕ", 11, ACCENT, true);
+        kicker.setLetterSpacing(0.08f);
+        copy.addView(kicker);
+        copy.addView(label("Обновление GameSpace APK", 23, TEXT, true));
+        copy.addView(label("Установлена версия " + installedVersionName(), 13, MUTED, false));
+        row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        ImageButton close = new ImageButton(activity);
+        close.setImageResource(R.drawable.ic_menu_close);
+        close.setImageTintList(ColorStateList.valueOf(TEXT));
+        close.setContentDescription("Закрыть проверку обновлений");
+        close.setPadding(dp(12), dp(12), dp(12), dp(12));
+        close.setBackground(round(CARD, BORDER, 14));
+        close.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { if (dialog != null) dialog.dismiss(); }
+        });
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(48), dp(48));
+        closeParams.setMargins(dp(12), 0, 0, 0);
+        row.addView(close, closeParams);
+        return row;
     }
 
     private void check() {
@@ -135,7 +215,6 @@ final class AppUpdateDialog {
     private void render() {
         content.removeAllViews();
         long installedCode = installedVersionCode();
-        text("Установлена версия " + installedVersionName(), true);
         text("Проверка выполняется только по кнопке. Источник — официальные выпуски GameSpace на GitHub.", false);
         text("GameSpace не скачивает и не устанавливает APK. Для обновления откройте официальный выпуск в браузере.", false);
         AppUpdateRepository.Snapshot snapshot = repository.current();
@@ -166,9 +245,7 @@ final class AppUpdateDialog {
                 @Override public void run() { openRelease(latest); }
             });
         }
-        if (dialog != null && dialog.getButton(AlertDialog.BUTTON_POSITIVE) != null) {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(!checking && !destroyed);
-        }
+        if (checkButton != null) checkButton.setEnabled(!checking && !destroyed);
     }
 
     private String installedVersionName() {
@@ -189,27 +266,82 @@ final class AppUpdateDialog {
     }
 
     private void button(String label, boolean enabled, Runnable action) {
-        Button button = new Button(activity);
-        button.setText(label);
-        button.setAllCaps(false);
+        Button button = styledButton(label, false);
         button.setEnabled(enabled);
-        button.setOnClickListener(new android.view.View.OnClickListener() {
-            @Override public void onClick(android.view.View view) { action.run(); }
+        button.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { action.run(); }
         });
-        content.addView(button);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(50));
+        params.setMargins(0, dp(10), 0, 0);
+        content.addView(button, params);
     }
 
     private TextView text(String value, boolean bold) {
         TextView view = new TextView(activity);
         view.setText(value);
         view.setTextSize(bold ? 17 : 15);
-        view.setTextColor(Color.rgb(30, 38, 46));
+        view.setTextColor(bold ? TEXT : MUTED);
         view.setTextIsSelectable(true);
+        view.setLineSpacing(0, 1.08f);
         if (bold) view.setTypeface(Typeface.DEFAULT_BOLD);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, dp(8));
         content.addView(view, params);
         return view;
+    }
+
+    private TextView label(String value, int size, int color, boolean bold) {
+        TextView view = new TextView(activity);
+        view.setText(value);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setLineSpacing(0, 1.06f);
+        if (bold) view.setTypeface(Typeface.DEFAULT_BOLD);
+        return view;
+    }
+
+    private Button styledButton(String label, boolean primary) {
+        Button button = new Button(activity);
+        button.setText(label);
+        button.setTextSize(15);
+        button.setTextColor(primary ? BACKDROP : TEXT);
+        button.setTypeface(Typeface.DEFAULT_BOLD);
+        button.setAllCaps(false);
+        button.setMinimumHeight(0);
+        button.setMinimumWidth(0);
+        button.setPadding(dp(14), 0, dp(14), 0);
+        button.setBackground(buttonBackground(primary));
+        return button;
+    }
+
+    private StateListDrawable buttonBackground(boolean primary) {
+        StateListDrawable states = new StateListDrawable();
+        states.addState(new int[] {-android.R.attr.state_enabled},
+            round(primary ? Color.rgb(54, 100, 116) : Color.rgb(24, 47, 68), BORDER, 14));
+        states.addState(new int[] {android.R.attr.state_pressed},
+            round(primary ? Color.rgb(135, 224, 252) : CARD_PRESSED, ACCENT, 14));
+        states.addState(new int[] {}, round(primary ? ACCENT : Color.rgb(7, 30, 57), primary ? ACCENT : BORDER, 14));
+        return states;
+    }
+
+    private GradientDrawable round(int color, int stroke, int radiusDp) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setColor(color);
+        drawable.setCornerRadius(dp(radiusDp));
+        drawable.setStroke(dp(1), stroke);
+        return drawable;
+    }
+
+    private void styleWindow() {
+        Window window = dialog == null ? null : dialog.getWindow();
+        if (window == null) return;
+        window.setBackgroundDrawable(new ColorDrawable(BACKDROP));
+        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        if (Build.VERSION.SDK_INT >= 21) {
+            window.setStatusBarColor(BACKDROP);
+            window.setNavigationBarColor(BACKDROP);
+        }
     }
 
     private static String mib(long bytes) {

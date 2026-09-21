@@ -188,7 +188,10 @@ $dialogSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'AppUpdateD
 if ($manifest -match 'android.permission.REQUEST_INSTALL_PACKAGES|android.intent.action.INSTALL_PACKAGE|AppUpdateFileProvider') { throw 'APK must not request or expose an in-app installer.' }
 if ($dialogSource -match 'ApkUpdateInstaller|ApkUpdateTransfer|ApkUpdateFiles|AndroidApkVerifier') { throw 'Update dialog must not download, verify or install APK files.' }
 if ($dialogSource -notmatch 'Intent\.ACTION_VIEW' -or $dialogSource -notmatch 'release\.releaseUrl') { throw 'Update dialog must open the official release page in a browser.' }
+if ($dialogSource -notmatch 'setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)') { throw 'Update dialog must use the same full-screen native surface as APK settings.' }
+if ($dialogSource -notmatch 'checkButton\.setOnClickListener[\s\S]*?check\(\)') { throw 'Update catalog access must remain behind the explicit check button.' }
+if ($dialogSource -notmatch 'Обновление GameSpace APK[\s\S]*?Проверка выполняется только по кнопке') { throw 'Update dialog must explain its manual network behavior.' }
 $descriptionPosition = $dialogSource.IndexOf('text(latest.description.length()')
 $releasePosition = $dialogSource.IndexOf('button("Открыть официальный выпуск"')
 if ($descriptionPosition -lt 0 -or $releasePosition -le $descriptionPosition) { throw 'Release description must precede the release-page button.' }
-Write-Host 'APK update UI: 4 checks passed. Browser opening still requires a device test.'
+Write-Host 'APK update UI: 7 checks passed. Browser opening still requires a device test.'
