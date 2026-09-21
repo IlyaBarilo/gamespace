@@ -157,6 +157,7 @@ $menuChecks = @{
     "full-screen dialog" = 'setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)'
     "scrollable menu" = 'ScrollView scroll = new ScrollView\(activity\)'
     "menu tab switch" = 'Switch setting = new Switch\(activity\)'
+    "menu tab setting follows diagnostics" = 'content\.addView\(diagnosticsCard\(\), cardParams\(\)\);\s*if \(!busy\) content\.addView\(viewerCard\(\), cardParams\(\)\);'
     "archive actions section" = 'ЛОКАЛЬНЫЕ АРХИВЫ[\s\S]*?Быстро обновить из архива[\s\S]*?Полное обновление из архива'
     "application section" = 'ПРИЛОЖЕНИЕ[\s\S]*?Обновление приложения[\s\S]*?Информация'
     "application card shows release state" = 'applicationCard\(\)[\s\S]*?appState\.buildDate[\s\S]*?appState\.minAndroid[\s\S]*?appState\.updateStatus[\s\S]*?appState\.updateCheckedAt'

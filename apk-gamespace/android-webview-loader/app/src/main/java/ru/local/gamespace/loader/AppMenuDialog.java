@@ -99,7 +99,6 @@ final class AppMenuDialog {
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         content.addView(statusCard(), cardParams());
-        if (!busy) content.addView(viewerCard(), cardParams());
         if (!busy) content.addView(storageCard(), cardParams());
         addSection(content, "ЛОКАЛЬНЫЕ АРХИВЫ", "Сайт и обновления", new String[] {
             "Выбрать архив", "Быстро обновить из архива", "Полное обновление из архива",
@@ -109,6 +108,7 @@ final class AppMenuDialog {
         if (!busy) content.addView(alternativeAppCard(), cardParams());
         if (!busy) content.addView(environmentCard(), cardParams());
         content.addView(diagnosticsCard(), cardParams());
+        if (!busy) content.addView(viewerCard(), cardParams());
         addSection(content, "О ПРИЛОЖЕНИИ", "Документы", new String[] {"Лицензии"});
         addSection(content, "УДАЛЕНИЕ", "Локальный сайт", new String[] {"Очистить сайт"});
 
