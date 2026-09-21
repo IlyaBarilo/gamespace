@@ -1,4 +1,5 @@
-const INDEX_NAMES = ["index.html", "index.htm"];
+const INDEX_NAME = "index.html";
+const IGNORED_ROOT_NAMES = new Set(["__macosx", ".ds_store", "thumbs.db", "desktop.ini"]);
 
 export function normalizeArchivePath(input) {
   if (typeof input !== "string") {
@@ -54,46 +55,59 @@ export function validateEntries(entries, { includeIgnored = false } = {}) {
   return result;
 }
 
-function isIndexName(name) {
-  return INDEX_NAMES.includes(name.toLocaleLowerCase("en-US"));
+function normalizedName(name) {
+  return name.toLocaleLowerCase("en-US");
 }
 
-function indexPriority(path) {
-  const name = path.split("/").at(-1).toLocaleLowerCase("en-US");
-  if (name === "index.html") return 0;
-  if (name === "index.htm") return 1;
-  return 2;
+function isIgnoredRootName(name) {
+  const normalized = normalizedName(name);
+  return normalized.startsWith(".") || IGNORED_ROOT_NAMES.has(normalized);
+}
+
+function isHtmlName(name) {
+  return !isIgnoredRootName(name) && normalizedName(name).endsWith(".html");
+}
+
+function chooseStartEntry(files) {
+  const exactIndex = files.find((entry) => entry.path.split("/").at(-1) === INDEX_NAME);
+  if (exactIndex) return exactIndex;
+
+  const caseInsensitiveIndexes = files.filter(
+    (entry) => normalizedName(entry.path.split("/").at(-1)) === INDEX_NAME,
+  );
+  if (caseInsensitiveIndexes.length === 1) return caseInsensitiveIndexes[0];
+  if (caseInsensitiveIndexes.length > 1) return null;
+
+  const htmlFiles = files.filter((entry) => isHtmlName(entry.path.split("/").at(-1)));
+  return htmlFiles.length === 1 ? htmlFiles[0] : null;
 }
 
 export function findIndexEntry(entries) {
-  const files = entries.filter((entry) => !entry.directory && isIndexName(entry.path.split("/").at(-1)));
-  const direct = files
-    .filter((entry) => !entry.path.includes("/"))
-    .sort((left, right) => indexPriority(left.path) - indexPriority(right.path));
-  if (direct.length) return direct[0];
+  const visibleEntries = entries.filter((entry) => {
+    const [rootName] = entry.path.split("/");
+    return rootName && !isIgnoredRootName(rootName);
+  });
+  const rootFiles = visibleEntries.filter((entry) => !entry.directory && !entry.path.includes("/"));
 
-  const inSite = files
-    .filter((entry) => entry.path.split("/").length === 2 && entry.path.split("/")[0].toLocaleLowerCase("en-US") === "site")
-    .sort((left, right) => indexPriority(left.path) - indexPriority(right.path));
-  if (inSite.length) return inSite[0];
-
-  const topLevelIndexes = files.filter((entry) => entry.path.split("/").length === 2);
-  const topDirectories = new Set(
-    entries
-      .map((entry) => entry.path.split("/")[0])
-      .filter((name) => name && name !== "__MACOSX" && !name.startsWith(".")),
-  );
-
-  if (topLevelIndexes.length === 1) return topLevelIndexes[0];
-  if (topDirectories.size === 1) {
-    const [onlyDirectory] = topDirectories;
-    const candidates = topLevelIndexes
-      .filter((entry) => entry.path.startsWith(`${onlyDirectory}/`))
-      .sort((left, right) => indexPriority(left.path) - indexPriority(right.path));
-    if (candidates.length) return candidates[0];
+  if (rootFiles.length) {
+    return chooseStartEntry(rootFiles);
   }
 
-  return null;
+  const topDirectories = new Set();
+  for (const entry of visibleEntries) {
+    const parts = entry.path.split("/");
+    if (parts.length > 1 || (entry.directory && parts.length === 1)) {
+      topDirectories.add(parts[0]);
+    }
+  }
+  if (topDirectories.size !== 1) return null;
+
+  const [onlyDirectory] = topDirectories;
+  const directoryFiles = visibleEntries.filter((entry) => {
+    const parts = entry.path.split("/");
+    return !entry.directory && parts.length === 2 && parts[0] === onlyDirectory;
+  });
+  return chooseStartEntry(directoryFiles);
 }
 
 export function dirname(path) {

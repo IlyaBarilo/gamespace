@@ -32,7 +32,7 @@ export async function extractZip({ file, destination, requireIndex, onEvent, sig
     onEvent({ type: "phase", phase: "index-check", label: "Проверяю стартовую страницу в ZIP…" });
     const indexEntry = findIndexEntry(entries);
     if (requireIndex && !indexEntry) {
-      throw new Error("В архиве не найден index.html. Поддерживается файл в корне, в site/ или в одном верхнем каталоге.");
+      throw new Error("Не удалось однозначно определить стартовую HTML-страницу. Нужен index.html или единственный файл .html в корне; единственный каталог проверяется только при отсутствии обычных файлов в корне.");
     }
 
     onEvent({ type: "phase", phase: "quota-check", label: "Проверяю доступную квоту хранилища…" });

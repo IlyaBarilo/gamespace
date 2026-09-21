@@ -1125,7 +1125,7 @@ public class MainActivity extends Activity {
         }
 
         if (savedIndexPath != null && savedIndexPath.length() > 0) {
-            recordRuntimeIssue("SITE-MISSING", new IOException("Сохранённый index.html не найден ни в одном доступном каталоге. Причина неизвестна; носитель может быть недоступен."),
+            recordRuntimeIssue("SITE-MISSING", new IOException("Сохранённая стартовая HTML-страница не найдена ни в одном доступном каталоге. Причина неизвестна; носитель может быть недоступен."),
                 "Ожидался файл: " + savedIndexPath, false);
         }
         return null;
@@ -1589,10 +1589,10 @@ public class MainActivity extends Activity {
                             index = previousIndexFile;
                         }
                     } else {
-                        context.setStage("INDEX-CHECK", "поиск стартового index.html в подготовленной ревизии");
+                        context.setStage("INDEX-CHECK", "поиск стартовой HTML-страницы в подготовленной ревизии");
                         File stagedIndex = findIndexInExtractedContent(workingRoot);
                         if (stagedIndex == null) {
-                            throw new IOException("В архиве не найден index.html. Поддерживается index.html в корне, site/index.html или один верхний каталог с index.html.");
+                            throw new IOException("Не удалось однозначно определить стартовую HTML-страницу. Нужен index.html или единственный файл .html в корне; единственный каталог проверяется только при отсутствии обычных файлов в корне.");
                         }
                         String relativeIndexPath = relativePathWithinRoot(workingRoot, stagedIndex);
                         context.setStage("SITE-VERIFY", "проверка подготовленной ревизии сайта");
@@ -1610,9 +1610,9 @@ public class MainActivity extends Activity {
                         index = new File(activeRoot, relativeIndexPath);
                     }
 
-                    context.setStage("INDEX-CHECK", "проверка стартового index.html активного сайта");
+                    context.setStage("INDEX-CHECK", "проверка стартовой HTML-страницы активного сайта");
                     if (index == null || !index.isFile()) {
-                        throw new IOException("После обновления не найден активный index.html.");
+                        throw new IOException("После обновления не найдена активная стартовая HTML-страница.");
                     }
                     context.setStage("SITE-VERIFY", "проверка активного сайта и подсчёт файлов");
                     SiteStats installedStats = summarizeInstalledSite(activeRoot);
@@ -1807,7 +1807,7 @@ public class MainActivity extends Activity {
                     context.writtenBytes = stats.bytes;
                     context.writtenFiles = stats.files;
 
-                    context.setStage("INDEX-CHECK", "поиск стартового index.html в подготовленной ревизии");
+                    context.setStage("INDEX-CHECK", "поиск стартовой HTML-страницы в подготовленной ревизии");
                     File stagedIndex = findIndexInExtractedContent(stagingRoot);
                     if (stagedIndex == null) {
                         throw new IOException("Во встроенном демо-сайте не найден index.html.");
@@ -2187,7 +2187,7 @@ public class MainActivity extends Activity {
             }
         }
 
-        updateProgress("Распаковка завершена. Проверяю index.html...");
+        updateProgress("Распаковка завершена. Проверяю стартовую страницу...");
         return new ZipStats(extractedBytes, extractedFiles, skippedFiles);
     }
 
@@ -2377,7 +2377,7 @@ public class MainActivity extends Activity {
             throw buildZipDiagnosticException(e, context);
         }
 
-        updateProgress("Распаковка завершена. Проверяю index.html...");
+        updateProgress("Распаковка завершена. Проверяю стартовую страницу...");
         return new ZipStats(extractedBytes, extractedFiles, skippedFiles);
     }
 
@@ -3027,99 +3027,7 @@ public class MainActivity extends Activity {
     }
 
     private File findIndexInExtractedContent(File extractRoot) {
-        if (extractRoot == null || !extractRoot.isDirectory()) {
-            return null;
-        }
-
-        File direct = findIndexFile(extractRoot);
-        if (direct != null) {
-            return direct;
-        }
-
-        File siteDir = findChildDirectoryIgnoreCase(extractRoot, "site");
-        if (siteDir != null) {
-            File siteIndex = findIndexFile(siteDir);
-            if (siteIndex != null) {
-                return siteIndex;
-            }
-        }
-
-        File[] children = extractRoot.listFiles();
-        if (children == null) {
-            return null;
-        }
-
-        List<File> topDirs = new ArrayList<File>();
-        List<File> indexCandidates = new ArrayList<File>();
-        for (File child : children) {
-            if (child.isDirectory() && !isIgnoredTopDirectory(child)) {
-                topDirs.add(child);
-                File childIndex = findIndexFile(child);
-                if (childIndex != null) {
-                    indexCandidates.add(childIndex);
-                }
-            }
-        }
-
-        if (indexCandidates.size() == 1) {
-            return indexCandidates.get(0);
-        }
-
-        if (topDirs.size() == 1) {
-            return findIndexFile(topDirs.get(0));
-        }
-
-        return null;
-    }
-
-    private File findIndexFile(File dir) {
-        if (dir == null || !dir.isDirectory()) {
-            return null;
-        }
-
-        File[] files = dir.listFiles();
-        if (files == null) {
-            return null;
-        }
-
-        File fallback = null;
-        for (File file : files) {
-            if (!file.isFile()) {
-                continue;
-            }
-
-            String name = file.getName();
-            if ("index.html".equals(name)) {
-                return file;
-            }
-            if ("index.htm".equals(name)) {
-                fallback = file;
-            } else if (("index.html".equalsIgnoreCase(name) || "index.htm".equalsIgnoreCase(name)) && fallback == null) {
-                fallback = file;
-            }
-        }
-
-        return fallback;
-    }
-
-    private File findChildDirectoryIgnoreCase(File parent, String name) {
-        File[] children = parent.listFiles();
-        if (children == null) {
-            return null;
-        }
-
-        for (File child : children) {
-            if (child.isDirectory() && child.getName().equalsIgnoreCase(name)) {
-                return child;
-            }
-        }
-
-        return null;
-    }
-
-    private boolean isIgnoredTopDirectory(File dir) {
-        String name = dir.getName();
-        return "__MACOSX".equals(name) || name.startsWith(".");
+        return ArchiveEntryPoint.find(extractRoot);
     }
 
     private File chooseStorageBaseForInstall() {

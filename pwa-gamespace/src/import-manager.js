@@ -125,11 +125,11 @@ async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
     revisionPath = `${REVISIONS_ROOT}/${revision}`;
     const result = await extractArchive({ file, destination: revisionPath, requireIndex: true, onEvent, signal });
     throwIfAborted(signal);
-    onEvent({ type: "phase", phase: "index-check", label: "Проверяю сохранённый index.html…" });
+    onEvent({ type: "phase", phase: "index-check", label: "Проверяю сохранённую стартовую страницу…" });
     const indexStoragePath = `${revisionPath}/${result.indexPath}`;
     const root = await getOpfsRoot();
     if (!await fileExists(root, indexStoragePath)) {
-      throw new Error("Распаковка закончилась, но index.html отсутствует в OPFS.");
+      throw new Error("Распаковка закончилась, но выбранная стартовая HTML-страница отсутствует в OPFS.");
     }
     const revisionDirectory = await getDirectoryAt(root, revisionPath, false);
     onEvent({ type: "phase", phase: "site-verify", label: "Проверяю число и размер сохранённых файлов…" });
@@ -260,9 +260,9 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal } = {}) {
     mergeJournal = merge;
     throwIfAborted(signal);
 
-    onEvent({ type: "phase", phase: "index-check", label: "Проверяю index.html после обновления…" });
+    onEvent({ type: "phase", phase: "index-check", label: "Проверяю стартовую страницу после обновления…" });
     if (!await fileExists(root, `${state.revisionPath}/${state.indexPath}`)) {
-      throw new Error("После обновления не найден установленный index.html.");
+      throw new Error("После обновления не найдена установленная стартовая HTML-страница.");
     }
     const stored = updatedSiteStatistics(state, merge);
 

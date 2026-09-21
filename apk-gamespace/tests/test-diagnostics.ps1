@@ -28,6 +28,10 @@ if ($LASTEXITCODE -ne 0) { throw "Compatibility observation tests failed." }
 if ($LASTEXITCODE -ne 0) { throw "Demo import work file compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.DemoImportFileTest $outputDirectory
 if ($LASTEXITCODE -ne 0) { throw "Demo import work file tests failed." }
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ArchiveEntryPoint.java") (Join-Path $PSScriptRoot "ArchiveEntryPointTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Archive entry point compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ArchiveEntryPointTest $outputDirectory
+if ($LASTEXITCODE -ne 0) { throw "Archive entry point tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ProgressEstimator.java") (Join-Path $PSScriptRoot "ProgressEstimatorTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Progress estimator compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ProgressEstimatorTest
@@ -107,6 +111,7 @@ $checks = @{
     "site viewport is centered in the app shell" = 'siteViewportFrame[\s\S]*?new FrameLayout\.LayoutParams\([\s\S]*?Gravity\.CENTER'
     "site viewport is limited to 10 by 16 in landscape" = 'availableWidth > availableHeight[\s\S]*?availableHeight \* 10f / 16f'
     "site WebViews belong to the limited viewport" = 'siteViewportFrame\.addView\(homeWebView[\s\S]*?siteViewportFrame\.addView\(webView'
+    "shared strict archive entry point" = 'findIndexInExtractedContent\(File extractRoot\)[\s\S]*?ArchiveEntryPoint\.find\(extractRoot\)'
     "operation cancellation" = 'ensureOperationNotCancelled\(\)'
     "WebView termination" = 'boolean onRenderProcessGone\(WebView view, RenderProcessGoneDetail detail\)'
     "manual report without exception" = 'buildRuntimeReport\("MANUAL", null'
