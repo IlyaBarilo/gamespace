@@ -132,6 +132,31 @@ final class CompatibilityCheck {
         if (!warning.isEmpty()) out.append("\n\n").append(warning);
         return out.toString();
     }
+
+    synchronized MenuStatus menuStatus() {
+        int completed = 0;
+        for (String step : ORDER) {
+            String value = (String) steps.get(step);
+            if ("success".equals(value) || "recorded".equals(value)) completed++;
+        }
+        if (error != null) return new MenuStatus("Зафиксирована ошибка · выполнено " + completed + " из 4", false, true);
+        if ("recorded".equals(steps.get("game"))) return new MenuStatus("Базовая проверка выполнена · 4 из 4", true, false);
+        if (pending) return new MenuStatus("Идёт импорт · выполнено " + completed + " из 4", false, false);
+        return new MenuStatus("Базовая проверка: выполнено " + completed + " из 4", false, false);
+    }
+
+    static final class MenuStatus {
+        final String text;
+        final boolean complete;
+        final boolean error;
+
+        MenuStatus(String text, boolean complete, boolean error) {
+            this.text = text;
+            this.complete = complete;
+            this.error = error;
+        }
+    }
+
     private static String label(String state) {
         if ("success".equals(state)) return "выполнено";
         if ("recorded".equals(state)) return "выполнено";

@@ -51,12 +51,13 @@ final class AppMenuDialog {
     private final String[] items;
     private final SiteState siteState;
     private final AppState appState;
+    private final DiagnosticsState diagnosticsState;
     private final Listener listener;
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
             boolean menuTabEnabled, String menuTabItem, String[] items, SiteState siteState,
-            AppState appState, Listener listener) {
+            AppState appState, DiagnosticsState diagnosticsState, Listener listener) {
         this.activity = activity;
         this.version = version;
         this.installed = installed;
@@ -66,6 +67,7 @@ final class AppMenuDialog {
         this.items = items;
         this.siteState = siteState;
         this.appState = appState;
+        this.diagnosticsState = diagnosticsState;
         this.listener = listener;
     }
 
@@ -105,9 +107,7 @@ final class AppMenuDialog {
         });
         if (!busy) content.addView(applicationCard(), cardParams());
         if (!busy) content.addView(environmentCard(), cardParams());
-        addSection(content, "ДИАГНОСТИКА", "Проверка и отчёты", new String[] {
-            "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка"
-        });
+        content.addView(diagnosticsCard(), cardParams());
         addSection(content, "О ПРИЛОЖЕНИИ", "Документы", new String[] {"Лицензии"});
         addSection(content, "УДАЛЕНИЕ", "Локальный сайт", new String[] {"Очистить сайт"});
 
@@ -150,12 +150,18 @@ final class AppMenuDialog {
     }
 
     private View statusCard() {
-        LinearLayout card = card("СОСТОЯНИЕ", installed ? "Сайт готов к работе" : "Сайт не установлен");
-        TextView status = text(busy ? "Выполняется локальная операция" : installed
+        LinearLayout card = card("СОСТОЯНИЕ", busy ? diagnosticsState.operationTitle
+            : installed ? "Сайт готов к работе" : "Сайт не установлен");
+        TextView status = text(busy ? diagnosticsState.operationDetails : installed
             ? "Меню открыто поверх локального сайта. Закрытие вернёт к его просмотру."
             : "Установите встроенный демо-сайт или выберите архив на устройстве.", 14, MUTED, false);
         status.setPadding(0, dp(8), 0, 0);
         card.addView(status);
+        if (busy) {
+            TextView hint = text(diagnosticsState.operationHint, 12, WARNING, false);
+            hint.setPadding(0, dp(10), 0, 0);
+            card.addView(hint);
+        }
         TextView badge = text(busy ? "ОПЕРАЦИЯ ВЫПОЛНЯЕТСЯ" : installed ? "УСТАНОВЛЕН" : "НЕТ САЙТА",
             11, busy ? WARNING : installed ? SUCCESS : MUTED, true);
         badge.setPadding(dp(11), dp(7), dp(11), dp(7));
@@ -224,6 +230,25 @@ final class AppMenuDialog {
         return card;
     }
 
+    private View diagnosticsCard() {
+        LinearLayout card = card("ДИАГНОСТИКА", "Проверка и отчёты");
+        int compatibilityColor = diagnosticsState.compatibilityError ? DANGER
+            : diagnosticsState.compatibilityComplete ? SUCCESS : WARNING;
+        TextView compatibility = text(diagnosticsState.compatibilityStatus, 14, compatibilityColor, true);
+        compatibility.setPadding(0, dp(10), 0, 0);
+        card.addView(compatibility);
+        card.addView(diagnosticLine(diagnosticsState.hasArchiveStatistics
+            ? "Статистика последнего архива сохранена" : "Статистики обработки архива пока нет",
+            diagnosticsState.hasArchiveStatistics ? SUCCESS : MUTED));
+        card.addView(diagnosticLine(diagnosticsState.hasLastError
+            ? "Последняя ошибка сохранена" : "Сохранённых ошибок пока нет",
+            diagnosticsState.hasLastError ? WARNING : SUCCESS));
+        addCardActions(card, new String[] {
+            "Отчёт о совместимости", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка"
+        });
+        return card;
+    }
+
     private View storageCard() {
         LinearLayout card = card("ХРАНИЛИЩЕ", "Память приложения");
         LinearLayout summary = new LinearLayout(activity);
@@ -275,6 +300,12 @@ final class AppMenuDialog {
 
     private TextView detailLine(String label, String value) {
         TextView line = text(label + ": " + value, 13, MUTED, false);
+        line.setPadding(0, dp(6), 0, 0);
+        return line;
+    }
+
+    private TextView diagnosticLine(String value, int color) {
+        TextView line = text(value, 13, color, false);
         line.setPadding(0, dp(6), 0, 0);
         return line;
     }
@@ -499,6 +530,24 @@ final class AppMenuDialog {
             this.webView = webView;
             this.updateStatus = updateStatus;
             this.updateCheckedAt = updateCheckedAt;
+        }
+    }
+
+    static final class DiagnosticsState {
+        final String operationTitle, operationDetails, operationHint, compatibilityStatus;
+        final boolean compatibilityComplete, compatibilityError, hasLastError, hasArchiveStatistics;
+
+        DiagnosticsState(String operationTitle, String operationDetails, String operationHint,
+                String compatibilityStatus, boolean compatibilityComplete, boolean compatibilityError,
+                boolean hasLastError, boolean hasArchiveStatistics) {
+            this.operationTitle = operationTitle;
+            this.operationDetails = operationDetails;
+            this.operationHint = operationHint;
+            this.compatibilityStatus = compatibilityStatus;
+            this.compatibilityComplete = compatibilityComplete;
+            this.compatibilityError = compatibilityError;
+            this.hasLastError = hasLastError;
+            this.hasArchiveStatistics = hasArchiveStatistics;
         }
     }
 

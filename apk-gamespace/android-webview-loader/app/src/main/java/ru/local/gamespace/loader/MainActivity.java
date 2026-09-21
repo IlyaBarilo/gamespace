@@ -1356,7 +1356,7 @@ public class MainActivity extends Activity {
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
             isMenuTabEnabled(), menuTabItem, items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
-            new AppMenuDialog.Listener() {
+            buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
                 @Override
                 public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
@@ -1459,6 +1459,45 @@ public class MainActivity extends Activity {
         if (model.length() == 0) return manufacturer;
         if (model.toLowerCase(Locale.ROOT).startsWith(manufacturer.toLowerCase(Locale.ROOT))) return model;
         return manufacturer + " " + model;
+    }
+
+    private AppMenuDialog.DiagnosticsState buildAppMenuDiagnosticsState() {
+        CompatibilityCheck.MenuStatus compatibility = compatibilityCheck == null
+            ? new CompatibilityCheck.MenuStatus("Базовая проверка пока недоступна", false, false)
+            : compatibilityCheck.menuStatus();
+        String operationTitle = viewText(progressTitle, "Локальная операция");
+        String operationDetails = viewText(progressDetails, "Операция продолжается…");
+        String operationHint = operationCancellationRequested
+            ? "Отмена уже запрошена. Закройте меню, чтобы следить за восстановлением состояния."
+            : operationCancelable
+                ? "Операцию можно отменить на основном экране после закрытия меню."
+                : "Текущий этап нельзя безопасно прервать. Дождитесь его завершения.";
+        return new AppMenuDialog.DiagnosticsState(
+            operationTitle,
+            operationDetails,
+            operationHint,
+            compatibility.text,
+            compatibility.complete,
+            compatibility.error,
+            readLastErrorReport().length() > 0,
+            hasArchiveStatistics());
+    }
+
+    private String viewText(TextView view, String fallback) {
+        if (view == null || view.getText() == null) return fallback;
+        String value = view.getText().toString().trim();
+        return value.length() == 0 ? fallback : value;
+    }
+
+    private boolean hasArchiveStatistics() {
+        String report = lastArchiveStatistics;
+        if (report != null) return report.length() > 0;
+        try {
+            report = getSharedPreferences(DIAGNOSTIC_PREFS, MODE_PRIVATE).getString(PREF_ARCHIVE_STATISTICS, "");
+            return report != null && report.length() > 0;
+        } catch (RuntimeException unavailable) {
+            return false;
+        }
     }
 
     private String describeStorageLocation(File base) {

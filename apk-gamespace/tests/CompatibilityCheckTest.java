@@ -21,18 +21,23 @@ public final class CompatibilityCheckTest {
     private static void contains(String text, String fragment) { checks++; if (!text.contains(fragment)) throw new AssertionError(fragment + " not in " + text); }
     public static void main(String[] args) {
         Memory store = new Memory(); CompatibilityCheck check = make(store);
+        contains(check.menuStatus().text, "выполнено 1 из 4");
         check.reconcileContent("already-installed"); check.pageLoaded(true);
         equal("not_performed", step(check, "import"));
         String ticket = check.beginImport("demo", 1000);
+        contains(check.menuStatus().text, "Идёт импорт");
         check.archive(ticket, 1859372, "7z"); check.imported(ticket, "demo:1", 45, 8000, false);
         check.pageLoaded(false); equal("not_performed", step(check, "game"));
         check.pageLoaded(true); check.pageLoaded(false);
         contains(report(check), "ИТОГ: базовая проверка пройдена");
         contains(check.guidance(), "4. Переход в игру: выполнено");
+        equal(true, check.menuStatus().complete);
+        contains(check.menuStatus().text, "4 из 4");
         equal("recorded", step(make(store), "game"));
         String frozen = report(check);
         check.pageError(false, "page"); check.pageLoaded(false);
         contains(report(check), "этап: переход в игру; код: GS-PAGE;");
+        equal(true, check.menuStatus().error);
         contains(frozen, "ИТОГ: базовая проверка пройдена");
         equal("error", step(make(store), "game"));
         check.reconcileContent("demo:2"); equal("not_performed", step(check, "import"));
