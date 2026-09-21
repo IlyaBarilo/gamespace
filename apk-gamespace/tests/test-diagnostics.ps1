@@ -99,6 +99,9 @@ $checks = @{
     "direct file access disabled" = 'settings\.setAllowFileAccess\(false\)'
     "WebView network restrictions installed" = 'WebViewIsolation\.configure\(settings\)'
     "native update menu" = '"Обновление приложения"\.equals\(item\)'
+    "settings use cached update result" = 'appUpdateDialog\.menuStatus\(\)'
+    "settings receive app and environment details" = 'new AppMenuDialog\.AppState\([\s\S]*?app_build_date[\s\S]*?app_min_android[\s\S]*?getDeviceModelText\(\)[\s\S]*?getWebViewEnvironmentText\(false\)'
+    "internet purpose is accurate" = 'Интернет используется только при ручной проверке обновлений приложения\.'
     "menu tab disabled by default" = 'getBoolean\(PREF_SHOW_MENU_TAB, false\)'
     "menu tab opens app menu directly" = 'createMenuTabButton\(\)[\s\S]*?showAppMenu\(\);'
     "menu tab appears only after toolbar hides" = 'hideTopBar\(\)[\s\S]*?updateMenuTabVisibility\(\);'
@@ -152,6 +155,9 @@ $menuChecks = @{
     "menu tab switch" = 'Switch setting = new Switch\(activity\)'
     "archive actions section" = 'ЛОКАЛЬНЫЕ АРХИВЫ[\s\S]*?Быстро обновить из архива[\s\S]*?Полное обновление из архива'
     "application section" = 'ПРИЛОЖЕНИЕ[\s\S]*?Обновление приложения[\s\S]*?Информация'
+    "application card shows release state" = 'applicationCard\(\)[\s\S]*?appState\.buildDate[\s\S]*?appState\.minAndroid[\s\S]*?appState\.updateStatus[\s\S]*?appState\.updateCheckedAt'
+    "environment card shows device runtime" = 'environmentCard\(\)[\s\S]*?appState\.androidVersion[\s\S]*?appState\.deviceModel[\s\S]*?appState\.webView'
+    "manual network note" = 'Интернет используется только при ручной проверке официальных выпусков\.'
     "diagnostics section" = 'ДИАГНОСТИКА[\s\S]*?Отчёт о совместимости[\s\S]*?Создать отчёт о проблеме[\s\S]*?Последняя ошибка'
     "danger action is separate" = 'УДАЛЕНИЕ[\s\S]*?Очистить сайт'
     "custom vector icons" = 'R\.drawable\.ic_menu_archive[\s\S]*?R\.drawable\.ic_menu_trash[\s\S]*?R\.drawable\.ic_menu_diagnostics'
@@ -163,6 +169,9 @@ foreach ($entry in $menuChecks.GetEnumerator()) {
 }
 if ($menuSource -match 'android\.webkit|addJavascriptInterface|loadUrl\(') {
     throw "The trusted APK menu must not use WebView or a JavaScript bridge."
+}
+if ($activity -match 'Интернет-разрешение в APK не используется') {
+    throw "APK information must not claim that the update-check internet permission is unused."
 }
 Write-Host "APK settings panel: $($menuChecks.Count + 1) checks passed. Visual layout still requires a device test."
 

@@ -60,6 +60,26 @@ final class AppUpdateDialog {
         return dialog;
     }
 
+    MenuStatus menuStatus() {
+        AppUpdateRepository.Snapshot snapshot = repository.current();
+        if (snapshot == null) return new MenuStatus("Проверка обновлений ещё не выполнялась", 0L);
+        AppUpdateCatalog.Release latest = snapshot.catalog.releases.get(0);
+        long installedCode = installedVersionCode();
+        String status;
+        if (installedCode < 0L) {
+            status = "Установленная версия не определена; последний выпуск " + latest.version;
+        } else if (latest.minSdk > Build.VERSION.SDK_INT) {
+            status = "Последний выпуск " + latest.version + " требует Android API " + latest.minSdk;
+        } else if (latest.versionCode > installedCode) {
+            status = "Доступна версия " + latest.version;
+        } else if (latest.versionCode == installedCode) {
+            status = "Установлена актуальная версия " + latest.version;
+        } else {
+            status = "Установленная версия новее выпуска " + latest.version;
+        }
+        return new MenuStatus(status, snapshot.checkedAt);
+    }
+
     void shown() {
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new android.view.View.OnClickListener() {
             @Override public void onClick(android.view.View view) { check(); }
@@ -206,6 +226,16 @@ final class AppUpdateDialog {
 
     private int dp(int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    static final class MenuStatus {
+        final String text;
+        final long checkedAt;
+
+        MenuStatus(String text, long checkedAt) {
+            this.text = text;
+            this.checkedAt = checkedAt;
+        }
     }
 
     void destroy() {

@@ -50,11 +50,13 @@ final class AppMenuDialog {
     private final String menuTabItem;
     private final String[] items;
     private final SiteState siteState;
+    private final AppState appState;
     private final Listener listener;
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, String[] items, SiteState siteState, Listener listener) {
+            boolean menuTabEnabled, String menuTabItem, String[] items, SiteState siteState,
+            AppState appState, Listener listener) {
         this.activity = activity;
         this.version = version;
         this.installed = installed;
@@ -63,6 +65,7 @@ final class AppMenuDialog {
         this.menuTabItem = menuTabItem;
         this.items = items;
         this.siteState = siteState;
+        this.appState = appState;
         this.listener = listener;
     }
 
@@ -100,10 +103,8 @@ final class AppMenuDialog {
             "Выбрать архив", "Быстро обновить из архива", "Полное обновление из архива",
             "Загрузить встроенный демо-сайт", "Перезагрузить сайт"
         });
-        addSection(content, "ПРИЛОЖЕНИЕ", "GameSpace APK", new String[] {
-            "Обновление приложения", "Информация"
-        });
-        addRuntimeSection(content);
+        if (!busy) content.addView(applicationCard(), cardParams());
+        if (!busy) content.addView(environmentCard(), cardParams());
         addSection(content, "ДИАГНОСТИКА", "Проверка и отчёты", new String[] {
             "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка"
         });
@@ -193,13 +194,34 @@ final class AppMenuDialog {
         return card;
     }
 
-    private void addRuntimeSection(LinearLayout content) {
+    private View applicationCard() {
+        LinearLayout card = card("ПРИЛОЖЕНИЕ", "GameSpace APK " + version);
+        card.addView(detailLine("Сборка", appState.buildDate));
+        card.addView(detailLine("Минимальная версия", appState.minAndroid));
+
+        TextView updateStatus = text(appState.updateStatus, 13, updateStatusColor(appState.updateStatus), true);
+        updateStatus.setPadding(0, dp(11), 0, 0);
+        card.addView(updateStatus);
+        card.addView(detailLine("Последняя проверка", appState.updateCheckedAt));
+
+        TextView network = text("Интернет используется только при ручной проверке официальных выпусков. Скачивание и установка APK выполняются вне GameSpace.", 12, MUTED, false);
+        network.setPadding(0, dp(10), 0, 0);
+        card.addView(network);
+        addCardActions(card, new String[] {"Обновление приложения", "Информация"});
+        return card;
+    }
+
+    private View environmentCard() {
+        LinearLayout card = card("УСТРОЙСТВО И СРЕДА", appState.androidVersion);
+        card.addView(detailLine("Устройство", appState.deviceModel));
+        card.addView(detailLine("WebView", appState.webView));
         for (String item : items) {
             if (item.startsWith("Среда запуска: ")) {
-                addSection(content, "СРЕДА ЗАПУСКА", "Android System WebView", new String[] {item});
-                return;
+                addCardActions(card, new String[] {item});
+                break;
             }
         }
+        return card;
     }
 
     private View storageCard() {
@@ -249,6 +271,31 @@ final class AppMenuDialog {
         TextView line = text(label + ": " + value, 13, MUTED, false);
         line.setPadding(0, dp(5), 0, 0);
         return line;
+    }
+
+    private TextView detailLine(String label, String value) {
+        TextView line = text(label + ": " + value, 13, MUTED, false);
+        line.setPadding(0, dp(6), 0, 0);
+        return line;
+    }
+
+    private int updateStatusColor(String status) {
+        if (status.startsWith("Доступна версия")) return WARNING;
+        if (status.startsWith("Установлена актуальная версия")) return SUCCESS;
+        return MUTED;
+    }
+
+    private void addCardActions(LinearLayout card, String[] accepted) {
+        int added = 0;
+        for (String acceptedItem : accepted) {
+            String item = findItem(acceptedItem);
+            if (item == null) continue;
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, added == 0 ? dp(12) : dp(8), 0, 0);
+            card.addView(action(item), params);
+            added++;
+        }
     }
 
     private void addSection(LinearLayout content, String kicker, String title, String[] accepted) {
@@ -325,7 +372,7 @@ final class AppMenuDialog {
         if ("Перепроверить файлы".equals(item)) return "Заново посчитать размер и количество файлов сайта";
         if ("Обновление приложения".equals(item)) return "Проверить официальный выпуск и открыть его в браузере";
         if ("Информация".equals(item)) return "Версия APK и сведения об установленном сайте";
-        if (item.startsWith("Среда запуска: ")) return item.substring("Среда запуска: ".length());
+        if (item.startsWith("Среда запуска: ")) return "Открыть сведения о WebView и историю изменений";
         if ("Статистика архива".equals(item)) return "Последняя установка или локальное обновление";
         if ("Отчёт о совместимости".equals(item)) return "Базовая проверка работы на этом устройстве";
         if ("Создать отчёт о проблеме".equals(item)) return "Собрать технические сведения без содержимого файлов";
@@ -437,6 +484,21 @@ final class AppMenuDialog {
             this.installedAt = installedAt;
             this.verifiedAt = verifiedAt;
             this.usedPercent = usedPercent;
+        }
+    }
+
+    static final class AppState {
+        final String buildDate, minAndroid, androidVersion, deviceModel, webView, updateStatus, updateCheckedAt;
+
+        AppState(String buildDate, String minAndroid, String androidVersion, String deviceModel,
+                String webView, String updateStatus, String updateCheckedAt) {
+            this.buildDate = buildDate;
+            this.minAndroid = minAndroid;
+            this.androidVersion = androidVersion;
+            this.deviceModel = deviceModel;
+            this.webView = webView;
+            this.updateStatus = updateStatus;
+            this.updateCheckedAt = updateCheckedAt;
         }
     }
 

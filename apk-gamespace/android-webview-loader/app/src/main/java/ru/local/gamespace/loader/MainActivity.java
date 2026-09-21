@@ -1352,8 +1352,11 @@ public class MainActivity extends Activity {
             ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
+        if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
+
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, items, buildAppMenuSiteState(installed), new AppMenuDialog.Listener() {
+            isMenuTabEnabled(), menuTabItem, items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
+            new AppMenuDialog.Listener() {
                 @Override
                 public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
@@ -1429,6 +1432,33 @@ public class MainActivity extends Activity {
             installedAt > 0L ? formatTimestamp(installedAt) : "не указана",
             verifiedAt > 0L ? formatTimestamp(verifiedAt) : "при следующей проверке",
             usedPercent);
+    }
+
+    private AppMenuDialog.AppState buildAppMenuAppState() {
+        AppUpdateDialog.MenuStatus update = appUpdateDialog == null ? null : appUpdateDialog.menuStatus();
+        String updateStatus = update == null ? "Проверка обновлений ещё не выполнялась" : update.text;
+        String updateCheckedAt = update == null || update.checkedAt <= 0L
+            ? "не выполнялась" : formatTimestamp(update.checkedAt);
+        String androidRelease = Build.VERSION.RELEASE == null || Build.VERSION.RELEASE.trim().length() == 0
+            ? "?" : Build.VERSION.RELEASE.trim();
+        return new AppMenuDialog.AppState(
+            getString(R.string.app_build_date),
+            getString(R.string.app_min_android),
+            "Android " + androidRelease + " (API " + Build.VERSION.SDK_INT + ")",
+            getDeviceModelText(),
+            getWebViewEnvironmentText(false),
+            updateStatus,
+            updateCheckedAt);
+    }
+
+    private String getDeviceModelText() {
+        String manufacturer = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.trim();
+        String model = Build.MODEL == null ? "" : Build.MODEL.trim();
+        if (manufacturer.length() == 0 && model.length() == 0) return "не определено";
+        if (manufacturer.length() == 0) return model;
+        if (model.length() == 0) return manufacturer;
+        if (model.toLowerCase(Locale.ROOT).startsWith(manufacturer.toLowerCase(Locale.ROOT))) return model;
+        return manufacturer + " " + model;
     }
 
     private String describeStorageLocation(File base) {
@@ -3503,7 +3533,8 @@ public class MainActivity extends Activity {
             info.append("Сайт пока не установлен.\n");
         }
 
-        info.append("\nИнтернет-разрешение в APK не используется.");
+        info.append("\nИнтернет используется только при ручной проверке обновлений приложения. ")
+            .append("Игры и локальные архивы работают без сети.");
 
         ScrollView scrollView = new ScrollView(this);
         TextView textView = new TextView(this);
