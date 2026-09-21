@@ -1350,7 +1350,7 @@ public class MainActivity extends Activity {
         final String menuTabItem = "Вкладка ••• после скрытия: " + (isMenuTabEnabled() ? "включена" : "выключена");
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            ? new String[] {"Открыть GameSpace", "Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
@@ -1361,7 +1361,9 @@ public class MainActivity extends Activity {
                 @Override
                 public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
-                    if ("Отчёт о совместимости".equals(item)) {
+                    if ("Открыть GameSpace".equals(item)) {
+                        showHomeWebView();
+                    } else if ("Отчёт о совместимости".equals(item)) {
                         showCompatibilityReport();
                     } else if ("Обновление приложения".equals(item)) {
                         if (appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(MainActivity.this);
@@ -1435,6 +1437,14 @@ public class MainActivity extends Activity {
         String archive = prefs.getString(PREF_ARCHIVE_NAME, "");
         long installedAt = prefs.getLong(PREF_INSTALLED_AT, 0L);
         long verifiedAt = prefs.getLong(PREF_STORAGE_VERIFIED_AT, 0L);
+        String updateMode = prefs.getString(PREF_LAST_UPDATE_MODE, "");
+        long operationDuration = prefs.getLong(PREF_LAST_UPDATE_DURATION_MS, -1L);
+        String archiveFormat = "?";
+        if (archive != null) {
+            String lowerArchive = archive.toLowerCase(Locale.ROOT);
+            if (lowerArchive.endsWith(".7z")) archiveFormat = "7z";
+            else if (lowerArchive.endsWith(".zip")) archiveFormat = "ZIP";
+        }
         return new AppMenuDialog.SiteState(
             archive == null || archive.length() == 0 ? "не указан" : archive,
             siteBytes < 0L ? "не определён" : formatBytes(siteBytes),
@@ -1444,6 +1454,9 @@ public class MainActivity extends Activity {
             formatBytes(free), formatBytes(total),
             installedAt > 0L ? formatTimestamp(installedAt) : "не указана",
             verifiedAt > 0L ? formatTimestamp(verifiedAt) : "при следующей проверке",
+            archiveFormat,
+            operationDuration >= 0L ? formatDuration(operationDuration) : "—",
+            updateMode == null || updateMode.length() == 0 ? "—" : formatUpdateMode(updateMode),
             usedPercent);
     }
 

@@ -18,6 +18,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.widget.FrameLayout;
+import android.widget.GridLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -77,40 +78,47 @@ final class AppMenuDialog {
 
         LinearLayout page = new LinearLayout(activity);
         page.setOrientation(LinearLayout.VERTICAL);
-        page.setBackgroundColor(SURFACE);
-        int maximumWidth = dp(760);
-        int pageWidth = Math.min(activity.getResources().getDisplayMetrics().widthPixels, maximumWidth);
+        page.setBackground(pageBackground());
+        int screenWidth = activity.getResources().getDisplayMetrics().widthPixels;
+        float widthDp = screenWidth / activity.getResources().getDisplayMetrics().density;
+        int horizontalMargin = dp(widthDp <= 620f ? 11 : 20);
+        int pageWidth = Math.min(Math.max(1, screenWidth - horizontalMargin * 2), dp(1040));
         FrameLayout.LayoutParams pageParams = new FrameLayout.LayoutParams(pageWidth,
             ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER_HORIZONTAL);
         backdrop.addView(page, pageParams);
-
-        page.addView(header(), new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         ScrollView scroll = new ScrollView(activity);
         scroll.setFillViewport(true);
         scroll.setClipToPadding(false);
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(10), dp(16), dp(28));
+        content.setPadding(dp(9), 0, dp(9), dp(28));
         scroll.addView(content, new ScrollView.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(scroll, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        content.addView(statusCard(), cardParams());
+        content.addView(header(), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        content.addView(statusLine(), statusLineParams());
+        content.addView(compatibilityCard(), cardParams());
+        if (busy) {
+            content.addView(operationCard(), cardParams());
+        } else if (installed) {
+            content.addView(installedSiteCard(), cardParams());
+        } else {
+            content.addView(firstLaunchCard(), cardParams());
+        }
         if (!busy) content.addView(storageCard(), cardParams());
-        addSection(content, "ЛОКАЛЬНЫЕ АРХИВЫ", "Сайт и обновления", new String[] {
-            "Выбрать архив", "Быстро обновить из архива", "Полное обновление из архива",
-            "Загрузить встроенный демо-сайт", "Перезагрузить сайт"
-        });
+        if (!busy && installed) content.addView(localArchivesCard(), cardParams());
         if (!busy) content.addView(applicationCard(), cardParams());
         if (!busy) content.addView(alternativeAppCard(), cardParams());
-        if (!busy) content.addView(environmentCard(), cardParams());
-        content.addView(diagnosticsCard(), cardParams());
+        content.addView(informationCard(), cardParams());
+        content.addView(lastProcessingCard(), cardParams());
         if (!busy) content.addView(viewerCard(), cardParams());
-        addSection(content, "О ПРИЛОЖЕНИИ", "Документы", new String[] {"Лицензии"});
-        addSection(content, "УДАЛЕНИЕ", "Локальный сайт", new String[] {"Очистить сайт"});
+        content.addView(lastErrorCard(), cardParams());
+        if (!busy) content.addView(licensesCard(), cardParams());
+        if (!busy && installed) content.addView(deleteCard(), cardParams());
 
         dialog = new AlertDialog.Builder(activity).setView(backdrop).create();
         dialog.setOnShowListener(new DialogInterface.OnShowListener() {
@@ -120,58 +128,88 @@ final class AppMenuDialog {
     }
 
     private View header() {
+        boolean compact = screenWidthDp() <= 620f;
         LinearLayout row = new LinearLayout(activity);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(dp(20), dp(17), dp(12), dp(15));
+        row.setPadding(dp(4), dp(22), 0, dp(18));
+
+        ImageView logo = new ImageView(activity);
+        logo.setImageResource(R.mipmap.ic_launcher);
+        logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        logo.setContentDescription("Значок GameSpace");
+        if (Build.VERSION.SDK_INT >= 21) logo.setElevation(dp(8));
+        int logoSize = compact ? 61 : 72;
+        LinearLayout.LayoutParams logoParams = new LinearLayout.LayoutParams(dp(logoSize), dp(logoSize));
+        logoParams.setMargins(0, 0, dp(compact ? 14 : 18), 0);
+        row.addView(logo, logoParams);
 
         LinearLayout copy = new LinearLayout(activity);
         copy.setOrientation(LinearLayout.VERTICAL);
-        TextView kicker = text("НАСТРОЙКИ И АРХИВЫ", 11, ACCENT, true);
+        TextView kicker = text("НАСТРОЙКИ · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ", 10, ACCENT, true);
         kicker.setLetterSpacing(0.08f);
         copy.addView(kicker);
-        TextView title = text("GameSpace APK", 24, TEXT, true);
-        copy.addView(title);
-        copy.addView(text("Версия " + version, 13, MUTED, false));
+
+        LinearLayout titleLine = new LinearLayout(activity);
+        titleLine.setOrientation(LinearLayout.HORIZONTAL);
+        titleLine.setGravity(Gravity.BOTTOM);
+        TextView title = text("GameSpace", compact ? 30 : 34, TEXT, true);
+        titleLine.addView(title);
+        TextView versionLabel = text(version, compact ? 13 : 15, ACCENT, true);
+        LinearLayout.LayoutParams versionParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        versionParams.setMargins(dp(compact ? 8 : 11), 0, 0, dp(3));
+        titleLine.addView(versionLabel, versionParams);
+        copy.addView(titleLine);
+
+        TextView summary = text(installed
+            ? siteState.archiveName + " · " + siteState.siteSize
+            : "Основной сайт ещё не установлен", 14, MUTED, false);
+        summary.setPadding(0, dp(7), 0, 0);
+        copy.addView(summary);
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        return row;
+    }
+
+    private View statusLine() {
+        LinearLayout line = new LinearLayout(activity);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(dp(13), dp(9), dp(13), dp(9));
+        line.setBackground(round(Color.rgb(3, 20, 42), BORDER, 12));
+
+        View dot = new View(activity);
+        int tone = busy ? WARNING : installed ? SUCCESS : Color.rgb(130, 169, 203);
+        dot.setBackground(round(tone, tone, 8));
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(8), dp(8));
+        dotParams.setMargins(0, 0, dp(9), 0);
+        line.addView(dot, dotParams);
+
+        String value = busy
+            ? diagnosticsState.operationTitle + ". " + diagnosticsState.operationDetails
+            : installed ? "Сайт готов к автономной работе"
+                : "Приложение готово к импорту";
+        line.addView(text(value, 12, MUTED, false), new LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ImageButton close = closeButton();
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(34), dp(34));
+        closeParams.setMargins(dp(8), 0, 0, 0);
+        line.addView(close, closeParams);
+        return line;
+    }
+
+    private ImageButton closeButton() {
         ImageButton close = new ImageButton(activity);
         close.setImageResource(R.drawable.ic_menu_close);
         close.setImageTintList(ColorStateList.valueOf(TEXT));
         close.setContentDescription("Закрыть меню");
-        close.setPadding(dp(12), dp(12), dp(12), dp(12));
-        close.setBackground(round(CARD, BORDER, 14));
+        close.setPadding(dp(8), dp(8), dp(8), dp(8));
+        close.setBackground(round(CARD, BORDER, 11));
         close.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) { if (dialog != null) dialog.dismiss(); }
         });
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(48), dp(48));
-        closeParams.setMargins(dp(12), 0, 0, 0);
-        row.addView(close, closeParams);
-        return row;
-    }
-
-    private View statusCard() {
-        LinearLayout card = card("СОСТОЯНИЕ", busy ? diagnosticsState.operationTitle
-            : installed ? "Сайт готов к работе" : "Сайт не установлен");
-        TextView status = text(busy ? diagnosticsState.operationDetails : installed
-            ? "Меню открыто поверх локального сайта. Закрытие вернёт к его просмотру."
-            : "Установите встроенный демо-сайт или выберите архив на устройстве.", 14, MUTED, false);
-        status.setPadding(0, dp(8), 0, 0);
-        card.addView(status);
-        if (busy) {
-            TextView hint = text(diagnosticsState.operationHint, 12, WARNING, false);
-            hint.setPadding(0, dp(10), 0, 0);
-            card.addView(hint);
-        }
-        TextView badge = text(busy ? "ОПЕРАЦИЯ ВЫПОЛНЯЕТСЯ" : installed ? "УСТАНОВЛЕН" : "НЕТ САЙТА",
-            11, busy ? WARNING : installed ? SUCCESS : MUTED, true);
-        badge.setPadding(dp(11), dp(7), dp(11), dp(7));
-        badge.setBackground(round(Color.rgb(7, 29, 54), busy ? WARNING : installed ? SUCCESS : BORDER, 16));
-        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        badgeParams.setMargins(0, dp(14), 0, 0);
-        card.addView(badge, badgeParams);
-        return card;
+        return close;
     }
 
     @SuppressWarnings("deprecation")
@@ -201,10 +239,69 @@ final class AppMenuDialog {
         return card;
     }
 
+    private View compatibilityCard() {
+        LinearLayout card = card("БАЗОВАЯ ПРОВЕРКА", "Совместимость устройства");
+        int color = diagnosticsState.compatibilityError ? DANGER
+            : diagnosticsState.compatibilityComplete ? SUCCESS : WARNING;
+        TextView state = text(diagnosticsState.compatibilityStatus, 14, color, true);
+        state.setPadding(0, dp(9), 0, 0);
+        card.addView(state);
+        TextView description = text("Доступна с первого запуска, даже если архив ещё не установлен или возникла ошибка.", 13, MUTED, false);
+        description.setPadding(0, dp(7), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Отчёт о совместимости"});
+        return card;
+    }
+
+    private View operationCard() {
+        LinearLayout card = card("ЛОКАЛЬНАЯ ОПЕРАЦИЯ", diagnosticsState.operationTitle);
+        TextView details = text(diagnosticsState.operationDetails, 14, WARNING, true);
+        details.setPadding(0, dp(9), 0, 0);
+        card.addView(details);
+        TextView hint = text(diagnosticsState.operationHint, 13, MUTED, false);
+        hint.setPadding(0, dp(7), 0, 0);
+        card.addView(hint);
+        return card;
+    }
+
+    private View installedSiteCard() {
+        LinearLayout card = card("ДОВЕРЕННЫЙ РЕЖИМ", "Готов к запуску");
+        TextView description = text("Витрина и игры открываются из локального каталога приложения. Подключение к интернету для запуска не требуется.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Открыть GameSpace"});
+        return card;
+    }
+
+    private View firstLaunchCard() {
+        LinearLayout card = card("ПЕРВЫЙ ЗАПУСК", "Выберите, с чего начать");
+        TextView description = text("Установите встроенную демонстрацию или выберите основной архив GameSpace на устройстве.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Загрузить встроенный демо-сайт", "Выбрать архив"});
+        return card;
+    }
+
+    private View localArchivesCard() {
+        LinearLayout card = card("ЛОКАЛЬНЫЕ АРХИВЫ", "Сайт и обновления");
+        TextView description = text("Основной архив можно обновить полностью или применить подготовленное локальное обновление.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {
+            "Быстро обновить из архива", "Полное обновление из архива",
+            "Загрузить встроенный демо-сайт", "Перезагрузить сайт"
+        });
+        return card;
+    }
+
     private View applicationCard() {
-        LinearLayout card = card("ПРИЛОЖЕНИЕ", "GameSpace APK " + version);
+        LinearLayout card = card("ОБОЛОЧКА APK", "Версия приложения");
+        card.addView(detailLine("Установлено", "GameSpace " + version));
         card.addView(detailLine("Сборка", appState.buildDate));
-        card.addView(detailLine("Минимальная версия", appState.minAndroid));
+        card.addView(detailLine("Минимальная версия Android", appState.minAndroid));
+        card.addView(detailLine("Система", appState.androidVersion));
+        card.addView(detailLine("Устройство", appState.deviceModel));
+        card.addView(detailLine("WebView", appState.webView));
 
         TextView updateStatus = text(appState.updateStatus, 13, updateStatusColor(appState.updateStatus), true);
         updateStatus.setPadding(0, dp(11), 0, 0);
@@ -214,7 +311,10 @@ final class AppMenuDialog {
         TextView network = text("Интернет используется только при ручной проверке официальных выпусков. Скачивание и установка APK выполняются вне GameSpace.", 12, MUTED, false);
         network.setPadding(0, dp(10), 0, 0);
         card.addView(network);
-        addCardActions(card, new String[] {"Обновление приложения", "Информация"});
+        String runtime = findRuntimeItem();
+        addCardActions(card, runtime == null
+            ? new String[] {"Обновление приложения", "Информация"}
+            : new String[] {"Обновление приложения", runtime, "Информация"});
         return card;
     }
 
@@ -224,38 +324,6 @@ final class AppMenuDialog {
         description.setPadding(0, dp(8), 0, 0);
         card.addView(description);
         addCardActions(card, new String[] {"Открыть PWA-версию"});
-        return card;
-    }
-
-    private View environmentCard() {
-        LinearLayout card = card("УСТРОЙСТВО И СРЕДА", appState.androidVersion);
-        card.addView(detailLine("Устройство", appState.deviceModel));
-        card.addView(detailLine("WebView", appState.webView));
-        for (String item : items) {
-            if (item.startsWith("Среда запуска: ")) {
-                addCardActions(card, new String[] {item});
-                break;
-            }
-        }
-        return card;
-    }
-
-    private View diagnosticsCard() {
-        LinearLayout card = card("ДИАГНОСТИКА", "Проверка и отчёты");
-        int compatibilityColor = diagnosticsState.compatibilityError ? DANGER
-            : diagnosticsState.compatibilityComplete ? SUCCESS : WARNING;
-        TextView compatibility = text(diagnosticsState.compatibilityStatus, 14, compatibilityColor, true);
-        compatibility.setPadding(0, dp(10), 0, 0);
-        card.addView(compatibility);
-        card.addView(diagnosticLine(diagnosticsState.hasArchiveStatistics
-            ? "Статистика последнего архива сохранена" : "Статистики обработки архива пока нет",
-            diagnosticsState.hasArchiveStatistics ? SUCCESS : MUTED));
-        card.addView(diagnosticLine(diagnosticsState.hasLastError
-            ? "Последняя ошибка сохранена" : "Сохранённых ошибок пока нет",
-            diagnosticsState.hasLastError ? WARNING : SUCCESS));
-        addCardActions(card, new String[] {
-            "Отчёт о совместимости", "Статистика архива", "Создать отчёт о проблеме", "Последняя ошибка"
-        });
         return card;
     }
 
@@ -302,6 +370,99 @@ final class AppMenuDialog {
         return card;
     }
 
+    private View informationCard() {
+        LinearLayout card = card("СОСТОЯНИЕ", "Информация");
+        TextView description = text(installed
+            ? "Сведения о последней установке или обработке локального сайта."
+            : "Сведения появятся после установки демонстрации или основного архива.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, dp(4));
+        card.addView(description);
+
+        GridLayout grid = new GridLayout(activity);
+        int columns = screenWidthDp() > 620f ? 2 : 1;
+        grid.setColumnCount(columns);
+        grid.setUseDefaultMargins(false);
+        addInformationCell(grid, "Архив", installed ? siteState.archiveName : "—", columns);
+        addInformationCell(grid, "Формат", installed ? siteState.archiveFormat : "—", columns);
+        addInformationCell(grid, "Файлы", installed ? siteState.fileCount : "—", columns);
+        addInformationCell(grid, "Размер сайта", installed ? siteState.siteSize : "—", columns);
+        addInformationCell(grid, "Дата", installed ? siteState.installedAt : "—", columns);
+        addInformationCell(grid, "Время", installed ? siteState.operationDuration : "—", columns);
+        addInformationCell(grid, "Последний режим", installed ? siteState.operationMode : "—", columns);
+        addInformationCell(grid, "Проверка файлов", installed ? siteState.verifiedAt : "—", columns);
+        LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        gridParams.setMargins(0, dp(8), 0, 0);
+        card.addView(grid, gridParams);
+        return card;
+    }
+
+    private void addInformationCell(GridLayout grid, String label, String value, int columns) {
+        LinearLayout cell = new LinearLayout(activity);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setPadding(dp(12), dp(10), dp(12), dp(10));
+        cell.setBackground(round(Color.rgb(5, 27, 51), BORDER, 12));
+        TextView labelView = text(label.toUpperCase(), 9, ACCENT, true);
+        labelView.setLetterSpacing(0.07f);
+        cell.addView(labelView);
+        TextView valueView = text(value, 14, TEXT, true);
+        valueView.setPadding(0, dp(4), 0, 0);
+        cell.addView(valueView);
+
+        GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+        params.width = 0;
+        params.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+        params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+        params.setMargins(dp(3), dp(3), dp(3), dp(3));
+        if (columns == 1) params.width = ViewGroup.LayoutParams.MATCH_PARENT;
+        grid.addView(cell, params);
+    }
+
+    private View lastProcessingCard() {
+        LinearLayout card = card("ПОСЛЕДНЯЯ ОБРАБОТКА", "Статистика архива");
+        int color = diagnosticsState.hasArchiveStatistics ? SUCCESS : MUTED;
+        TextView state = text(diagnosticsState.hasArchiveStatistics
+            ? "Сведения о последней обработке сохранены"
+            : "Статистики обработки архива пока нет", 13, color, true);
+        state.setPadding(0, dp(8), 0, 0);
+        card.addView(state);
+        addCardActions(card, new String[] {"Статистика архива"});
+        return card;
+    }
+
+    private View lastErrorCard() {
+        LinearLayout card = card("ПОМОЩЬ ПРИ СБОЕ", "Последняя ошибка");
+        int color = diagnosticsState.hasLastError ? WARNING : SUCCESS;
+        TextView state = text(diagnosticsState.hasLastError
+            ? "Последняя ошибка сохранена"
+            : "Сохранённых ошибок пока нет", 13, color, true);
+        state.setPadding(0, dp(8), 0, 0);
+        card.addView(state);
+        TextView description = text("Технический отчёт не включает содержимое пользовательских файлов.", 13, MUTED, false);
+        description.setPadding(0, dp(7), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Последняя ошибка", "Создать отчёт о проблеме"});
+        return card;
+    }
+
+    private View licensesCard() {
+        LinearLayout card = card("О ПРИЛОЖЕНИИ", "Лицензии");
+        TextView description = text("Лицензия GameSpace и сведения о сторонних компонентах доступны без подключения к интернету.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Лицензии"});
+        return card;
+    }
+
+    private View deleteCard() {
+        LinearLayout card = card("УДАЛЕНИЕ", "Локальный сайт");
+        TextView description = text("Удаляет распакованный сайт и его локальные данные. Само приложение остаётся установленным.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Очистить сайт"});
+        return card;
+    }
+
     private TextView storageLine(String label, String value) {
         TextView line = text(label + ": " + value, 13, MUTED, false);
         line.setPadding(0, dp(5), 0, 0);
@@ -310,12 +471,6 @@ final class AppMenuDialog {
 
     private TextView detailLine(String label, String value) {
         TextView line = text(label + ": " + value, 13, MUTED, false);
-        line.setPadding(0, dp(6), 0, 0);
-        return line;
-    }
-
-    private TextView diagnosticLine(String value, int color) {
-        TextView line = text(value, 13, color, false);
         line.setPadding(0, dp(6), 0, 0);
         return line;
     }
@@ -339,24 +494,16 @@ final class AppMenuDialog {
         }
     }
 
-    private void addSection(LinearLayout content, String kicker, String title, String[] accepted) {
-        LinearLayout section = card(kicker, title);
-        int added = 0;
-        for (String acceptedItem : accepted) {
-            String item = findItem(acceptedItem);
-            if (item == null) continue;
-            LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            actionParams.setMargins(0, added == 0 ? dp(12) : dp(8), 0, 0);
-            section.addView(action(item), actionParams);
-            added++;
-        }
-        if (added > 0) content.addView(section, cardParams());
-    }
-
     private String findItem(String accepted) {
         for (String item : items) {
             if (item.equals(accepted) || accepted.startsWith("Среда запуска: ") && item.startsWith("Среда запуска: ")) return item;
+        }
+        return null;
+    }
+
+    private String findRuntimeItem() {
+        for (String item : items) {
+            if (item.startsWith("Среда запуска: ")) return item;
         }
         return null;
     }
@@ -396,6 +543,8 @@ final class AppMenuDialog {
 
     private String actionTitle(String item) {
         if (item.startsWith("Среда запуска: ")) return "Среда запуска";
+        if ("Открыть GameSpace".equals(item)) return "Открыть GameSpace";
+        if ("Выбрать архив".equals(item)) return "Выбрать основной архив";
         if ("Быстро обновить из архива".equals(item)) return "Быстро обновить";
         if ("Полное обновление из архива".equals(item)) return "Полная установка";
         if ("Загрузить встроенный демо-сайт".equals(item)) return "Установить демо-сайт";
@@ -405,7 +554,8 @@ final class AppMenuDialog {
     }
 
     private String actionDescription(String item) {
-        if ("Выбрать архив".equals(item)) return "Установить локальный сайт из файла .7z или .zip";
+        if ("Открыть GameSpace".equals(item)) return "Перейти к установленной витрине игр";
+        if ("Выбрать архив".equals(item)) return "Выбрать site.7z или site.zip на устройстве";
         if ("Быстро обновить из архива".equals(item)) return "Заменить только файлы из update-архива";
         if ("Полное обновление из архива".equals(item)) return "Проверить и полностью заменить локальный сайт";
         if ("Загрузить встроенный демо-сайт".equals(item)) return "Заменить текущий сайт встроенным демонстрационным архивом";
@@ -425,6 +575,7 @@ final class AppMenuDialog {
     }
 
     private int actionIcon(String item) {
+        if ("Открыть GameSpace".equals(item)) return R.drawable.ic_menu_play;
         if ("Выбрать архив".equals(item) || "Быстро обновить из архива".equals(item)
                 || "Полное обновление из архива".equals(item)) return R.drawable.ic_menu_archive;
         if (item.contains("демо")) return R.drawable.ic_menu_play;
@@ -466,6 +617,18 @@ final class AppMenuDialog {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, dp(8), 0, dp(8));
         return params;
+    }
+
+    private LinearLayout.LayoutParams statusLineParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(0, dp(4), 0, dp(10));
+        return params;
+    }
+
+    private GradientDrawable pageBackground() {
+        return new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+            new int[] {BACKDROP, SURFACE, Color.rgb(11, 45, 88)});
     }
 
     private StateListDrawable actionBackground(boolean danger) {
@@ -511,12 +674,19 @@ final class AppMenuDialog {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
     }
 
+    private float screenWidthDp() {
+        return activity.getResources().getDisplayMetrics().widthPixels
+            / activity.getResources().getDisplayMetrics().density;
+    }
+
     static final class SiteState {
-        final String archiveName, siteSize, fileCount, storageLabel, usedSpace, freeSpace, totalSpace, installedAt, verifiedAt;
+        final String archiveName, siteSize, fileCount, storageLabel, usedSpace, freeSpace, totalSpace;
+        final String installedAt, verifiedAt, archiveFormat, operationDuration, operationMode;
         final int usedPercent;
 
         SiteState(String archiveName, String siteSize, String fileCount, String storageLabel,
-                String usedSpace, String freeSpace, String totalSpace, String installedAt, String verifiedAt, int usedPercent) {
+                String usedSpace, String freeSpace, String totalSpace, String installedAt, String verifiedAt,
+                String archiveFormat, String operationDuration, String operationMode, int usedPercent) {
             this.archiveName = archiveName;
             this.siteSize = siteSize;
             this.fileCount = fileCount;
@@ -526,6 +696,9 @@ final class AppMenuDialog {
             this.totalSpace = totalSpace;
             this.installedAt = installedAt;
             this.verifiedAt = verifiedAt;
+            this.archiveFormat = archiveFormat;
+            this.operationDuration = operationDuration;
+            this.operationMode = operationMode;
             this.usedPercent = usedPercent;
         }
     }

@@ -71,7 +71,8 @@ if ($LASTEXITCODE -ne 0) { throw "APK update client tests failed." }
 # Wiring checks supplement JVM tests; they do not replace Android device tests.
 $activity = Get-Content -LiteralPath (Join-Path $sourceDirectory "MainActivity.java") -Raw -Encoding UTF8
 $checks = @{
-    "demo available with an installed site" = '\? new String\[\] \{"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт"'
+    "demo available with an installed site" = '\? new String\[\] \{"Открыть GameSpace", "Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт"'
+    "menu opens installed storefront" = '"Открыть GameSpace"\.equals\(item\)[\s\S]*?showHomeWebView\(\)'
     "demo menu asks before replacing site" = 'else if \("Загрузить встроенный демо-сайт"\.equals\(item\)\)\s*\{\s*confirmInstallBuiltinDemoSite\(\);'
     "demo replacement has cancel and explicit install" = 'private void confirmInstallBuiltinDemoSite\(\)[\s\S]*?\.setNegativeButton\("Отмена", null\)[\s\S]*?\.setPositiveButton\("Установить демо"'
     "demo copy outside cache" = 'DemoImportFile\.prepare\(getNoBackupFilesDir\(\)\)'
@@ -157,17 +158,23 @@ $menuChecks = @{
     "full-screen dialog" = 'setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)'
     "scrollable menu" = 'ScrollView scroll = new ScrollView\(activity\)'
     "menu tab switch" = 'Switch setting = new Switch\(activity\)'
-    "menu tab setting follows diagnostics" = 'content\.addView\(diagnosticsCard\(\), cardParams\(\)\);\s*if \(!busy\) content\.addView\(viewerCard\(\), cardParams\(\)\);'
-    "archive actions section" = 'ЛОКАЛЬНЫЕ АРХИВЫ[\s\S]*?Быстро обновить из архива[\s\S]*?Полное обновление из архива'
-    "application section" = 'ПРИЛОЖЕНИЕ[\s\S]*?Обновление приложения[\s\S]*?Информация'
-    "application card shows release state" = 'applicationCard\(\)[\s\S]*?appState\.buildDate[\s\S]*?appState\.minAndroid[\s\S]*?appState\.updateStatus[\s\S]*?appState\.updateCheckedAt'
+    "PWA card order" = 'compatibilityCard\(\)[\s\S]*?installedSiteCard\(\)[\s\S]*?storageCard\(\)[\s\S]*?localArchivesCard\(\)[\s\S]*?applicationCard\(\)[\s\S]*?alternativeAppCard\(\)[\s\S]*?informationCard\(\)[\s\S]*?lastProcessingCard\(\)[\s\S]*?viewerCard\(\)[\s\S]*?lastErrorCard\(\)[\s\S]*?licensesCard\(\)[\s\S]*?deleteCard\(\)'
+    "compatibility is available first" = 'БАЗОВАЯ ПРОВЕРКА[\s\S]*?Совместимость устройства[\s\S]*?Доступна с первого запуска[\s\S]*?Отчёт о совместимости'
+    "installed site card" = 'ДОВЕРЕННЫЙ РЕЖИМ[\s\S]*?Готов к запуску[\s\S]*?Открыть GameSpace'
+    "first launch choices" = 'ПЕРВЫЙ ЗАПУСК[\s\S]*?Выберите, с чего начать[\s\S]*?Загрузить встроенный демо-сайт[\s\S]*?Выбрать архив'
+    "archive actions section" = 'localArchivesCard\(\)[\s\S]*?ЛОКАЛЬНЫЕ АРХИВЫ[\s\S]*?Быстро обновить из архива[\s\S]*?Полное обновление из архива'
+    "application section" = 'ОБОЛОЧКА APK[\s\S]*?Обновление приложения[\s\S]*?Информация'
+    "application card shows release and device state" = 'applicationCard\(\)[\s\S]*?appState\.buildDate[\s\S]*?appState\.minAndroid[\s\S]*?appState\.androidVersion[\s\S]*?appState\.deviceModel[\s\S]*?appState\.webView[\s\S]*?appState\.updateStatus[\s\S]*?appState\.updateCheckedAt'
     "separate PWA card" = 'alternativeAppCard\(\)[\s\S]*?ДРУГАЯ ВЕРСИЯ[\s\S]*?GameSpace PWA[\s\S]*?Открыть PWA-версию'
     "PWA link has external icon" = '"Открыть PWA-версию"\.equals\(item\)\) return R\.drawable\.ic_menu_external'
-    "environment card shows device runtime" = 'environmentCard\(\)[\s\S]*?appState\.androidVersion[\s\S]*?appState\.deviceModel[\s\S]*?appState\.webView'
     "manual network note" = 'Интернет используется только при ручной проверке официальных выпусков\.'
-    "diagnostics section" = 'ДИАГНОСТИКА[\s\S]*?Отчёт о совместимости[\s\S]*?Создать отчёт о проблеме[\s\S]*?Последняя ошибка'
-    "diagnostics card shows saved states" = 'diagnosticsCard\(\)[\s\S]*?compatibilityStatus[\s\S]*?hasArchiveStatistics[\s\S]*?hasLastError'
-    "busy card shows operation snapshot" = 'statusCard\(\)[\s\S]*?diagnosticsState\.operationTitle[\s\S]*?diagnosticsState\.operationDetails[\s\S]*?diagnosticsState\.operationHint'
+    "information table" = 'GridLayout grid = new GridLayout\(activity\)[\s\S]*?Архив[\s\S]*?Формат[\s\S]*?Файлы[\s\S]*?Размер сайта[\s\S]*?Последний режим'
+    "separate archive statistics" = 'ПОСЛЕДНЯЯ ОБРАБОТКА[\s\S]*?diagnosticsState\.hasArchiveStatistics[\s\S]*?Статистика архива'
+    "separate failure help" = 'ПОМОЩЬ ПРИ СБОЕ[\s\S]*?diagnosticsState\.hasLastError[\s\S]*?Последняя ошибка[\s\S]*?Создать отчёт о проблеме'
+    "PWA-style branded header" = 'R\.mipmap\.ic_launcher[\s\S]*?НАСТРОЙКИ · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ[\s\S]*?text\("GameSpace", compact \? 30 : 34[\s\S]*?text\(version, compact \? 13 : 15[\s\S]*?siteState\.archiveName \+ " · " \+ siteState\.siteSize'
+    "PWA-width responsive surface" = 'widthDp <= 620f \? 11 : 20[\s\S]*?dp\(1040\)'
+    "status line shows operation snapshot" = 'statusLine\(\)[\s\S]*?diagnosticsState\.operationTitle \+ "\. " \+ diagnosticsState\.operationDetails'
+    "ready status matches PWA wording" = 'installed \? "Сайт готов к автономной работе"[\s\S]*?: "Приложение готово к импорту"'
     "danger action is separate" = 'УДАЛЕНИЕ[\s\S]*?Очистить сайт'
     "custom vector icons" = 'R\.drawable\.ic_menu_archive[\s\S]*?R\.drawable\.ic_menu_trash[\s\S]*?R\.drawable\.ic_menu_diagnostics'
     "storage card uses filesystem values" = 'Память приложения[\s\S]*?siteState\.siteSize[\s\S]*?siteState\.usedSpace[\s\S]*?siteState\.freeSpace[\s\S]*?siteState\.totalSpace'
@@ -183,6 +190,25 @@ if ($activity -match 'Интернет-разрешение в APK не испо
     throw "APK information must not claim that the update-check internet permission is unused."
 }
 Write-Host "APK settings panel: $($menuChecks.Count + 1) checks passed. Visual layout still requires a device test."
+
+$compatibilitySource = Get-Content -LiteralPath (Join-Path $sourceDirectory "CompatibilityDialog.java") -Raw -Encoding UTF8
+$compatibilityChecks = @{
+    "compatibility dialog matches menu surface" = 'Native compatibility surface[\s\S]*?pageBackground\(\)[\s\S]*?card\("ТЕКУЩИЙ РЕЗУЛЬТАТ", "Базовая проверка"\)'
+    "compatibility dialog is full-screen" = 'setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)'
+    "four visible verification steps" = 'Запуск приложения[\s\S]*?Загрузка архива[\s\S]*?Открытие витрины[\s\S]*?Переход в игру'
+    "step states are parsed and colored" = 'STEP_PATTERN[\s\S]*?выполнено[\s\S]*?пока не выполнено[\s\S]*?пока не проверено[\s\S]*?ошибка[\s\S]*?прервано[\s\S]*?setTextColor'
+    "report purpose remains explicit" = 'улучшения программы, исследований и публикации результатов[\s\S]*?Предоставление отчёта добровольно'
+    "report is read-only and selectable" = 'Текст отчёта доступен только для чтения[\s\S]*?setTextIsSelectable\(true\)'
+    "form opens separately in browser" = 'actionButton\("Открыть форму"[\s\S]*?openForm\(\)[\s\S]*?Intent\.ACTION_VIEW[\s\S]*?CATEGORY_BROWSABLE'
+    "report refreshes while open" = 'handler\.postDelayed[\s\S]*?refresh\(\)[\s\S]*?handler\.postDelayed\(this, 1000\)'
+}
+foreach ($entry in $compatibilityChecks.GetEnumerator()) {
+    if ($compatibilitySource -notmatch $entry.Value) { throw "Missing compatibility UI: $($entry.Key)" }
+}
+if ($compatibilitySource -match 'android\.webkit|addJavascriptInterface|loadUrl\(') {
+    throw "The compatibility report must not use WebView or a JavaScript bridge."
+}
+Write-Host "APK compatibility panel: $($compatibilityChecks.Count + 1) checks passed. Visual layout still requires a device test."
 
 if ($activity -notmatch '"Перепроверить файлы"\.equals\(item\)[\s\S]*?verifyInstalledSiteStats\(\)') { throw 'APK storage card must start a real file recount.' }
 if ($activity -notmatch 'verifyInstalledSiteStats\(\)[\s\S]*?summarizeInstalledSite\(root\)[\s\S]*?putLong\(PREF_STORAGE_VERIFIED_AT, now\)') { throw 'APK file recount must persist verified statistics.' }
