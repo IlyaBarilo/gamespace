@@ -1345,12 +1345,10 @@ public class MainActivity extends Activity {
             ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
-        AlertDialog dialog = new AlertDialog.Builder(this)
-            .setTitle("GameSpace APK " + getAppVersionName())
-            .setItems(items, new DialogInterface.OnClickListener() {
+        AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
+            isMenuTabEnabled(), menuTabItem, items, new AppMenuDialog.Listener() {
                 @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    String item = items[which];
+                public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
                     if ("Отчёт о совместимости".equals(item)) {
                         showCompatibilityReport();
@@ -1394,8 +1392,7 @@ public class MainActivity extends Activity {
                         confirmClearSite();
                     }
                 }
-            })
-            .create();
+            }).create();
         showHeldDialog(dialog);
     }
 

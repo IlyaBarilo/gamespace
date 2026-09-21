@@ -144,6 +144,26 @@ if ($appGradle -notmatch 'minSdk\s+23') {
 }
 Write-Host "Diagnostic wiring: $($checks.Count + 6) checks passed. Android UI still requires a device test."
 
+$menuSource = Get-Content -LiteralPath (Join-Path $sourceDirectory "AppMenuDialog.java") -Raw -Encoding UTF8
+$menuChecks = @{
+    "native menu contains no WebView" = 'deliberately contains no WebView or JavaScript bridge'
+    "full-screen dialog" = 'setLayout\(ViewGroup\.LayoutParams\.MATCH_PARENT, ViewGroup\.LayoutParams\.MATCH_PARENT\)'
+    "scrollable menu" = 'ScrollView scroll = new ScrollView\(activity\)'
+    "menu tab switch" = 'Switch setting = new Switch\(activity\)'
+    "archive actions section" = 'ЛОКАЛЬНЫЕ АРХИВЫ[\s\S]*?Быстро обновить из архива[\s\S]*?Полное обновление из архива'
+    "application section" = 'ПРИЛОЖЕНИЕ[\s\S]*?Обновление приложения[\s\S]*?Информация'
+    "diagnostics section" = 'ДИАГНОСТИКА[\s\S]*?Отчёт о совместимости[\s\S]*?Создать отчёт о проблеме[\s\S]*?Последняя ошибка'
+    "danger action is separate" = 'УДАЛЕНИЕ[\s\S]*?Очистить сайт'
+    "custom vector icons" = 'R\.drawable\.ic_menu_archive[\s\S]*?R\.drawable\.ic_menu_trash[\s\S]*?R\.drawable\.ic_menu_diagnostics'
+}
+foreach ($entry in $menuChecks.GetEnumerator()) {
+    if ($menuSource -notmatch $entry.Value) { throw "Missing native menu UI: $($entry.Key)" }
+}
+if ($menuSource -match 'android\.webkit|addJavascriptInterface|loadUrl\(') {
+    throw "The trusted APK menu must not use WebView or a JavaScript bridge."
+}
+Write-Host "APK settings panel: $($menuChecks.Count + 1) checks passed. Visual layout still requires a device test."
+
 # Update UI must remain informational and delegate APK handling to the browser.
 $dialogSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'AppUpdateDialog.java') -Raw -Encoding UTF8
 if ($manifest -match 'android.permission.REQUEST_INSTALL_PACKAGES|android.intent.action.INSTALL_PACKAGE|AppUpdateFileProvider') { throw 'APK must not request or expose an in-app installer.' }
