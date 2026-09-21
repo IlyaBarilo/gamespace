@@ -534,11 +534,22 @@ final class AppMenuDialog {
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         row.setOnClickListener(new View.OnClickListener() {
             @Override public void onClick(View view) {
-                if (dialog != null) dialog.dismiss();
+                if (!keepsMenuOpen(item) && dialog != null) dialog.dismiss();
                 listener.onAction(item);
             }
         });
         return row;
+    }
+
+    private boolean keepsMenuOpen(String item) {
+        return "Отчёт о совместимости".equals(item)
+            || "Обновление приложения".equals(item)
+            || "Информация".equals(item)
+            || item.startsWith("Среда запуска: ")
+            || "Статистика архива".equals(item)
+            || "Создать отчёт о проблеме".equals(item)
+            || "Последняя ошибка".equals(item)
+            || "Лицензии".equals(item);
     }
 
     private String actionTitle(String item) {

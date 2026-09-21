@@ -171,6 +171,7 @@ $menuChecks = @{
     "information table" = 'GridLayout grid = new GridLayout\(activity\)[\s\S]*?Архив[\s\S]*?Формат[\s\S]*?Файлы[\s\S]*?Размер сайта[\s\S]*?Последний режим'
     "separate archive statistics" = 'ПОСЛЕДНЯЯ ОБРАБОТКА[\s\S]*?diagnosticsState\.hasArchiveStatistics[\s\S]*?Статистика архива'
     "separate failure help" = 'ПОМОЩЬ ПРИ СБОЕ[\s\S]*?diagnosticsState\.hasLastError[\s\S]*?Последняя ошибка[\s\S]*?Создать отчёт о проблеме'
+    "informational panels return to the menu" = 'if \(!keepsMenuOpen\(item\) && dialog != null\) dialog\.dismiss\(\)[\s\S]*?keepsMenuOpen\(String item\)[\s\S]*?Отчёт о совместимости[\s\S]*?Обновление приложения[\s\S]*?Информация[\s\S]*?Среда запуска:[\s\S]*?Статистика архива[\s\S]*?Создать отчёт о проблеме[\s\S]*?Последняя ошибка[\s\S]*?Лицензии'
     "PWA-style branded header" = 'R\.mipmap\.ic_launcher[\s\S]*?НАСТРОЙКИ · ЛОКАЛЬНОЕ ПРИЛОЖЕНИЕ[\s\S]*?text\("GameSpace", compact \? 30 : 34[\s\S]*?text\(version, compact \? 13 : 15[\s\S]*?siteState\.archiveName \+ " · " \+ siteState\.siteSize'
     "PWA-width responsive surface" = 'widthDp <= 620f \? 11 : 20[\s\S]*?dp\(1040\)'
     "status line shows operation snapshot" = 'statusLine\(\)[\s\S]*?diagnosticsState\.operationTitle \+ "\. " \+ diagnosticsState\.operationDetails'
