@@ -155,6 +155,8 @@ $menuChecks = @{
     "diagnostics section" = 'ДИАГНОСТИКА[\s\S]*?Отчёт о совместимости[\s\S]*?Создать отчёт о проблеме[\s\S]*?Последняя ошибка'
     "danger action is separate" = 'УДАЛЕНИЕ[\s\S]*?Очистить сайт'
     "custom vector icons" = 'R\.drawable\.ic_menu_archive[\s\S]*?R\.drawable\.ic_menu_trash[\s\S]*?R\.drawable\.ic_menu_diagnostics'
+    "storage card uses filesystem values" = 'Память приложения[\s\S]*?siteState\.siteSize[\s\S]*?siteState\.usedSpace[\s\S]*?siteState\.freeSpace[\s\S]*?siteState\.totalSpace'
+    "storage ring has an accessible percentage" = 'class StorageRingView[\s\S]*?"Занято " \+ percent \+ " процентов раздела"'
 }
 foreach ($entry in $menuChecks.GetEnumerator()) {
     if ($menuSource -notmatch $entry.Value) { throw "Missing native menu UI: $($entry.Key)" }
@@ -163,6 +165,10 @@ if ($menuSource -match 'android\.webkit|addJavascriptInterface|loadUrl\(') {
     throw "The trusted APK menu must not use WebView or a JavaScript bridge."
 }
 Write-Host "APK settings panel: $($menuChecks.Count + 1) checks passed. Visual layout still requires a device test."
+
+if ($activity -notmatch '"Перепроверить файлы"\.equals\(item\)[\s\S]*?verifyInstalledSiteStats\(\)') { throw 'APK storage card must start a real file recount.' }
+if ($activity -notmatch 'verifyInstalledSiteStats\(\)[\s\S]*?summarizeInstalledSite\(root\)[\s\S]*?putLong\(PREF_STORAGE_VERIFIED_AT, now\)') { throw 'APK file recount must persist verified statistics.' }
+Write-Host 'APK storage card: 2 checks passed. Large directory recount still requires a device test.'
 
 # Update UI must remain informational and delegate APK handling to the browser.
 $dialogSource = Get-Content -LiteralPath (Join-Path $sourceDirectory 'AppUpdateDialog.java') -Raw -Encoding UTF8

@@ -4,7 +4,10 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
@@ -46,11 +49,12 @@ final class AppMenuDialog {
     private final boolean menuTabEnabled;
     private final String menuTabItem;
     private final String[] items;
+    private final SiteState siteState;
     private final Listener listener;
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, String[] items, Listener listener) {
+            boolean menuTabEnabled, String menuTabItem, String[] items, SiteState siteState, Listener listener) {
         this.activity = activity;
         this.version = version;
         this.installed = installed;
@@ -58,6 +62,7 @@ final class AppMenuDialog {
         this.menuTabEnabled = menuTabEnabled;
         this.menuTabItem = menuTabItem;
         this.items = items;
+        this.siteState = siteState;
         this.listener = listener;
     }
 
@@ -90,6 +95,7 @@ final class AppMenuDialog {
 
         content.addView(statusCard(), cardParams());
         if (!busy) content.addView(viewerCard(), cardParams());
+        if (!busy) content.addView(storageCard(), cardParams());
         addSection(content, "ЛОКАЛЬНЫЕ АРХИВЫ", "Сайт и обновления", new String[] {
             "Выбрать архив", "Быстро обновить из архива", "Полное обновление из архива",
             "Загрузить встроенный демо-сайт", "Перезагрузить сайт"
@@ -196,6 +202,55 @@ final class AppMenuDialog {
         }
     }
 
+    private View storageCard() {
+        LinearLayout card = card("ХРАНИЛИЩЕ", "Память приложения");
+        LinearLayout summary = new LinearLayout(activity);
+        summary.setOrientation(LinearLayout.HORIZONTAL);
+        summary.setGravity(Gravity.CENTER_VERTICAL);
+        summary.setPadding(0, dp(12), 0, 0);
+
+        StorageRingView ring = new StorageRingView(activity, siteState.usedPercent);
+        summary.addView(ring, new LinearLayout.LayoutParams(dp(88), dp(88)));
+
+        LinearLayout details = new LinearLayout(activity);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(14), 0, 0, 0);
+        details.addView(text("Сайт GameSpace: " + siteState.siteSize, 15, TEXT, true));
+        details.addView(text(siteState.fileCount, 13, MUTED, false));
+        details.addView(text("Занято в разделе: " + siteState.usedSpace, 13, MUTED, false));
+        details.addView(text("Свободно: " + siteState.freeSpace, 13, MUTED, false));
+        details.addView(text("Раздел: " + siteState.totalSpace, 13, MUTED, false));
+        summary.addView(details, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        card.addView(summary);
+
+        TextView location = text(siteState.storageLabel, 13, ACCENT, true);
+        location.setPadding(0, dp(12), 0, 0);
+        card.addView(location);
+        if (installed) {
+            card.addView(storageLine("Архив", siteState.archiveName));
+            card.addView(storageLine("Дата операции", siteState.installedAt));
+            card.addView(storageLine("Проверка файлов", siteState.verifiedAt));
+        }
+        TextView retention = text("Файлы находятся в каталоге приложения и удаляются при очистке данных или удалении APK.", 12, MUTED, false);
+        retention.setPadding(0, dp(11), 0, 0);
+        card.addView(retention);
+
+        String verify = findItem("Перепроверить файлы");
+        if (verify != null) {
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMargins(0, dp(12), 0, 0);
+            card.addView(action(verify), params);
+        }
+        return card;
+    }
+
+    private TextView storageLine(String label, String value) {
+        TextView line = text(label + ": " + value, 13, MUTED, false);
+        line.setPadding(0, dp(5), 0, 0);
+        return line;
+    }
+
     private void addSection(LinearLayout content, String kicker, String title, String[] accepted) {
         LinearLayout section = card(kicker, title);
         int added = 0;
@@ -267,6 +322,7 @@ final class AppMenuDialog {
         if ("Полное обновление из архива".equals(item)) return "Проверить и полностью заменить локальный сайт";
         if ("Загрузить встроенный демо-сайт".equals(item)) return "Заменить текущий сайт встроенным демонстрационным архивом";
         if ("Перезагрузить сайт".equals(item)) return "Заново открыть установленную витрину";
+        if ("Перепроверить файлы".equals(item)) return "Заново посчитать размер и количество файлов сайта";
         if ("Обновление приложения".equals(item)) return "Проверить официальный выпуск и открыть его в браузере";
         if ("Информация".equals(item)) return "Версия APK и сведения об установленном сайте";
         if (item.startsWith("Среда запуска: ")) return item.substring("Среда запуска: ".length());
@@ -363,5 +419,62 @@ final class AppMenuDialog {
 
     private int dp(int value) {
         return Math.round(value * activity.getResources().getDisplayMetrics().density);
+    }
+
+    static final class SiteState {
+        final String archiveName, siteSize, fileCount, storageLabel, usedSpace, freeSpace, totalSpace, installedAt, verifiedAt;
+        final int usedPercent;
+
+        SiteState(String archiveName, String siteSize, String fileCount, String storageLabel,
+                String usedSpace, String freeSpace, String totalSpace, String installedAt, String verifiedAt, int usedPercent) {
+            this.archiveName = archiveName;
+            this.siteSize = siteSize;
+            this.fileCount = fileCount;
+            this.storageLabel = storageLabel;
+            this.usedSpace = usedSpace;
+            this.freeSpace = freeSpace;
+            this.totalSpace = totalSpace;
+            this.installedAt = installedAt;
+            this.verifiedAt = verifiedAt;
+            this.usedPercent = usedPercent;
+        }
+    }
+
+    private static final class StorageRingView extends View {
+        private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int percent;
+        private final float density;
+
+        StorageRingView(Activity activity, int percent) {
+            super(activity);
+            this.percent = percent;
+            density = activity.getResources().getDisplayMetrics().density;
+            track.setStyle(Paint.Style.STROKE);
+            track.setStrokeWidth(8f * density);
+            track.setStrokeCap(Paint.Cap.ROUND);
+            track.setColor(Color.rgb(29, 67, 101));
+            fill.setStyle(Paint.Style.STROKE);
+            fill.setStrokeWidth(8f * density);
+            fill.setStrokeCap(Paint.Cap.ROUND);
+            fill.setColor(ACCENT);
+            label.setColor(TEXT);
+            label.setTextAlign(Paint.Align.CENTER);
+            label.setTextSize(17f * density);
+            label.setTypeface(Typeface.DEFAULT_BOLD);
+            setContentDescription(percent < 0 ? "Занятое место неизвестно" : "Занято " + percent + " процентов раздела");
+        }
+
+        @Override protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            float inset = 8f * density;
+            RectF bounds = new RectF(inset, inset, getWidth() - inset, getHeight() - inset);
+            canvas.drawArc(bounds, -90f, 360f, false, track);
+            if (percent >= 0) canvas.drawArc(bounds, -90f, percent * 3.6f, false, fill);
+            Paint.FontMetrics metrics = label.getFontMetrics();
+            float baseline = getHeight() / 2f - (metrics.ascent + metrics.descent) / 2f;
+            canvas.drawText(percent < 0 ? "—" : percent + "%", getWidth() / 2f, baseline, label);
+        }
     }
 }

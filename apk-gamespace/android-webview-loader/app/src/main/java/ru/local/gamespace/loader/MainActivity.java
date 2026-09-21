@@ -22,6 +22,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.provider.OpenableColumns;
@@ -101,6 +102,7 @@ public class MainActivity extends Activity {
     private static final String PREF_LAST_EXTRACT_DURATION_MS = "last_extract_duration_ms";
     private static final String PREF_LAST_OPERATION_WRITTEN_BYTES = "last_operation_written_bytes";
     private static final String PREF_LAST_OPERATION_WRITTEN_FILES = "last_operation_written_files";
+    private static final String PREF_STORAGE_VERIFIED_AT = "storage_verified_at";
     private static final String STORAGE_DIR_NAME = "gamespace-loader";
     private static final String EXTRACT_DIR_NAME = SiteTransactionManager.ACTIVE_DIRECTORY_NAME;
     private static final int BUFFER_SIZE = 1024 * 256;
@@ -1282,7 +1284,12 @@ public class MainActivity extends Activity {
         if (!busy || !operationCancelable || operationCancellationRequested) return;
         operationCancellationRequested = true;
         if (cancelOperationButton != null) cancelOperationButton.setEnabled(false);
-        if (progressDetails != null) progressDetails.setText("Отменяю операцию и восстанавливаю прежнее состояние…");
+        if (progressDetails != null) {
+            boolean fileCheck = progressTitle != null && "Проверка файлов".contentEquals(progressTitle.getText());
+            progressDetails.setText(fileCheck
+                ? "Отменяю проверку. Сохранённые сведения останутся без изменений…"
+                : "Отменяю операцию и восстанавливаю прежнее состояние…");
+        }
         if (diagnosticJournal != null) diagnosticJournal.checkpoint("CANCEL", "Пользователь запросил отмену операции");
     }
 
@@ -1342,11 +1349,11 @@ public class MainActivity extends Activity {
         final String menuTabItem = "Вкладка ••• после скрытия: " + (isMenuTabEnabled() ? "включена" : "выключена");
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
             : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, items, new AppMenuDialog.Listener() {
+            isMenuTabEnabled(), menuTabItem, items, buildAppMenuSiteState(installed), new AppMenuDialog.Listener() {
                 @Override
                 public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);
@@ -1369,6 +1376,8 @@ public class MainActivity extends Activity {
                         openZipPicker();
                     } else if ("Перезагрузить сайт".equals(item)) {
                         reloadSite();
+                    } else if ("Перепроверить файлы".equals(item)) {
+                        verifyInstalledSiteStats();
                     } else if (menuTabItem.equals(item)) {
                         boolean enabled = !isMenuTabEnabled();
                         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_SHOW_MENU_TAB, enabled).apply();
@@ -1394,6 +1403,104 @@ public class MainActivity extends Activity {
                 }
             }).create();
         showHeldDialog(dialog);
+    }
+
+    private AppMenuDialog.SiteState buildAppMenuSiteState(boolean installed) {
+        SharedPreferences prefs = getPrefs();
+        File base = chooseStorageBaseForInstall();
+        File space = base.exists() ? base : base.getParentFile();
+        long total = space == null ? -1L : space.getTotalSpace();
+        long free = space == null ? -1L : space.getUsableSpace();
+        int usedPercent = total > 0L && free >= 0L
+            ? (int) Math.max(0L, Math.min(100L, Math.round((total - free) * 100.0 / total)))
+            : -1;
+        long siteBytes = installed ? prefs.getLong(PREF_EXTRACTED_BYTES, -1L) : 0L;
+        int siteFiles = installed ? prefs.getInt(PREF_EXTRACTED_FILES, -1) : 0;
+        String archive = prefs.getString(PREF_ARCHIVE_NAME, "");
+        long installedAt = prefs.getLong(PREF_INSTALLED_AT, 0L);
+        long verifiedAt = prefs.getLong(PREF_STORAGE_VERIFIED_AT, 0L);
+        return new AppMenuDialog.SiteState(
+            archive == null || archive.length() == 0 ? "не указан" : archive,
+            siteBytes < 0L ? "не определён" : formatBytes(siteBytes),
+            siteFiles < 0 ? "Количество файлов не определено" : siteFiles + " файлов",
+            describeStorageLocation(base),
+            total > 0L && free >= 0L ? formatBytes(Math.max(0L, total - free)) : "неизвестно",
+            formatBytes(free), formatBytes(total),
+            installedAt > 0L ? formatTimestamp(installedAt) : "не указана",
+            verifiedAt > 0L ? formatTimestamp(verifiedAt) : "при следующей проверке",
+            usedPercent);
+    }
+
+    private String describeStorageLocation(File base) {
+        try {
+            String path = base.getCanonicalPath();
+            String internal = withTrailingSeparator(getFilesDir().getCanonicalPath());
+            if (path.equals(getFilesDir().getCanonicalPath()) || path.startsWith(internal)) {
+                return "Внутренняя память приложения";
+            }
+            if (Build.VERSION.SDK_INT >= 21 && Environment.isExternalStorageRemovable(base)) {
+                return "Съёмное хранилище приложения";
+            }
+            return "Хранилище устройства · каталог приложения";
+        } catch (IOException | RuntimeException error) {
+            return "Каталог приложения";
+        }
+    }
+
+    private void verifyInstalledSiteStats() {
+        if (busy || currentIndexFile == null || !currentIndexFile.isFile()) return;
+        busy = true;
+        operationCancelable = true;
+        operationCancellationRequested = false;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        showProgress("Проверка файлов", "Считаю размер и количество файлов установленного сайта…");
+        if (diagnosticJournal != null) diagnosticJournal.begin("проверка файлов сайта");
+
+        Thread worker = new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    SharedPreferences prefs = getPrefs();
+                    String basePath = prefs.getString(PREF_BASE_PATH, "");
+                    File root = basePath == null || basePath.length() == 0
+                        ? currentContentRoot : new File(new File(basePath), EXTRACT_DIR_NAME);
+                    SiteStats stats = summarizeInstalledSite(root);
+                    ensureOperationNotCancelled();
+                    long now = System.currentTimeMillis();
+                    boolean saved = prefs.edit()
+                        .putLong(PREF_EXTRACTED_BYTES, stats.bytes)
+                        .putInt(PREF_EXTRACTED_FILES, stats.files)
+                        .putLong(PREF_STORAGE_VERIFIED_AT, now)
+                        .commit();
+                    if (!saved) throw new IOException("Не удалось сохранить результаты проверки файлов.");
+                    final String message = "Проверено: " + stats.files + " файлов, " + formatBytes(stats.bytes) + ".";
+                    mainHandler.post(new Runnable() {
+                        @Override public void run() {
+                            loadInstalledSiteOrPrompt();
+                            Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } catch (OperationCancelledException cancelled) {
+                    mainHandler.post(new Runnable() {
+                        @Override public void run() {
+                            loadInstalledSiteOrPrompt();
+                            Toast.makeText(MainActivity.this, "Проверка файлов отменена. Сохранённые сведения не изменены.", Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } catch (final Exception error) {
+                    final String report = saveLastErrorReport(buildRuntimeReport("SITE-VERIFY", error,
+                        "Проверка файлов установленного сайта не завершена. Сохранённые сведения не изменены."));
+                    mainHandler.post(new Runnable() {
+                        @Override public void run() {
+                            loadInstalledSiteOrPrompt();
+                            showErrorDialog("Ошибка проверки файлов", report);
+                        }
+                    });
+                } finally {
+                    finishBusy();
+                }
+            }
+        }, "site-statistics-verify");
+        worker.start();
     }
 
     private void openZipPicker() {
@@ -3327,7 +3434,8 @@ public class MainActivity extends Activity {
             .putInt(PREF_EXTRACTED_FILES, extractedFiles)
             .putInt(PREF_SKIPPED_FILES, skippedFiles)
             .putLong(PREF_LAST_OPERATION_WRITTEN_BYTES, operationWrittenBytes)
-            .putInt(PREF_LAST_OPERATION_WRITTEN_FILES, operationWrittenFiles);
+            .putInt(PREF_LAST_OPERATION_WRITTEN_FILES, operationWrittenFiles)
+            .putLong(PREF_STORAGE_VERIFIED_AT, System.currentTimeMillis());
 
         if (updateMode != null && updateMode.length() > 0) {
             editor
