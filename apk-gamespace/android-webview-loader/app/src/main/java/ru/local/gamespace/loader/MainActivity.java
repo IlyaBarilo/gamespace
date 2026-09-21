@@ -118,6 +118,7 @@ public class MainActivity extends Activity {
     private static final int ARCHIVE_ZIP = 1;
     private static final int ARCHIVE_7Z = 2;
     private static final String BUILTIN_DEMO_ASSET_NAME = "demo.7z";
+    private static final String PWA_URL = "https://ilyabarilo.github.io/gamespace/";
     private static final String HOME_PAGE_PAUSE_JS = "(function(){try{window.dispatchEvent(new Event('gamespace:pause'));var list=[];var media=document.querySelectorAll('audio,video');for(var i=0;i<media.length;i++){var m=media[i];if(m&&!m.paused&&!m.ended){list.push(i);try{m.pause();}catch(e){}}}window.__gamespacePausedMedia=list;if(window.Howler&&window.Howler.ctx&&window.Howler.ctx.state==='running'&&window.Howler.ctx.suspend){window.__gamespaceResumeHowler=true;window.Howler.ctx.suspend();}var toneCtx=window.Tone&&window.Tone.context&&(window.Tone.context.rawContext||window.Tone.context);if(toneCtx&&toneCtx.state==='running'&&toneCtx.suspend){window.__gamespaceResumeTone=true;toneCtx.suspend();}}catch(e){}})();";
     private static final String HOME_PAGE_RESUME_JS = "(function(){try{window.dispatchEvent(new Event('gamespace:resume'));var media=document.querySelectorAll('audio,video');var list=window.__gamespacePausedMedia||[];for(var i=0;i<list.length;i++){var m=media[list[i]];if(m){try{var p=m.play();if(p&&p.catch){p.catch(function(){});}}catch(e){}}}window.__gamespacePausedMedia=[];if(window.__gamespaceResumeHowler&&window.Howler&&window.Howler.ctx&&window.Howler.ctx.resume){window.__gamespaceResumeHowler=false;window.Howler.ctx.resume();}var toneCtx=window.Tone&&window.Tone.context&&(window.Tone.context.rawContext||window.Tone.context);if(window.__gamespaceResumeTone&&toneCtx&&toneCtx.resume){window.__gamespaceResumeTone=false;toneCtx.resume();}}catch(e){}})();";
     private static final String BUILTIN_DEMO_ARCHIVE_NAME = "Встроенный демо-сайт (demo.7z)";
@@ -1349,8 +1350,8 @@ public class MainActivity extends Activity {
         final String menuTabItem = "Вкладка ••• после скрытия: " + (isMenuTabEnabled() ? "включена" : "выключена");
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : installed
-            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
-            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
+            ? new String[] {"Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
+            : new String[] {"Выбрать архив", "Загрузить встроенный демо-сайт", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии"};
 
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
 
@@ -1390,6 +1391,8 @@ public class MainActivity extends Activity {
                             Toast.LENGTH_SHORT).show();
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
+                    } else if ("Открыть PWA-версию".equals(item)) {
+                        openPwaSite();
                     } else if (runtimeEnvironmentItem.equals(item)) {
                         showRuntimeEnvironmentDialog();
                     } else if ("Статистика архива".equals(item)) {
@@ -1406,6 +1409,16 @@ public class MainActivity extends Activity {
                 }
             }).create();
         showHeldDialog(dialog);
+    }
+
+    private void openPwaSite() {
+        try {
+            Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(PWA_URL));
+            browser.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(browser);
+        } catch (RuntimeException unavailable) {
+            Toast.makeText(this, "Не удалось открыть PWA в браузере.", Toast.LENGTH_LONG).show();
+        }
     }
 
     private AppMenuDialog.SiteState buildAppMenuSiteState(boolean installed) {

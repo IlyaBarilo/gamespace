@@ -1114,6 +1114,28 @@ a:focus-visible {
   gap: 10px;
 }
 
+.alternative-app-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  gap: 28px;
+  align-items: center;
+  border-color: rgba(118, 212, 255, 0.28);
+}
+
+.alternative-app-copy p:not(.section-kicker) {
+  max-width: 650px;
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.alternative-app-button {
+  margin: 0;
+  font: inherit;
+  text-decoration: none;
+}
+
 .version-secondary-button,
 .recovery-link {
   border: 1px solid rgba(123, 190, 244, 0.45);
@@ -1810,6 +1832,11 @@ body.is-viewing-site {
   }
 
   .pwa-update-panel {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .alternative-app-panel {
     grid-template-columns: 1fr;
     gap: 18px;
   }

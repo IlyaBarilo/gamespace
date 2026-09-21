@@ -106,6 +106,7 @@ final class AppMenuDialog {
             "Загрузить встроенный демо-сайт", "Перезагрузить сайт"
         });
         if (!busy) content.addView(applicationCard(), cardParams());
+        if (!busy) content.addView(alternativeAppCard(), cardParams());
         if (!busy) content.addView(environmentCard(), cardParams());
         content.addView(diagnosticsCard(), cardParams());
         addSection(content, "О ПРИЛОЖЕНИИ", "Документы", new String[] {"Лицензии"});
@@ -214,6 +215,15 @@ final class AppMenuDialog {
         network.setPadding(0, dp(10), 0, 0);
         card.addView(network);
         addCardActions(card, new String[] {"Обновление приложения", "Информация"});
+        return card;
+    }
+
+    private View alternativeAppCard() {
+        LinearLayout card = card("ДРУГАЯ ВЕРСИЯ", "GameSpace PWA");
+        TextView description = text("APK и PWA можно установить одновременно. Их локальные сайты, настройки и сохранения игр не переносятся автоматически.", 13, MUTED, false);
+        description.setPadding(0, dp(8), 0, 0);
+        card.addView(description);
+        addCardActions(card, new String[] {"Открыть PWA-версию"});
         return card;
     }
 
@@ -403,6 +413,7 @@ final class AppMenuDialog {
         if ("Перепроверить файлы".equals(item)) return "Заново посчитать размер и количество файлов сайта";
         if ("Обновление приложения".equals(item)) return "Проверить официальный выпуск и открыть его в браузере";
         if ("Информация".equals(item)) return "Версия APK и сведения об установленном сайте";
+        if ("Открыть PWA-версию".equals(item)) return "Открыть официальный сайт PWA во внешнем браузере";
         if (item.startsWith("Среда запуска: ")) return "Открыть сведения о WebView и историю изменений";
         if ("Статистика архива".equals(item)) return "Последняя установка или локальное обновление";
         if ("Отчёт о совместимости".equals(item)) return "Базовая проверка работы на этом устройстве";
@@ -419,6 +430,7 @@ final class AppMenuDialog {
         if (item.contains("демо")) return R.drawable.ic_menu_play;
         if ("Перезагрузить сайт".equals(item)) return R.drawable.ic_menu_reload;
         if ("Обновление приложения".equals(item)) return R.drawable.ic_menu_update;
+        if ("Открыть PWA-версию".equals(item)) return R.drawable.ic_menu_external;
         if ("Информация".equals(item) || item.startsWith("Среда запуска: ")) return R.drawable.ic_menu_info;
         if ("Лицензии".equals(item)) return R.drawable.ic_menu_document;
         if ("Очистить сайт".equals(item)) return R.drawable.ic_menu_trash;
