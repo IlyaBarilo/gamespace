@@ -41,6 +41,8 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
@@ -142,8 +144,8 @@ public class MainActivity extends Activity {
     private TextView emptyDetails;
     private TextView progressTitle;
     private TextView progressDetails;
-    private Button backButton;
-    private Button menuButton;
+    private ImageButton backButton;
+    private ImageButton menuButton;
     private Button menuTabButton;
     private Button chooseButton;
     private Button demoButton;
@@ -510,9 +512,7 @@ public class MainActivity extends Activity {
         button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setIncludeFontPadding(false);
         button.setPadding(0, 0, 0, 0);
-        button.setMinWidth(0);
         button.setMinimumWidth(0);
-        button.setMinHeight(0);
         button.setMinimumHeight(0);
         GradientDrawable background = new GradientDrawable();
         background.setColor(Color.argb(220, 31, 38, 45));
@@ -531,17 +531,15 @@ public class MainActivity extends Activity {
         return button;
     }
 
-    private Button createToolbarIconButton(int iconResource, String description) {
-        Button button = new Button(this);
+    private ImageButton createToolbarIconButton(int iconResource, String description) {
+        ImageButton button = new ImageButton(this);
         button.setContentDescription(description);
-        button.setPadding(0, 0, 0, 0);
-        button.setMinWidth(0);
+        button.setImageResource(iconResource);
+        button.setScaleType(ImageView.ScaleType.CENTER);
+        button.setPadding(dp(9), dp(9), dp(9), dp(9));
         button.setMinimumWidth(0);
-        button.setMinHeight(0);
         button.setMinimumHeight(0);
-        button.setGravity(Gravity.CENTER);
-        button.setCompoundDrawablesWithIntrinsicBounds(iconResource, 0, 0, 0);
-        button.setCompoundDrawableTintList(new ColorStateList(
+        button.setImageTintList(new ColorStateList(
             new int[][] {
                 new int[] {-android.R.attr.state_enabled},
                 new int[] {}
