@@ -169,6 +169,11 @@ final class AppMenuDialog {
         copy.addView(summary);
         row.addView(copy, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
+        ImageButton close = closeButton();
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(42), dp(42));
+        closeParams.setMargins(dp(8), 0, 0, 0);
+        row.addView(close, closeParams);
+
         return row;
     }
 
@@ -192,10 +197,6 @@ final class AppMenuDialog {
                 : "Приложение готово к импорту";
         line.addView(text(value, 12, MUTED, false), new LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        ImageButton close = closeButton();
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(34), dp(34));
-        closeParams.setMargins(dp(8), 0, 0, 0);
-        line.addView(close, closeParams);
         return line;
     }
 
@@ -203,7 +204,7 @@ final class AppMenuDialog {
         ImageButton close = new ImageButton(activity);
         close.setImageResource(R.drawable.ic_menu_close);
         close.setImageTintList(ColorStateList.valueOf(TEXT));
-        close.setContentDescription("Закрыть меню");
+        close.setContentDescription("Закрыть меню и вернуться в GameSpace");
         close.setPadding(dp(8), dp(8), dp(8), dp(8));
         close.setBackground(round(CARD, BORDER, 11));
         close.setOnClickListener(new View.OnClickListener() {
