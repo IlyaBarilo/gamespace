@@ -105,6 +105,9 @@ $checks = @{
     "settings use cached update result" = 'appUpdateDialog\.menuStatus\(\)'
     "settings receive app and environment details" = 'new AppMenuDialog\.AppState\([\s\S]*?app_build_date[\s\S]*?app_min_android[\s\S]*?getDeviceModelText\(\)[\s\S]*?getWebViewEnvironmentText\(false\)'
     "settings receive diagnostic state" = 'buildAppMenuDiagnosticsState\(\)[\s\S]*?compatibilityCheck\.menuStatus\(\)[\s\S]*?readLastErrorReport\(\)\.length\(\) > 0[\s\S]*?hasArchiveStatistics\(\)'
+    "missing site opens the new menu" = 'loadInstalledSiteOrPrompt\(\)[\s\S]*?GameSpace готов к установке[\s\S]*?showMenuWhenIdle = true[\s\S]*?showAppMenu\(\)'
+    "deferred menu opens after local operation" = 'finishBusy\(\)[\s\S]*?showMenuWhenIdle && currentIndexFile == null[\s\S]*?showAppMenu\(\)'
+    "recovery failure blocks installation menu" = 'Требуется восстановление сайта[\s\S]*?emptyMenuButton\.setVisibility\(View\.GONE\)|emptyMenuButton\.setVisibility\(View\.GONE\)[\s\S]*?Требуется восстановление сайта'
     "busy settings use visible operation progress" = 'viewText\(progressTitle, "Локальная операция"\)[\s\S]*?viewText\(progressDetails, "Операция продолжается…"\)'
     "internet purpose is accurate" = 'Интернет используется только при ручной проверке обновлений приложения\.'
     "menu tab disabled by default" = 'getBoolean\(PREF_SHOW_MENU_TAB, false\)'
@@ -141,6 +144,18 @@ if ($activity -match 'Build\.SERIAL|Build\.getSerial|ANDROID_ID') {
 }
 if ($activity -match 'addJavascriptInterface\(') {
     throw "Imported pages must not receive a native JavaScript bridge."
+}
+$emptyPanelStart = $activity.IndexOf('private LinearLayout createEmptyPanel()')
+$progressPanelStart = $activity.IndexOf('private LinearLayout createProgressPanel()')
+if ($emptyPanelStart -lt 0 -or $progressPanelStart -le $emptyPanelStart) {
+    throw "The empty APK surface could not be inspected."
+}
+$emptyPanelSource = $activity.Substring($emptyPanelStart, $progressPanelStart - $emptyPanelStart)
+if ($emptyPanelSource -notmatch 'Color\.rgb\(2, 9, 22\)[\s\S]*?Открыть меню[\s\S]*?showAppMenu\(\)') {
+    throw "The empty APK surface must use the new dark menu entry point."
+}
+if ($emptyPanelSource -match 'openZipPicker|confirmInstallBuiltinDemoSite|Отчёт о совместимости') {
+    throw "The empty APK surface must not duplicate actions from the new menu."
 }
 $manifest = Get-Content -LiteralPath (Join-Path $apkRoot "android-webview-loader\app\src\main\AndroidManifest.xml") -Raw -Encoding UTF8
 if ($manifest -notmatch 'android:enableOnBackInvokedCallback="true"') {

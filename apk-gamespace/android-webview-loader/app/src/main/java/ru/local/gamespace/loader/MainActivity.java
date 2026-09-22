@@ -147,13 +147,13 @@ public class MainActivity extends Activity {
     private ImageButton backButton;
     private ImageButton menuButton;
     private Button menuTabButton;
-    private Button chooseButton;
-    private Button demoButton;
+    private Button emptyMenuButton;
     private Button cancelOperationButton;
 
     private volatile boolean busy;
     private volatile boolean operationCancelable;
     private volatile boolean operationCancellationRequested;
+    private boolean showMenuWhenIdle;
     private volatile String lastErrorReport;
     // Process-scoped: Activity recreation must not masquerade as a terminated operation.
     private static DiagnosticJournal diagnosticJournal;
@@ -289,6 +289,7 @@ public class MainActivity extends Activity {
                             hideSiteWebViews();
                             progressPanel.setVisibility(View.GONE);
                             emptyPanel.setVisibility(View.VISIBLE);
+                            emptyMenuButton.setVisibility(View.GONE);
                             emptyTitle.setText("Требуется восстановление сайта");
                             emptyDetails.setText("Автоматический откат не завершён. Не запускайте новую установку до устранения ошибки.");
                             showErrorDialog("Ошибка восстановления сайта", report);
@@ -598,11 +599,11 @@ public class MainActivity extends Activity {
         outer.setOrientation(LinearLayout.VERTICAL);
         outer.setGravity(Gravity.CENTER);
         outer.setPadding(dp(24), dp(24), dp(24), dp(24));
-        outer.setBackgroundColor(Color.WHITE);
+        outer.setBackgroundColor(Color.rgb(2, 9, 22));
 
         emptyTitle = new TextView(this);
-        emptyTitle.setTextColor(Color.rgb(22, 28, 33));
-        emptyTitle.setTextSize(22);
+        emptyTitle.setTextColor(Color.rgb(230, 244, 255));
+        emptyTitle.setTextSize(24);
         emptyTitle.setTypeface(Typeface.DEFAULT_BOLD);
         emptyTitle.setGravity(Gravity.CENTER);
         outer.addView(emptyTitle, new LinearLayout.LayoutParams(
@@ -611,8 +612,8 @@ public class MainActivity extends Activity {
         ));
 
         emptyDetails = new TextView(this);
-        emptyDetails.setTextColor(Color.rgb(75, 84, 92));
-        emptyDetails.setTextSize(15);
+        emptyDetails.setTextColor(Color.rgb(168, 199, 224));
+        emptyDetails.setTextSize(14);
         emptyDetails.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams detailsParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -621,43 +622,20 @@ public class MainActivity extends Activity {
         detailsParams.setMargins(0, dp(12), 0, dp(20));
         outer.addView(emptyDetails, detailsParams);
 
-        chooseButton = new Button(this);
-        chooseButton.setText("Выбрать архив");
-        chooseButton.setAllCaps(false);
-        chooseButton.setOnClickListener(new View.OnClickListener() {
+        emptyMenuButton = new Button(this);
+        emptyMenuButton.setText("Открыть меню");
+        emptyMenuButton.setTextColor(Color.rgb(230, 244, 255));
+        emptyMenuButton.setTextSize(15);
+        emptyMenuButton.setTypeface(Typeface.DEFAULT_BOLD);
+        emptyMenuButton.setAllCaps(false);
+        emptyMenuButton.setBackground(createToolbarButtonBackground());
+        emptyMenuButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                openZipPicker();
+                showAppMenu();
             }
         });
-        outer.addView(chooseButton, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(48)
-        ));
-
-        demoButton = new Button(this);
-        demoButton.setText("Загрузить встроенный демо-сайт");
-        demoButton.setAllCaps(false);
-        demoButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                confirmInstallBuiltinDemoSite();
-            }
-        });
-        LinearLayout.LayoutParams demoParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            dp(48)
-        );
-        demoParams.setMargins(0, dp(10), 0, 0);
-        outer.addView(demoButton, demoParams);
-
-        Button compatibilityButton = new Button(this);
-        compatibilityButton.setText("Отчёт о совместимости");
-        compatibilityButton.setAllCaps(false);
-        compatibilityButton.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) { showCompatibilityReport(); }
-        });
-        outer.addView(compatibilityButton, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        outer.addView(emptyMenuButton, new LinearLayout.LayoutParams(dp(240), dp(52)));
 
         return outer;
     }
@@ -1092,10 +1070,17 @@ public class MainActivity extends Activity {
         hideSiteWebViews();
         progressPanel.setVisibility(View.GONE);
         emptyPanel.setVisibility(View.VISIBLE);
-        emptyTitle.setText("Сайт не установлен");
-        emptyDetails.setText("Выберите ZIP/7z-архив с сайтом или загрузите встроенный демо-сайт для проверки приложения.\n\nДемо-сайт распакуется во внутренний каталог приложения и запустится без интернета. Позже его можно заменить своим архивом через настройки.");
+        emptyMenuButton.setVisibility(View.VISIBLE);
+        emptyTitle.setText("GameSpace готов к установке");
+        emptyDetails.setText("Откройте меню, чтобы установить встроенный демо-сайт или выбрать основной архив на устройстве.");
         showTopBarPersistent();
         updateSystemBackCallbackRegistration();
+        if (busy) {
+            showMenuWhenIdle = true;
+        } else {
+            showMenuWhenIdle = false;
+            showAppMenu();
+        }
     }
 
     private File findInstalledIndex() {
@@ -1133,6 +1118,7 @@ public class MainActivity extends Activity {
     }
 
     private void loadSite(File indexFile) {
+        showMenuWhenIdle = false;
         if (compatibilityCheck != null) compatibilityCheck.reconcileContent(compatibilityContentKey());
         currentIndexFile = indexFile;
         currentContentRoot = indexFile.getParentFile();
@@ -1259,10 +1245,6 @@ public class MainActivity extends Activity {
                 cancelOperationButton.setVisibility(operationCancelable ? View.VISIBLE : View.GONE);
                 cancelOperationButton.setEnabled(operationCancelable && !operationCancellationRequested);
                 menuButton.setEnabled(true);
-                chooseButton.setEnabled(false);
-                if (demoButton != null) {
-                    demoButton.setEnabled(false);
-                }
                 showTopBarPersistent();
                 updateSystemBackCallbackRegistration();
             }
@@ -1327,10 +1309,6 @@ public class MainActivity extends Activity {
             public void run() {
                 getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 menuButton.setEnabled(true);
-                chooseButton.setEnabled(true);
-                if (demoButton != null) {
-                    demoButton.setEnabled(true);
-                }
                 if (cancelOperationButton != null) {
                     cancelOperationButton.setVisibility(View.GONE);
                 }
@@ -1338,6 +1316,10 @@ public class MainActivity extends Activity {
                     startTopBarCountdown();
                 }
                 updateSystemBackCallbackRegistration();
+                if (showMenuWhenIdle && currentIndexFile == null) {
+                    showMenuWhenIdle = false;
+                    showAppMenu();
+                }
             }
         });
     }
@@ -3499,6 +3481,7 @@ public class MainActivity extends Activity {
                         @Override
                         public void run() {
                             loadInstalledSiteOrPrompt();
+                            showMenuWhenIdle = false;
                             showErrorDialog("Ошибка очистки сайта", report);
                         }
                     });
