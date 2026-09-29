@@ -113,3 +113,52 @@ test("environment uses observed details; reduced Android UA is not trusted", asy
   assert.equal(await readCompatibilityStorage({ storage: { persisted: async () => false } }), "ordinary");
   assert.equal(await readCompatibilityStorage({}), null);
 });
+
+test("Apple mobile classification identifies the family without inventing a model", async () => {
+  const safari18 = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
+  });
+  assert.equal(safari18.manufacturer, "Apple");
+  assert.equal(safari18.deviceFamily, "iPhone");
+  assert.equal(safari18.model, null);
+  assert.equal(safari18.systemName, "iOS");
+  assert.equal(safari18.systemVersion, "18.6");
+
+  const safari26 = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1",
+  });
+  assert.equal(safari26.manufacturer, "Apple");
+  assert.equal(safari26.deviceFamily, "iPhone");
+  assert.equal(safari26.model, null);
+  assert.equal(safari26.systemVersion, null);
+
+  const installedPwa = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+    standalone: true,
+  });
+  assert.equal(installedPwa.deviceFamily, "iPhone");
+  assert.equal(installedPwa.systemVersion, null);
+
+  const ordinaryIpad = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (iPad; CPU OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+    maxTouchPoints: 5,
+  });
+  const desktopIpad = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+    maxTouchPoints: 5,
+  });
+  for (const environment of [ordinaryIpad, desktopIpad]) {
+    assert.equal(environment.manufacturer, "Apple");
+    assert.equal(environment.deviceFamily, "iPad");
+    assert.equal(environment.model, null);
+    assert.equal(environment.systemName, "iPadOS");
+  }
+
+  const mac = await readCompatibilityEnvironment({
+    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+    maxTouchPoints: 0,
+  });
+  assert.equal(mac.manufacturer, null);
+  assert.equal(mac.deviceFamily, null);
+  assert.equal(mac.systemName, "macOS");
+});

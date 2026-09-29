@@ -1,5 +1,22 @@
 import { readBrowserEnvironment } from "./runtime-environment.js";
 
+function appleMobileFamily(userAgent, maxTouchPoints) {
+  if (/iPhone/.test(userAgent)) return "iPhone";
+  if (/iPad/.test(userAgent)) return "iPad";
+  if (/iPod/.test(userAgent)) return "iPod";
+  return /Macintosh/.test(userAgent) && Number(maxTouchPoints) > 1 ? "iPad" : null;
+}
+
+function reliableAppleSystemVersion(userAgent, browser) {
+  const observed = /(?:CPU (?:iPhone )?OS|iPhone OS) ([\d_]+)/.exec(userAgent)?.[1]?.replace(/_/g, ".") || null;
+  if (!observed) return null;
+  const safariMajor = browser.browser === "Safari" ? Number.parseInt(browser.version, 10) : null;
+  // Safari 26+ freezes the OS token. Installed Apple web apps may omit the browser version,
+  // so their UA token cannot be distinguished from a real pre-freeze iOS version either.
+  return (Number.isInteger(safariMajor) && safariMajor >= 26) || browser.browser === "Неизвестный браузер"
+    ? null : observed;
+}
+
 export function realPwaLaunchMode(navigatorObject = globalThis.navigator, matchMedia = globalThis.matchMedia?.bind(globalThis)) {
   return navigatorObject?.standalone === true || matchMedia?.("(display-mode: standalone)").matches
     || matchMedia?.("(display-mode: fullscreen)").matches ? "installed" : "browser";
@@ -9,7 +26,7 @@ export async function readCompatibilityEnvironment(navigatorObject = globalThis.
   const browser = await readBrowserEnvironment(navigatorObject);
   const result = { environmentName: browser.browser === "Неизвестный браузер" ? null : browser.browser,
     environmentVersion: browser.version || null, manufacturer: null, model: null,
-    systemName: null, systemVersion: null, baseOs: null, baseOsVersion: null };
+    deviceFamily: null, systemName: null, systemVersion: null, baseOs: null, baseOsVersion: null };
   const ua = String(navigatorObject?.userAgent || "");
   let details = null;
   try { details = await navigatorObject?.userAgentData?.getHighEntropyValues?.(["platform", "platformVersion", "model"]); } catch { /* restricted by browser */ }
@@ -19,9 +36,10 @@ export async function readCompatibilityEnvironment(navigatorObject = globalThis.
     // Reduced Android/Chromium UA values are not the device's actual Android version or model.
     result.baseOsVersion = details?.platform === "Android" && details.platformVersion ? details.platformVersion : null;
     result.model = details?.platform === "Android" && details.model ? details.model : null;
-  } else if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigatorObject?.maxTouchPoints > 1)) {
-    result.systemName = /iPad|Macintosh/.test(ua) ? "iPadOS" : "iOS";
-    result.systemVersion = /(?:CPU (?:iPhone )?OS|iPhone OS) ([\d_]+)/.exec(ua)?.[1]?.replace(/_/g, ".") || null;
+  } else if ((result.deviceFamily = appleMobileFamily(ua, navigatorObject?.maxTouchPoints))) {
+    result.manufacturer = "Apple";
+    result.systemName = result.deviceFamily === "iPad" ? "iPadOS" : "iOS";
+    result.systemVersion = reliableAppleSystemVersion(ua, browser);
     result.baseOs = result.baseOsVersion = "-";
   } else {
     result.systemName = platform === "Windows" || /Windows NT/.test(ua) ? "Windows"
