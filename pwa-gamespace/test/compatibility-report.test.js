@@ -69,3 +69,13 @@ test("safe error catalogue and default unknown values", () => {
   assert.throws(() => formatCompatibilityBody({ ...input, error: "/private/path/raw exception" }));
   assert.equal(COMPATIBILITY_FORM_URL, vectors.formUrl);
 });
+
+test("a browser check needs all four observations but does not require installation", () => {
+  const input = { ...vectors.cases[0].input, variant: "PWA", launchMode: "browser" };
+  assert.match(formatCompatibilityBody(input), /запуск: вкладка браузера/);
+  assert.match(formatCompatibilityBody(input), /ИТОГ: базовая проверка пройдена/);
+  const incomplete = formatCompatibilityBody({ ...input, steps: { launch: "success" } });
+  assert.match(incomplete, /ИТОГ: базовая проверка не завершена/);
+  assert.match(incomplete, /ДЕЙСТВИЯ: импортируйте/);
+  assert.doesNotMatch(incomplete, /запустите установленное приложение/);
+});

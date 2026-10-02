@@ -177,3 +177,8 @@ test("Linux kernel hints are not reported as a distribution version", async () =
     assert.equal(result.baseOs, "-");
   }
 });
+
+test("fullscreen presentation does not claim installation", () => {
+  assert.equal(realPwaLaunchMode({}, query => ({ matches: query === "(display-mode: fullscreen)" })), "browser");
+  assert.equal(realPwaLaunchMode({}, query => ({ matches: query === "(display-mode: standalone)" })), "installed");
+});

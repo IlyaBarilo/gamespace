@@ -82,19 +82,24 @@
           <p class="eyebrow">ЛОКАЛЬНЫЕ САЙТЫ · БЕЗ СЕТИ</p>
           <h1>Игры и материалы<br><span>всегда под рукой</span></h1>
           <p class="landing-lead">
-            Установите GameSpace на телефон или планшет и открывайте локальный сайт без интернета. Архив остаётся только на вашем устройстве.
+            Установите GameSpace или откройте его в браузере на компьютере, телефоне или планшете. После подготовки оболочки и импорта локальный сайт работает без интернета. Архив остаётся только на вашем устройстве.
           </p>
           <div class="landing-cta">
             <button id="installButton" class="install-primary" type="button">
               <span>Установить GameSpace</span>
               <small>Без магазина приложений</small>
             </button>
+            <a id="openBrowserButton" class="secondary-button browser-launch-button" href="?launch=browser">
+              <span>Открыть в браузере</span>
+              <small>Без установки приложения</small>
+            </a>
             <p id="installAvailability" class="install-availability">Проверяем возможность установки…</p>
           </div>
           <div id="installHelp" class="install-help" hidden>
             <strong>Установка вручную</strong>
             <span>На Android: откройте меню браузера и выберите «Установить приложение».</span>
             <span>На iPhone и iPad: откройте «Поделиться» и выберите «На экран Домой».</span>
+            <span>На компьютере: используйте кнопку установки в адресной строке или меню браузера. Если значок не запускается, откройте GameSpace через меню приложений браузера, если оно доступно, или нажмите «Открыть в браузере».</span>
           </div>
           <p id="installResult" class="install-result" role="status" hidden></p>
         </div>
@@ -108,14 +113,14 @@
               <h2>Можно начать без своего архива</h2>
             </div>
           </div>
-          <p>После установки приложения откройте настройки и нажмите «Установить демо-сайт». Встроенный каталог игр сразу будет доступен без сети.</p>
+          <p>Откройте GameSpace со значка или во вкладке и нажмите «Установить демо-сайт» в настройках. После подготовки оболочки и установки демо встроенный каталог игр будет доступен без сети.</p>
           <p><strong>Демо можно оставить в приложении:</strong> для своей работы загрузите собственный архив. Переносить игры и материалы из демо в него нельзя.</p>
           <ul class="demo-points">
             <li><span>✓</span> Уже входит в приложение</li>
             <li><span>✓</span> Устанавливается одним нажатием</li>
             <li><span>✓</span> Показывает возможности GameSpace</li>
           </ul>
-          <div class="demo-next-step">Установите приложение — затем выберите демо</div>
+          <div class="demo-next-step">Откройте GameSpace — затем выберите демо</div>
         </aside>
       </section>
 
@@ -143,7 +148,7 @@
           <h2>Три простых шага</h2>
         </div>
         <ol>
-          <li><span>1</span><div><strong>Установите приложение</strong><small>Добавьте GameSpace на экран телефона или планшета.</small></div></li>
+          <li><span>1</span><div><strong>Откройте GameSpace</strong><small>Установите приложение или нажмите «Открыть в браузере».</small></div></li>
           <li><span>2</span><div><strong>Попробуйте демо или выберите архив</strong><small>Демо уже встроено, а ваш файл никуда не загружается.</small></div></li>
           <li><span>3</span><div><strong>Открывайте сайт без интернета</strong><small>Все файлы сохраняются локально на устройстве.</small></div></li>
         </ol>
@@ -191,6 +196,12 @@
         <button id="compatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
         <p>Доступен с первого запуска, даже если архив ещё не установлен или возникла ошибка.</p>
       </section>
+
+      <div class="app-window-actions">
+        <button id="fullscreenButton" class="version-secondary-button" type="button" aria-pressed="false">На весь экран</button>
+        <a id="browserInstallLink" class="version-secondary-button" href="./" hidden>Установка GameSpace</a>
+        <p id="browserLaunchHint" hidden>GameSpace открыт во вкладке. Сохраните эту страницу в закладки для повторного запуска. Для работы без сети сначала подготовьте оболочку и импортируйте архив или демо.</p>
+      </div>
 
       <section id="emptyState" class="setup-section">
         <div class="section-heading">
@@ -498,6 +509,11 @@
     <section id="viewer" class="viewer" hidden>
       <div id="viewerToolbar" class="viewer-toolbar" aria-label="Управление сайтом">
         <strong id="viewerToolbarTitle" class="viewer-toolbar-title">GameSpace PWA</strong>
+        <button id="viewerFullscreen" type="button" aria-label="На весь экран" title="На весь экран" aria-pressed="false">
+          <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"></path>
+          </svg>
+        </button>
         <button id="viewerBack" type="button" aria-label="Назад" disabled>
           <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10 5 3 12l7 7"></path>

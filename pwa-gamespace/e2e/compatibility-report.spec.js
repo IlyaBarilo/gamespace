@@ -21,14 +21,14 @@ test("report is available before install, readonly, colored and sent only via th
   const frozen = await page.locator("#compatibilityText").inputValue();
   expect(frozen).toContain("ФОРМАТ: 1");
   expect(frozen).toContain("импорт: не выполнено");
-  await expect(page.locator("#compatibilityStep_launch")).toContainText("установка пока не проверена");
+  await expect(page.locator("#compatibilityStep_launch")).toHaveText("выполнено во вкладке");
   await expect(page.locator("#compatibilityText")).toHaveAttribute("readonly", "");
   await page.setViewportSize({ width: 360, height: 800 });
   expect(await page.locator("#compatibilityDialog").evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
 
   await expect(page.getByRole("button", { name: "Обновить отчёт", exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Сохранить текст", exact: true })).toHaveCount(0);
-  await expect(page.locator("#compatibilityStep_launch")).toHaveCSS("color", "rgb(255, 212, 124)");
+  await expect(page.locator("#compatibilityStep_launch")).toHaveCSS("color", "rgb(110, 231, 183)");
   await expect(page.locator("#compatibilityStep_import")).toHaveCSS("color", "rgb(255, 212, 124)");
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await context.route("https://forms.yandex.ru/**", route => route.fulfill({ contentType: "text/html", body: "<h1>Test form destination</h1>" }));

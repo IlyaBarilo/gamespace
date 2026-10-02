@@ -177,10 +177,10 @@ final class CompatibilityReport {
             + "; время импорта: " + duration(input.get("importDurationMs")));
         lines.add("ПРОВЕРКА: запуск приложения: " + labels[0] + "; импорт: " + labels[1] + "; загрузка витрины: " + labels[2] + "; переход в игру внутри GameSpace: " + labels[3]);
         if (error != null) lines.add("ОШИБКА: этап: " + STAGES[failure] + "; код: " + error[1] + "; описание: " + error[2]);
-        boolean complete = completed && installed;
+        boolean complete = completed;
         lines.add("ИТОГ: " + (error != null ? "базовая проверка завершилась ошибкой" : complete ? "базовая проверка пройдена" : "базовая проверка не завершена"));
         if (!complete || error != null) {
-            String next = !installed || !"success".equals(steps[0]) ? "запустите установленное приложение и начните новую проверку"
+            String next = !"success".equals(steps[0]) ? ("APK".equals(variant) ? "запустите установленное приложение и начните новую проверку" : "откройте GameSpace и начните новую проверку")
                 : !"success".equals(steps[1]) ? "импортируйте встроенное демо или свой архив в рамках текущей проверки"
                 : !"success".equals(steps[2]) ? "откройте витрину установленного сайта в GameSpace"
                 : "перейдите из витрины в одну из игр внутри GameSpace";

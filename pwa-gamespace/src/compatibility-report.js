@@ -127,11 +127,11 @@ export function formatCompatibilityBody(input) {
     `ПРОВЕРКА: запуск приложения: ${STATES[steps[0]]}; импорт: ${STATES[steps[1]]}; загрузка витрины: ${STATES[steps[2]]}; переход в игру внутри GameSpace: ${STATES[steps[3]]}`,
   ];
   if (error) lines.push(`ОШИБКА: этап: ${STAGES[failures[0]]}; код: ${error[0]}; описание: ${error[1]}`);
-  const complete = previousCompleted && input.launchMode === "installed";
+  const complete = previousCompleted;
   lines.push(`ИТОГ: ${error ? "базовая проверка завершилась ошибкой" : complete ? "базовая проверка пройдена" : "базовая проверка не завершена"}`);
   if (!complete || error) {
-    const next = input.launchMode !== "installed" || steps[0] !== "success"
-      ? "запустите установленное приложение и начните новую проверку"
+    const next = steps[0] !== "success"
+      ? variant === "APK" ? "запустите установленное приложение и начните новую проверку" : "откройте GameSpace и начните новую проверку"
       : steps[1] !== "success" ? "импортируйте встроенное демо или свой архив в рамках текущей проверки"
         : steps[2] !== "success" ? "откройте витрину установленного сайта в GameSpace"
           : "перейдите из витрины в одну из игр внутри GameSpace";

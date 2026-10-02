@@ -181,9 +181,34 @@ a:focus-visible {
 
 .landing-cta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 18px;
   margin-top: 32px;
+}
+
+.browser-launch-button {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.app-window-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 24px;
+}
+
+.app-window-actions a { text-decoration: none; }
+.app-window-actions p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
 .install-primary,

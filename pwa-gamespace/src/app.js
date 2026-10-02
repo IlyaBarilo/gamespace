@@ -163,13 +163,47 @@ const displayOverride = import.meta.env.DEV
 function isRunningAsInstalledApp() {
   if (displayOverride === "app") return true;
   if (displayOverride === "landing") return false;
-  return navigator.standalone === true
-    || window.matchMedia?.("(display-mode: standalone)").matches
-    || window.matchMedia?.("(display-mode: fullscreen)").matches;
+  return realPwaLaunchMode() === "installed";
 }
 
 const runningAsInstalledApp = isRunningAsInstalledApp();
+const runningAsApp = displayOverride !== "landing" && (runningAsInstalledApp
+  || new URLSearchParams(location.search).get("launch") === "browser");
 elements.installButton.hidden = runningAsInstalledApp;
+elements.browserInstallLink.hidden = runningAsInstalledApp;
+elements.browserLaunchHint.hidden = runningAsInstalledApp;
+
+function refreshFullscreenAction() {
+  const active = Boolean(document.fullscreenElement);
+  const label = active ? "Выйти из полного экрана" : "На весь экран";
+  elements.fullscreenButton.textContent = label;
+  elements.viewerFullscreen.setAttribute("aria-label", label);
+  elements.viewerFullscreen.title = label;
+  for (const button of [elements.fullscreenButton, elements.viewerFullscreen]) {
+    button.setAttribute("aria-pressed", String(active));
+  }
+}
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else {
+      if (!document.documentElement.requestFullscreen) throw new Error("Fullscreen unavailable");
+      await document.documentElement.requestFullscreen();
+    }
+  } catch {
+    window.alert("Браузер не разрешил полноэкранный режим. На компьютере можно нажать F11; повторное нажатие вернёт обычное окно.");
+  }
+  refreshFullscreenAction();
+}
+for (const button of [elements.fullscreenButton, elements.viewerFullscreen]) {
+  button.addEventListener("click", toggleFullscreen);
+}
+document.addEventListener("fullscreenchange", () => {
+  refreshFullscreenAction();
+  if (!elements.viewer.hidden) showViewerToolbar();
+});
+elements.browserInstallLink.addEventListener("click", event => { if (busy) event.preventDefault(); });
 
 function manualInstallStatus() {
   return "Если окно установки не появилось, используйте меню браузера. Нажмите кнопку, чтобы увидеть инструкцию.";
@@ -1197,7 +1231,7 @@ async function initialize() {
     });
     diagnosticSession.acknowledge(record);
   }
-  if (!runningAsInstalledApp) {
+  if (!runningAsApp) {
     showLanding();
     elements.installAvailability.textContent = navigator.onLine
       ? "Подготовка к установке и автономной работе…"
@@ -1443,10 +1477,10 @@ window.addEventListener("appinstalled", () => {
   elements.installAvailability.hidden = true;
   elements.installResult.classList.add("is-complete");
   elements.installResult.hidden = false;
-  elements.installResult.textContent = "Закройте эту вкладку браузера. Затем запустите GameSpace с нового значка на рабочем столе или главном экране — только так откроется режим приложения.";
+  elements.installResult.textContent = "GameSpace установлен. Запустите его со значка на рабочем столе или главном экране. Если значок не запускается, используйте меню приложений браузера, если оно доступно, или кнопку «Открыть в браузере» на этой странице.";
 });
 window.addEventListener("online", () => {
-  if (!runningAsInstalledApp) {
+  if (!runningAsApp) {
     elements.installAvailability.textContent = installPrompt
       ? "Приложение готово к установке на это устройство."
       : manualInstallStatus();
@@ -1455,7 +1489,7 @@ window.addEventListener("online", () => {
   setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
 });
 window.addEventListener("offline", () => {
-  if (!runningAsInstalledApp) {
+  if (!runningAsApp) {
     elements.installAvailability.textContent = manualInstallStatus();
     return;
   }

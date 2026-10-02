@@ -18,10 +18,10 @@ export function createCompatibilityUI(elements, { snapshot, buildInput, isBusy, 
     const installed = launchMode() === "installed";
     for (const key of ["launch", "import", "storefront", "game"]) {
       const element = elements[`compatibilityStep_${key}`];
-      element.textContent = key === "launch" && !installed ? "открыто во вкладке; установка пока не проверена" : LABELS[steps[key]];
-      element.dataset.state = key === "launch" && !installed ? "not_checked" : steps[key];
+      element.textContent = key === "launch" && !installed && steps[key] === "success" ? "выполнено во вкладке" : LABELS[steps[key]];
+      element.dataset.state = steps[key];
     }
-    const complete = installed && steps.launch === "success" && steps.import === "success" && steps.storefront === "success" && steps.game === "recorded";
+    const complete = steps.launch === "success" && steps.import === "success" && steps.storefront === "success" && steps.game === "recorded";
     elements.compatibilitySummary.textContent = check.data.error
       ? "Проверка зафиксировала ошибку. Неполный отчёт тоже можно отправить."
       : complete ? "Базовая проверка пройдена. Можно сформировать и отправить отчёт."

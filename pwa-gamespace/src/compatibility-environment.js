@@ -18,8 +18,9 @@ function reliableAppleSystemVersion(userAgent, browser) {
 }
 
 export function realPwaLaunchMode(navigatorObject = globalThis.navigator, matchMedia = globalThis.matchMedia?.bind(globalThis)) {
+  // GameSpace's installed manifest uses standalone. Fullscreen API / F11 is not installation.
   return navigatorObject?.standalone === true || matchMedia?.("(display-mode: standalone)").matches
-    || matchMedia?.("(display-mode: fullscreen)").matches ? "installed" : "browser";
+    ? "installed" : "browser";
 }
 
 export async function readCompatibilityEnvironment(navigatorObject = globalThis.navigator) {
