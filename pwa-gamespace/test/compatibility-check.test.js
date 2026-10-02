@@ -162,3 +162,18 @@ test("Apple mobile classification identifies the family without inventing a mode
   assert.equal(mac.deviceFamily, null);
   assert.equal(mac.systemName, "macOS");
 });
+
+
+test("Linux kernel hints are not reported as a distribution version", async () => {
+  for (const platformVersion of ["", "6.1.0"]) {
+    const result = await readCompatibilityEnvironment({
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) Chrome/132.0.0.0",
+      userAgentData: { platform: "Linux", getHighEntropyValues: async () => ({ platform: "Linux", platformVersion, model: "" }) },
+    });
+    assert.equal(result.systemName, "Linux");
+    assert.equal(result.systemVersion, null);
+    assert.equal(result.manufacturer, null);
+    assert.equal(result.model, null);
+    assert.equal(result.baseOs, "-");
+  }
+});

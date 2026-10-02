@@ -36,3 +36,30 @@ test("reports WebKit for browsers on iOS", () => {
   });
   assert.equal(formatBrowserEnvironment(environment), "Firefox 142.0 · WebKit");
 });
+
+
+test("Yandex explicit identity is not hidden by generic Chromium hints", async () => {
+  const ua = "Mozilla/5.0 (X11; Linux x86_64) Chrome/132.0.0.0 YaBrowser/25.2.0.1 Safari/537.36";
+  for (const brand of ["Chromium", "Google Chrome"]) {
+    const nav = { userAgent: ua, userAgentData: {
+      brands: [{ brand, version: "132" }],
+      getHighEntropyValues: async () => ({ fullVersionList: [{ brand, version: "132.0.6834.1000" }] }),
+    } };
+    assert.equal(detectBrowserEnvironment(nav).browser, "Яндекс Браузер");
+    assert.equal(formatBrowserEnvironment(await readBrowserEnvironment(nav)), "Яндекс Браузер 25.2.0.1 · Chromium");
+    nav.userAgentData.getHighEntropyValues = async () => { throw new Error("restricted"); };
+    assert.equal((await readBrowserEnvironment(nav)).version, "25.2.0.1");
+  }
+});
+
+test("Yandex full brand version is used; Chromium remains Chromium without Yandex markers", async () => {
+  const userAgent = "Mozilla/5.0 (X11; Linux x86_64) Chrome/132.0.0.0 Safari/537.36";
+  const nav = { userAgent, userAgentData: {
+    brands: [{ brand: "Chromium", version: "132" }],
+    getHighEntropyValues: async () => ({ fullVersionList: [
+      { brand: "Chromium", version: "132.0.6834.1000" }, { brand: "Yandex", version: "25.2.0.1" },
+    ] }),
+  } };
+  assert.equal(formatBrowserEnvironment(await readBrowserEnvironment(nav)), "Яндекс Браузер 25.2.0.1 · Chromium");
+  assert.equal(detectBrowserEnvironment(nav).browser, "Chromium");
+});

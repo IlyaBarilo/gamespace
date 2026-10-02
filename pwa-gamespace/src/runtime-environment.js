@@ -1,4 +1,5 @@
 const BRAND_PRIORITY = [
+  ["Яндекс Браузер", /^(?:yandex(?: browser)?|yabrowser)$/i, "Chromium"],
   ["Microsoft Edge", /microsoft edge/i, "Chromium"],
   ["Samsung Internet", /samsung internet/i, "Chromium"],
   ["Opera", /^opera$/i, "Chromium"],
@@ -43,7 +44,13 @@ function fromUserAgent(userAgent, isAppleMobile) {
 function detect(navigatorObject, brands) {
   const userAgent = String(navigatorObject?.userAgent || "");
   const isAppleMobile = /(?:iPhone|iPad|iPod)/.test(userAgent);
-  return { ...(fromBrands(normalizeBrands(brands), isAppleMobile) || fromUserAgent(userAgent, isAppleMobile)), userAgent };
+  const branded = fromBrands(normalizeBrands(brands), isAppleMobile);
+  const uaBrowser = fromUserAgent(userAgent, isAppleMobile);
+  // Generic engine hints must not hide a derivative's explicit UA identity.
+  // Never use a Chromium version as the derivative browser's version.
+  const specificUa = !["Google Chrome", "Неизвестный браузер"].includes(uaBrowser.browser);
+  const genericBrand = !branded || ["Chromium", "Google Chrome"].includes(branded.browser);
+  return { ...(specificUa && genericBrand ? uaBrowser : (branded || uaBrowser)), userAgent };
 }
 
 export function detectBrowserEnvironment(navigatorObject = globalThis.navigator) {
