@@ -7,9 +7,15 @@ import {
   installFullArchive,
   applyUpdateArchive,
   refreshInstalledSiteStatistics,
-  removeInstalledSite,
   readInstalledSiteState,
+  readInstalledArchiveCatalog,
+  selectInstalledArchive,
+  renameInstalledArchive,
+  removeInstalledArchive,
 } from "./import-manager.js";
+import { DEMO_ARCHIVE_ID, createArchiveCatalog, summarizeArchiveCatalog } from "./archive-catalog.js";
+import { renderArchiveCatalog } from "./archive-catalog-ui.js";
+import { acquireContentView } from "./site-operation-lock.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 import { ProgressEstimator } from "./progress-estimator.js";
@@ -46,6 +52,10 @@ const elements = Object.fromEntries(
 );
 
 let state = null;
+let archiveCatalog = createArchiveCatalog();
+let pendingArchiveId = null;
+let releaseContentView = null;
+let viewerOpening = false;
 let pendingMode = "full";
 let installPrompt = null;
 let busy = false;
@@ -61,6 +71,7 @@ const importScreenLock = createScreenWakeLock({
   onStatus(message) { elements.progressScreen.textContent = message; },
 });
 let progressUnit = null;
+let progressHideTimer = null;
 let lastStorageEstimate = null;
 const diagnosticSession = new DiagnosticSession();
 const diagnosticPresence = connectDiagnosticSessions(diagnosticSession);
@@ -380,13 +391,20 @@ function renderState() {
   elements.restoreDemoButton.hidden = !installed;
   elements.openSiteButton.disabled = !installed || busy;
   elements.fastUpdateButton.disabled = !installed || busy;
-  elements.fullUpdateButton.disabled = busy;
+  elements.fullUpdateButton.disabled = !installed || busy;
   elements.removeSiteButton.disabled = !installed || busy;
   elements.removeSiteButton.hidden = !installed;
   elements.storageVerifyButton.disabled = !installed || busy;
 
+  renderArchiveCatalog(elements.archiveList, archiveCatalog, { busy,
+    open: entry => { void openCatalogArchive(entry.id); },
+    replace: entry => chooseArchive("full", entry.id),
+    rename: entry => { void renameCatalogArchive(entry); },
+    remove: entry => { void deleteCatalogArchive(entry); },
+    restoreDemo: () => { void installBuiltinDemoSite({ force: true }); },
+  });
   if (!installed) {
-    elements.siteSummary.textContent = "Основной сайт ещё не установлен";
+    elements.siteSummary.textContent = "Архив для запуска ещё не выбран";
     elements.infoArchive.textContent = "—";
     elements.infoFormat.textContent = "—";
     elements.infoFiles.textContent = "—";
@@ -396,7 +414,7 @@ function renderState() {
     elements.infoMode.textContent = "—";
     return;
   }
-  elements.siteSummary.textContent = `${state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
+  elements.siteSummary.textContent = `${state.archiveDisplayName || state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
   elements.infoArchive.textContent = state.archiveName || "—";
   elements.infoFormat.textContent = (state.archiveType || "—").toUpperCase();
   elements.infoFiles.textContent = Number(state.files || 0).toLocaleString("ru-RU");
@@ -407,6 +425,8 @@ function renderState() {
 }
 
 function showProgress(title) {
+  clearTimeout(progressHideTimer);
+  progressHideTimer = null;
   elements.progressPanel.hidden = false;
   elements.progressTitle.textContent = title;
   elements.progressPhase.textContent = "Подготовка…";
@@ -428,6 +448,13 @@ function hideProgress() {
 }
 
 function showError(error, context = {}) {
+  elements.errorDetailsButton.hidden = error?.code === "GS-VIEWER-BUSY";
+  if (error?.code === "GS-VIEWER-BUSY") {
+    elements.errorText.textContent = errorMessage(error);
+    elements.errorPanel.hidden = false;
+    diagnosticSession.record("Содержимое занято другим окном", context.operation || "просмотр");
+    return;
+  }
   diagnosticSession.record("Ошибка операции", `${context.stage || "operation"}: ${errorMessage(error)}`, true);
   elements.errorText.textContent = errorMessage(error);
   elements.errorPanel.hidden = false;
@@ -496,10 +523,11 @@ function handleImportEvent(event) {
   }
 }
 
-async function chooseArchive(mode) {
+async function chooseArchive(mode, archiveId = null) {
   if (busy) return;
   diagnosticSession.record("Выбор архива", mode);
   pendingMode = mode;
+  pendingArchiveId = archiveId || (mode === "fast" ? state?.archiveId : null);
   elements.archiveInput.value = "";
   elements.archiveInput.click();
 }
@@ -507,11 +535,13 @@ async function chooseArchive(mode) {
 async function importSelectedFile(file, source = "локальный архив") {
   if (!file || busy) return false;
   const isUpdate = pendingMode === "fast";
+  const targetId = pendingArchiveId;
+  const target = archiveCatalog.entries.find(entry => entry.id === targetId);
   const confirmed = window.confirm(isUpdate
-    ? `Применить локальное обновление «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Изменённые файлы будут защищены журналом отката.`
-    : state
-      ? `Полностью заменить установленный сайт архивом «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Новая версия станет активной только после успешной проверки.`
-      : `Установить сайт из архива «${file.name}»? Используйте только архив из доверенного источника: он может содержать исполняемый JavaScript. Сам GameSpace не отправляет архив в сеть.`);
+    ? `Применить обновление «${file.name}» к архиву «${target?.name || "выбранный архив"}»? Используйте только доверенный архив. Изменённые файлы защищены журналом отката.`
+    : targetId
+      ? `Заменить файлы архива «${target?.name || "выбранный архив"}» содержимым «${file.name}»? Другие архивы сохранятся. Используйте только доверенный архив.`
+      : `Добавить архив «${file.name}» отдельной записью? Используйте только доверенный источник: архив может содержать исполняемый JavaScript. Сам GameSpace не отправляет архив в сеть.`);
   if (!confirmed) return false;
   compatibilityImportToken = compatibilityCheck.beginImport({ source: source === "демо" ? "demo" : "user", bytes: file.size });
   const diagnosticContext = {
@@ -523,6 +553,7 @@ async function importSelectedFile(file, source = "локальный архив"
 
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
+  setStatus(isUpdate ? "Обновляю выбранный архив" : targetId ? "Заменяю выбранный архив" : "Добавляю архив", "neutral");
   activeImportController = new AbortController();
   showProgress(isUpdate ? "Быстрое обновление сайта" : "Установка сайта");
   importScreenLock.start();
@@ -531,8 +562,8 @@ async function importSelectedFile(file, source = "локальный архив"
   try {
     diagnosticSession.begin(diagnosticContext.operation, file.name);
     state = isUpdate
-      ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal })
-      : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal });
+      ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId })
+      : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId, kind: source === "демо" ? "demo" : "user" });
     diagnosticSession.site(state);
     compatibilityCheck.finishImport(compatibilityImportToken, state, isUpdate);
     diagnosticContext.stage = "interface-refresh";
@@ -543,7 +574,7 @@ async function importSelectedFile(file, source = "локальный архив"
     elements.progressPhase.textContent = "Готово";
     elements.progressFile.textContent = "Сайт проверен и доступен без сети.";
     setStatus("Сайт готов к автономной работе", "good");
-    setTimeout(hideProgress, 1600);
+    progressHideTimer = setTimeout(hideProgress, 1600);
     outcome = "успешно";
   } catch (error) {
     compatibilityCheck.fail("import", compatibilityErrorCategory(error, diagnosticErrorCode(error, error?.diagnosticContext?.stage)), {
@@ -554,7 +585,7 @@ async function importSelectedFile(file, source = "локальный архив"
       elements.progressPhase.textContent = "Операция отменена";
       elements.progressFile.textContent = state ? "Предыдущий сайт сохранён." : "Неполные данные удалены.";
       setStatus(state ? "Операция отменена, предыдущий сайт сохранён" : "Установка отменена", "neutral");
-      setTimeout(hideProgress, 1600);
+      progressHideTimer = setTimeout(hideProgress, 1600);
     } else {
       showError(error, diagnosticContext);
       elements.progressPhase.textContent = "Операция остановлена";
@@ -575,6 +606,7 @@ async function importSelectedFile(file, source = "локальный архив"
     activeImportController = null;
     setBusy(false);
   }
+  return outcome === "успешно" ? true : undefined;
 }
 
 function contentIndexPathname() {
@@ -664,8 +696,15 @@ function returnViewerToIndex(source) {
 }
 
 async function openViewer() {
-  if (!state) return false;
+  if (!state || viewerOpening) return false;
+  if (!elements.viewer.hidden) return true;
+  viewerOpening = true;
+  const expectedArchiveId = state.archiveId;
   try {
+    releaseContentView = await acquireContentView();
+    state = await readInstalledSiteState();
+    if (!state) throw new Error("Архив для запуска не выбран. Откройте его из списка.");
+    if (expectedArchiveId && state.archiveId !== expectedArchiveId) throw new Error("Выбранный архив изменился в другом окне. Откройте нужный архив из списка.");
     await ensureServiceWorker();
     if (!navigator.serviceWorker.controller) {
       throw new Error("Локальный сайт нельзя открыть до активации Service Worker.");
@@ -692,11 +731,12 @@ async function openViewer() {
     showViewerToolbar();
     return true;
   } catch (error) {
-    compatibilityPageFailure("page");
+    if (error.code !== "GS-VIEWER-BUSY") compatibilityPageFailure("page");
     showError(error, { operation: "открытие сайта", stage: "viewer-open", stageLabel: "Подготовка автономного просмотра" });
     setStatus("Локальный сайт пока не открыт", "bad");
+    closeViewer();
     return false;
-  }
+  } finally { viewerOpening = false; }
 }
 
 function closeViewer() {
@@ -711,7 +751,16 @@ function closeViewer() {
   setViewerScrollLock(false);
   elements.appShell.removeAttribute("aria-hidden");
   elements.appShell.inert = false;
-  elements.siteFrame.src = "about:blank";
+  // Replacing the iframe destroys its page before releasing the global lease.
+  // Navigation to about:blank alone is asynchronous and can leave old JS running.
+  const oldFrame = elements.siteFrame;
+  const newFrame = oldFrame.cloneNode(false);
+  newFrame.src = "about:blank";
+  oldFrame.replaceWith(newFrame);
+  elements.siteFrame = newFrame;
+  newFrame.addEventListener("load", attachFrameGuards);
+  releaseContentView?.();
+  releaseContentView = null;
   clearTimeout(toolbarTimer);
 }
 
@@ -788,14 +837,15 @@ async function refreshStorage() {
 
   // Read current metadata after awaiting the browser: an import or removal may
   // have completed while an earlier estimate was still pending.
-  const managedBytes = state?.writtenBytes || 0;
-  const managedFiles = Number(state?.files || 0);
+  const totals = summarizeArchiveCatalog(archiveCatalog);
+  const managedBytes = totals.bytes;
+  const managedFiles = totals.files;
   const summary = summarizeStorage(managedBytes, estimate);
   lastStorageEstimate = { quota: summary.quota, usage: summary.usage, measuredAt: new Date().toISOString() };
-  elements.storageManaged.textContent = state ? `Сайт GameSpace: ${formatBytes(managedBytes)}` : "Сайт GameSpace: не установлен";
-  elements.storageFiles.textContent = state ? `${managedFiles.toLocaleString("ru-RU")} файлов в OPFS` : "0 файлов в OPFS";
+  elements.storageManaged.textContent = totals.installed ? `Все архивы: ${formatBytes(managedBytes)}` : "Все архивы: не установлены";
+  elements.storageFiles.textContent = `${managedFiles.toLocaleString("ru-RU")} файлов в OPFS · архивов: ${totals.installed}`;
   elements.storageUsage.textContent = summary.usesManagedSize
-    ? `Учтено не менее ${formatBytes(summary.usedBytes)} — по файлам сайта`
+    ? `Учтено не менее ${formatBytes(summary.usedBytes)} — по файлам архивов`
     : summary.usage !== null ? `Оценка браузера: ${formatBytes(summary.usage)}` : "Оценка браузера: недоступна";
   elements.storageQuota.textContent = summary.quota !== null
     ? `Квота браузера: ${formatBytes(summary.quota)}` : "Квота браузера: не сообщается";
@@ -818,7 +868,10 @@ async function refreshStorage() {
 }
 
 async function synchronizeSiteInterface({ reloadState = false } = {}) {
-  if (reloadState) state = await readState();
+  if (reloadState) {
+    archiveCatalog = await readInstalledArchiveCatalog();
+    state = await readState();
+  }
   renderState();
   await refreshStorage();
 }
@@ -848,8 +901,7 @@ async function verifyStoredSite() {
   try {
     const result = await refreshInstalledSiteStatistics();
     state = result.state;
-    renderState();
-    await refreshStorage();
+    await synchronizeSiteInterface({ reloadState: true });
     setStatus(`Проверено: ${result.files.toLocaleString("ru-RU")} файлов, ${formatBytes(result.bytes)}`, "good");
   } catch (error) {
     showError(error, { operation: "проверка сайта", stage: "site-verify", stageLabel: "Проверка файлов в OPFS" });
@@ -1192,7 +1244,9 @@ async function checkForPwaUpdate(target = "app") {
 
 async function rollbackPwaRelease() {
   if (busy || !runtimeState?.previousVersion) return;
-  if (!window.confirm(`Вернуться к локально сохранённой версии ${runtimeState.previousVersion}? Текущая версия останется доступной для обратного переключения.`)) return;
+  const archiveWarning = summarizeArchiveCatalog(archiveCatalog).installed > 1
+    ? " В старой версии может отсутствовать список архивов. Не заменяйте и не удаляйте содержимое через старое меню; для управления архивами вернитесь к этой версии." : "";
+  if (!window.confirm(`Вернуться к локально сохранённой версии ${runtimeState.previousVersion}? Текущая версия останется доступной для обратного переключения.${archiveWarning}`)) return;
   setBusy(true);
   try {
     diagnosticSession.begin("откат оболочки PWA", runtimeState.previousVersion);
@@ -1269,8 +1323,9 @@ async function initialize() {
     try { await cleanupOrphans(); }
     catch (error) {
       error.diagnosticContext = { ...error.diagnosticContext, stage: "startup-recovery", stageLabel: "Восстановление / очистка при запуске" };
-      throw error;
+      if (error.code !== "GS-VIEWER-BUSY") throw error;
     }
+    archiveCatalog = await readInstalledArchiveCatalog();
     state = await readInstalledSiteState();
     compatibilityCheck.reconcileContent(state);
     diagnosticSession.site(state);
@@ -1278,6 +1333,7 @@ async function initialize() {
       const result = await refreshInstalledSiteStatistics();
       state = result.state;
     }
+    archiveCatalog = await readInstalledArchiveCatalog();
     renderState();
 
     if (state && navigator.serviceWorker?.controller) {
@@ -1315,8 +1371,10 @@ for (const button of [elements.manualReportButton, elements.landingReportButton]
     diagnosticUI.manual({ operation: busy ? "текущая операция продолжается" : "проверка состояния", previousSite: state ? "установлен" : "не установлен" });
   });
 }
-async function installBuiltinDemoSite() {
-  if (busy) return;
+async function installBuiltinDemoSite({ force = false, openAfter = false } = {}) {
+  if (busy) return false;
+  const demo = archiveCatalog.entries.find(entry => entry.id === DEMO_ARCHIVE_ID);
+  if (demo?.state && !force) return openCatalogArchive(DEMO_ARCHIVE_ID);
   const demoCheckToken = compatibilityCheck.beginImport({ source: "demo", format: "7z" });
   const startedAt = Date.now();
   setBusy(true);
@@ -1328,6 +1386,7 @@ async function installBuiltinDemoSite() {
     if (!response.ok) throw new Error(`Встроенный demo.7z недоступен: HTTP ${response.status}.`);
     const blob = await response.blob();
     pendingMode = "full";
+    pendingArchiveId = DEMO_ARCHIVE_ID;
     diagnosticSession.finish("демо получено");
     setBusy(false);
     const accepted = await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
@@ -1335,6 +1394,8 @@ async function installBuiltinDemoSite() {
       lastModified: Date.now(),
     }), "демо");
     if (accepted === false) compatibilityCheck.reset("Установка демо отменена. Можно начать проверку позже.");
+    if (accepted && openAfter) await openViewer();
+    return accepted;
   } catch (error) {
     compatibilityCheck.fail("import", "demo", { token: demoCheckToken });
     showError(error, { operation: "встроенное демо", stage: "demo-read", stageLabel: "Получение встроенного demo.7z", startedAt });
@@ -1343,9 +1404,10 @@ async function installBuiltinDemoSite() {
     setBusy(false);
   }
 }
-elements.demoButton.addEventListener("click", installBuiltinDemoSite);
-elements.restoreDemoButton.addEventListener("click", installBuiltinDemoSite);
-elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full"));
+elements.demoButton.addEventListener("click", () => { void installBuiltinDemoSite(); });
+elements.restoreDemoButton.addEventListener("click", () => { void openCatalogArchive(DEMO_ARCHIVE_ID); });
+elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full", state?.archiveId));
+elements.addArchiveButton.addEventListener("click", () => chooseArchive("full"));
 elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"));
 elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
 elements.runtimeHistoryButton.addEventListener("click", () => {
@@ -1410,37 +1472,67 @@ window.addEventListener("pagehide", () => {
   runtimeHistoryState = runtimeHistoryStore.observe(browserEnvironment);
 });
 elements.errorClose.addEventListener("click", () => { elements.errorPanel.hidden = true; });
-elements.removeSiteButton.addEventListener("click", async () => {
-  if (!state || !window.confirm("Удалить распакованный сайт и его локальные данные из хранилища PWA?")) return;
-  const previousState = state;
-  const startedAt = Date.now();
+async function openCatalogArchive(id) {
+  if (busy) return false;
+  const entry = archiveCatalog.entries.find(item => item.id === id);
+  if (entry?.kind === "demo" && !entry.state) return installBuiltinDemoSite({ openAfter: true });
+  setBusy(true);
+  closeViewer();
+  try {
+    state = await selectInstalledArchive(id);
+    compatibilityCheck.reconcileContent(state);
+    diagnosticSession.site(state);
+    await synchronizeSiteInterface({ reloadState: true });
+    return await openViewer();
+  } catch (error) {
+    showError(error, { operation: "переключение архива", stage: "archive-select", stageLabel: "Выбор содержимого" });
+    setStatus("Не удалось открыть архив", "bad");
+    return false;
+  } finally { setBusy(false); }
+}
+
+async function renameCatalogArchive(entry) {
+  if (busy) return;
+  const name = window.prompt("Название архива в списке (до 120 символов):", entry.name);
+  if (name === null) return;
+  setBusy(true);
+  try {
+    await renameInstalledArchive(entry.id, name);
+    await synchronizeSiteInterface({ reloadState: true });
+  } catch (error) { showError(error, { operation: "переименование архива", stage: "archive-rename" }); }
+  finally { setBusy(false); }
+}
+
+async function deleteCatalogArchive(entry) {
+  if (busy || !entry) return;
+  const message = entry.kind === "demo"
+    ? "Удалить распакованные файлы встроенного демо? Демо останется в списке для повторной подготовки. Общие сохранения игр сохранятся."
+    : `Удалить архив «${entry.name}» и его распакованные файлы? Другие архивы и общие сохранения игр сохранятся.`;
+  if (!window.confirm(message)) return;
+  const wasActive = archiveCatalog.activeId === entry.id;
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
   closeViewer();
-  state = null;
-  renderState();
-  void refreshStorage().catch(() => {});
-  setStatus("Удаляю файлы сайта", "neutral");
+  setStatus("Удаляю файлы архива", "neutral");
   try {
-    diagnosticSession.begin("удаление сайта");
-    diagnosticSession.site(null);
-    await removeInstalledSite();
-    compatibilityCheck.reset("Установленный сайт удалён. Начните новую проверку с импорта архива.");
+    diagnosticSession.begin("удаление архива");
+    await removeInstalledArchive(entry.id);
+    if (wasActive) compatibilityCheck.reset("Архив удалён. Начните новую проверку выбранного содержимого.");
     await synchronizeSiteInterface({ reloadState: true });
-    scheduleSiteInterfaceRefresh();
+    diagnosticSession.site(state);
     setStatus("Сайт удалён", "neutral");
     diagnosticSession.finish("успешно");
   } catch (error) {
-    state = await readState().catch(() => previousState);
-    diagnosticSession.site(state);
-    renderState();
-    await refreshStorage().catch(() => {});
-    showError(error, { operation: "удаление сайта", stage: "site-delete", stageLabel: "Удаление локального сайта", previousSite: "установлен", startedAt });
-  } finally {
-    diagnosticSession.finish("ошибка удаления");
-    setBusy(false);
-  }
+    diagnosticSession.finish("удаление не выполнено");
+    await synchronizeSiteInterface({ reloadState: true }).catch(() => {});
+    showError(error, { operation: "удаление архива", stage: "site-delete", stageLabel: "Удаление файлов архива" });
+  } finally { setBusy(false); }
+}
+
+elements.removeSiteButton.addEventListener("click", () => {
+  void deleteCatalogArchive(archiveCatalog.entries.find(entry => entry.id === state?.archiveId));
 });
+
 elements.installButton.addEventListener("click", async () => {
   if (installPrompt) {
     const prompt = installPrompt;

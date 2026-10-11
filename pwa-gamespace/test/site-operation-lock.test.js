@@ -26,3 +26,31 @@ test("the exclusive lock covers the complete async operation and propagates canc
   }, { signal: controller.signal, onWait() { waiting = true; } }), 42);
   assert.equal(acquired, false);
 });
+
+
+test("an active viewer rejects content changes in another window", async t => {
+  const { withContentMutation } = await import("../src/site-operation-lock.js");
+  browser(t, { locks: { request: async (name, options, action) => {
+    assert.equal(name, "gamespace-content-view-v1");
+    assert.equal(options.ifAvailable, true);
+    return action(null);
+  } } });
+  let touched = false;
+  await assert.rejects(withContentMutation(() => { touched = true; }), { code: "GS-VIEWER-BUSY" });
+  assert.equal(touched, false);
+});
+
+test("viewer lease stays acquired until its owner releases it", async t => {
+  const { acquireContentView } = await import("../src/site-operation-lock.js");
+  let held = false;
+  browser(t, { locks: { async request(_name, _options, action) {
+    held = true;
+    try { return await action({}); } finally { held = false; }
+  } } });
+  const release = await acquireContentView();
+  await new Promise(done => setImmediate(done));
+  assert.equal(held, true);
+  release();
+  await new Promise(done => setImmediate(done));
+  assert.equal(held, false);
+});

@@ -234,7 +234,7 @@
             <h3>Сайт с устройства</h3>
             <p>Выберите архив в памяти, на флешке или SD-карте. Файл никуда не отправляется.</p>
             <button id="chooseArchiveButton" class="secondary-button" type="button">
-              <span>Выбрать основной архив</span>
+              <span>Добавить свой архив</span>
               <small>site.7z или site.zip</small>
             </button>
           </article>
@@ -282,6 +282,17 @@
         <button id="errorClose" type="button" aria-label="Закрыть сообщение">×</button>
       </section>
 
+      <section id="archiveCatalogPanel" class="panel archive-catalog-panel" aria-labelledby="archiveCatalogTitle">
+        <div class="panel-heading">
+          <div><p class="section-kicker">ЛОКАЛЬНЫЕ САЙТЫ</p><h2 id="archiveCatalogTitle">Мои архивы</h2></div>
+          <button id="addArchiveButton" class="version-secondary-button" type="button">Добавить архив</button>
+        </div>
+        <p class="archive-catalog-help">Добавляйте разные работы и их версии. Каждый архив хранится отдельно; последнее выбранное содержимое открывается при запуске.</p>
+        <div id="archiveList" class="archive-list"></div>
+        <p id="archiveStorageNotice" class="archive-storage-notice">Сохранения игр пока общие: localStorage, sessionStorage, IndexedDB, cookies и Cache Storage не разделяются по архивам. Совпадающие записи могут влиять на другие работы. Раздельно хранятся распакованные файлы; квота браузера общая.</p>
+        <p class="archive-catalog-help">Просмотр доступен в одном окне GameSpace. Перед переключением, обновлением или удалением закройте просмотр в другом окне.</p>
+      </section>
+
       <section class="dashboard-grid">
         <article class="panel storage-panel">
           <div class="panel-heading">
@@ -296,7 +307,7 @@
               <span id="storageBarText">—</span>
             </div>
             <div class="storage-copy">
-              <strong id="storageManaged">Сайт GameSpace: —</strong>
+              <strong id="storageManaged">Все архивы: —</strong>
               <span id="storageFiles">— файлов в OPFS</span>
               <span id="storageUsage">Оценка браузера: —</span>
               <span id="storageQuota">Квота браузера: —</span>
@@ -318,15 +329,15 @@
           <div class="action-stack">
             <button id="fastUpdateButton" class="action-button" type="button">
               <span class="action-symbol">↯</span>
-              <span><strong>Быстро обновить</strong><small>Заменить только файлы из update-архива</small></span>
+              <span><strong>Обновить выбранный архив</strong><small>Заменить только файлы из update-архива</small></span>
             </button>
             <button id="fullUpdateButton" class="action-button" type="button">
               <span class="action-symbol">↻</span>
-              <span><strong>Полная установка</strong><small>Проверить и заменить весь локальный сайт</small></span>
+              <span><strong>Заменить выбранный архив</strong><small>Полная проверка и замена только этой записи</small></span>
             </button>
             <button id="restoreDemoButton" class="action-button" type="button" hidden>
               <span class="action-symbol">▶</span>
-              <span><strong>Установить демо-сайт</strong><small>Заменить текущий сайт встроенным демо</small></span>
+              <span><strong>Открыть встроенное демо</strong><small>Свои архивы остаются в списке</small></span>
             </button>
           </div>
         </article>
@@ -388,7 +399,7 @@
           <div><dt>Время</dt><dd id="infoDuration">—</dd></div>
           <div><dt>Последний режим</dt><dd id="infoMode">—</dd></div>
         </dl>
-        <button id="removeSiteButton" class="danger-button" type="button">Удалить распакованный сайт</button>
+        <button id="removeSiteButton" class="danger-button" type="button">Удалить выбранный архив</button>
       </section>
 
       <section class="panel diagnostics-panel" aria-labelledby="archiveStatisticsTitle">

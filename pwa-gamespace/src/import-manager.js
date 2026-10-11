@@ -1,12 +1,13 @@
 import {
   clearOperationJournal,
-  beginSiteRemoval,
   clearStateIfRevision,
   commitStateAndClearOperationJournal,
   readOperationJournal,
   readState,
   writeOperationJournal,
   writeState,
+  readArchiveCatalog,
+  writeArchiveCatalog,
 } from "./db.js";
 import { extractSevenZip } from "./archive/sevenzip-client.js";
 import { extractZip } from "./archive/zip-import.js";
@@ -22,7 +23,8 @@ import {
   summarizeMergeStorage,
 } from "./opfs.js";
 import { throwIfAborted } from "./abort.js";
-import { withSiteOperation } from "./site-operation-lock.js";
+import { withSiteOperation, withContentMutation } from "./site-operation-lock.js";
+import { ARCHIVES_ROOT, catalogContentState, createArchiveCatalog, detachCatalogArchive, storeArchiveInCatalog, validateArchiveCatalog } from "./archive-catalog.js";
 
 const APP_ROOT = "gamespace";
 const REVISIONS_ROOT = `${APP_ROOT}/revisions`;
@@ -100,13 +102,13 @@ export async function requestPersistentStorage() {
 }
 
 export function installFullArchive(file, onEvent, options = {}) {
-  return withSiteOperation(() => installFullArchiveUnlocked(file, onEvent, options), {
+  return withContentMutation(() => installFullArchiveUnlocked(file, onEvent, options), {
     signal: options.signal,
     onWait: () => onEvent?.({ type: "phase", phase: "storage-lock", label: "Ожидаю доступа к хранилищу…" }),
   });
 }
 
-async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
+async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = null, kind = "user" } = {}) {
   const diagnostics = new OperationDiagnostics("полная установка", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let revisionPath = null;
@@ -120,9 +122,12 @@ async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
     await recoverInterruptedOperationUnlocked();
     onEvent({ type: "phase", phase: "state-read", label: "Чтение сведений об установленном сайте из IndexedDB" });
-    const previousState = await readState();
+    const catalog = await initializeArchiveCatalogUnlocked();
+    const previousEntry = archiveId ? catalog.entries.find(item => item.id === archiveId) : null;
+    if (archiveId && !previousEntry) throw new Error("Выбранный архив уже удалён. Выберите его заново.");
     const revision = jobId();
-    revisionPath = `${REVISIONS_ROOT}/${revision}`;
+    const id = archiveId || `archive-${revision}`;
+    revisionPath = `${ARCHIVES_ROOT}/${revision}`;
     const result = await extractArchive({ file, destination: revisionPath, requireIndex: true, onEvent, signal });
     throwIfAborted(signal);
     onEvent({ type: "phase", phase: "index-check", label: "Проверяю сохранённую стартовую страницу…" });
@@ -141,6 +146,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
     const state = {
       schema: 1,
       activeRevision: revision,
+      archiveId: id,
       revisionPath,
       contentRoot: result.contentRoot || "",
       indexPath: result.indexPath,
@@ -158,16 +164,17 @@ async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
     throwIfAborted(signal);
-    await writeState(state);
+    const updatedCatalog = storeArchiveInCatalog(catalog, state, { id, kind });
+    await writeArchiveCatalog(updatedCatalog);
     committed = true;
     emitServiceWorkerStateChanged();
 
-    if (previousState?.revisionPath && previousState.revisionPath !== revisionPath) {
-      onEvent?.({ type: "phase", phase: "cleanup", label: "Удаляю предыдущую версию сайта…" });
-      await cleanupAfterCommit(() => removePath(root, previousState.revisionPath), onEvent, "Очистка предыдущей ревизии после успешной установки");
+    if (previousEntry?.state?.revisionPath && previousEntry.state.revisionPath !== revisionPath) {
+      onEvent?.({ type: "phase", phase: "cleanup", label: "Удаляю предыдущую версию выбранного архива…" });
+      await cleanupAfterCommit(() => removePath(root, previousEntry.state.revisionPath), onEvent, "Очистка предыдущей ревизии после успешной установки");
     }
     await cleanupAfterCommit(() => cleanupOrphansUnlocked(), onEvent, "Очистка временных файлов после успешной установки");
-    return state;
+    return catalogContentState(updatedCatalog);
   } catch (error) {
     const failure = diagnostics.failure(error);
     if (revisionPath && !committed) {
@@ -180,13 +187,13 @@ async function installFullArchiveUnlocked(file, onEvent, { signal } = {}) {
 }
 
 export function applyUpdateArchive(file, onEvent, options = {}) {
-  return withSiteOperation(() => applyUpdateArchiveUnlocked(file, onEvent, options), {
+  return withContentMutation(() => applyUpdateArchiveUnlocked(file, onEvent, options), {
     signal: options.signal,
     onWait: () => onEvent?.({ type: "phase", phase: "storage-lock", label: "Ожидаю доступа к хранилищу…" }),
   });
 }
 
-async function applyUpdateArchiveUnlocked(file, onEvent, { signal } = {}) {
+async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId } = {}) {
   const diagnostics = new OperationDiagnostics("быстрое обновление", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let state;
@@ -204,8 +211,10 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal } = {}) {
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
     await recoverInterruptedOperationUnlocked();
     onEvent({ type: "phase", phase: "state-read", label: "Чтение установленного сайта и подготовка обновления" });
+    await initializeArchiveCatalogUnlocked();
     state = await readState();
-    if (!state?.revisionPath) throw new Error("Сначала установите основной архив сайта.");
+    if (archiveId && state?.archiveId !== archiveId) throw new Error("Выбранный архив изменился в другом окне. Выберите его заново.");
+    if (!state?.revisionPath) throw new Error("Сначала добавьте и выберите архив.");
     if (!hasVerifiedStatistics(state)) {
       onEvent({ type: "phase", phase: "site-verify", label: "Проверяю исходную статистику установленного сайта…" });
       state = (await refreshInstalledSiteStatisticsUnlocked()).state;
@@ -312,16 +321,89 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal } = {}) {
 }
 
 export function removeInstalledSite() {
-  return withSiteOperation(removeInstalledSiteUnlocked);
+  return withContentMutation(removeInstalledSiteUnlocked);
 }
 
 async function removeInstalledSiteUnlocked() {
-  const state = await readState();
-  const pending = await readOperationJournal();
-  if (pending?.type !== "site-delete") {
-    // Detach the site and persist deletion intent atomically before removing files.
-    await beginSiteRemoval({ schema: 1, type: "site-delete", startedAt: Date.now(), revisionPath: state?.revisionPath || null });
+  await removeCatalogArchiveUnlocked((await initializeArchiveCatalogUnlocked()).activeId);
+}
+
+export function readInstalledArchiveCatalog() {
+  return withSiteOperation(initializeArchiveCatalogUnlocked);
+}
+
+async function initializeArchiveCatalogUnlocked() {
+  let catalog = await readArchiveCatalog();
+  const active = await readState();
+  if (catalog) validateArchiveCatalog(catalog);
+  if (!catalog) {
+    catalog = createArchiveCatalog(active);
+    await writeArchiveCatalog(catalog);
+  } else if (active?.revisionPath) {
+    const entry = catalog.entries.find(item => item.state?.revisionPath === active.revisionPath);
+    if (entry) {
+      // Reconcile metadata written by the v1 shell after a release rollback.
+      catalog = storeArchiveInCatalog(catalog, active, { id: entry.id });
+      await writeArchiveCatalog(catalog);
+    } else {
+      const legacy = createArchiveCatalog(active);
+      catalog = { ...catalog, legacyRevision: legacy.legacyRevision || catalog.legacyRevision };
+      catalog = storeArchiveInCatalog(catalog, active, { id: `legacy-${active.activeRevision}`, name: active.archiveName });
+      await writeArchiveCatalog(catalog);
+    }
+  } else if (catalog.activeId) {
+    catalog = { ...catalog, activeId: null };
+    await writeArchiveCatalog(catalog);
   }
+  return catalog;
+}
+
+export function selectInstalledArchive(id) {
+  return withContentMutation(async () => {
+    await recoverInterruptedOperationUnlocked();
+    const catalog = await initializeArchiveCatalogUnlocked();
+    const entry = catalog.entries.find(item => item.id === id);
+    if (!entry?.state?.revisionPath) throw new Error("Этот архив ещё не установлен.");
+    const root = await getOpfsRoot();
+    if (!await fileExists(root, `${entry.state.revisionPath}/${entry.state.indexPath}`)) {
+      throw new Error("Стартовая страница архива отсутствует. Замените его полную версию.");
+    }
+    const updated = { ...catalog, activeId: id };
+    await writeArchiveCatalog(updated);
+    emitServiceWorkerStateChanged();
+    return catalogContentState(updated);
+  });
+}
+
+export function renameInstalledArchive(id, name) {
+  return withSiteOperation(async () => {
+    const trimmed = String(name || "").trim();
+    if (!trimmed || trimmed.length > 120) throw new Error("Введите название архива длиной от 1 до 120 символов.");
+    const catalog = await initializeArchiveCatalogUnlocked();
+    const entry = catalog.entries.find(item => item.id === id && item.kind !== "demo");
+    if (!entry) throw new Error("Этот архив нельзя переименовать.");
+    await writeArchiveCatalog({ ...catalog, entries: catalog.entries.map(item => item.id === id ? { ...item, name: trimmed } : item) });
+  });
+}
+
+export function removeInstalledArchive(id) {
+  return withContentMutation(() => removeCatalogArchiveUnlocked(id));
+}
+
+async function removeCatalogArchiveUnlocked(id) {
+  await recoverInterruptedOperationUnlocked();
+  const catalog = await initializeArchiveCatalogUnlocked();
+  const entry = catalog.entries.find(item => item.id === id);
+  if (!entry) return;
+  if (!entry.state?.revisionPath) {
+    await writeArchiveCatalog(detachCatalogArchive(catalog, id));
+    emitServiceWorkerStateChanged();
+    return;
+  }
+  // Registry, worker pointer and deletion intent are committed together.
+  await writeArchiveCatalog(detachCatalogArchive(catalog, id), {
+    journal: { schema: 1, type: "site-delete", startedAt: Date.now(), revisionPath: entry.state.revisionPath },
+  });
   emitServiceWorkerStateChanged();
   await recoverInterruptedOperationUnlocked();
 }
@@ -344,7 +426,12 @@ async function readInstalledSiteStateUnlocked() {
   // Older deletions could leave metadata pointing to a missing/empty revision.
   // Compare inside the transaction so a newer installation cannot be cleared.
   const result = await clearStateIfRevision(installed.revisionPath);
-  if (result.cleared) emitServiceWorkerStateChanged();
+  if (result.cleared) {
+    const catalog = await readArchiveCatalog();
+    if (catalog) await writeArchiveCatalog({ ...catalog, activeId: null,
+      entries: catalog.entries.map(entry => entry.state?.revisionPath === installed.revisionPath ? { ...entry, state: null } : entry) });
+    emitServiceWorkerStateChanged();
+  }
   return result.state;
 }
 
@@ -363,7 +450,7 @@ export function updatedSiteStatistics(state, merge) {
 }
 
 export function refreshInstalledSiteStatistics() {
-  return withSiteOperation(async () => {
+  return withContentMutation(async () => {
     await recoverInterruptedOperationUnlocked();
     return refreshInstalledSiteStatisticsUnlocked();
   });
@@ -389,31 +476,30 @@ async function refreshInstalledSiteStatisticsUnlocked() {
 }
 
 export function cleanupOrphans() {
-  return withSiteOperation(cleanupOrphansUnlocked);
+  return withContentMutation(cleanupOrphansUnlocked);
 }
 
 async function cleanupOrphansUnlocked() {
   await recoverInterruptedOperationUnlocked();
-  // Never trust a snapshot captured before another window acquired the lock.
-  const currentState = await readState();
+  const catalog = await initializeArchiveCatalogUnlocked();
   const root = await getOpfsRoot();
   await removePath(root, UPDATES_ROOT);
   await removePath(root, ROLLBACK_ROOT);
-
-  try {
-    const revisions = await getDirectoryAt(root, REVISIONS_ROOT, false);
-    for await (const [name] of revisions.entries()) {
-      if (name !== currentState?.activeRevision) {
-        await revisions.removeEntry(name, { recursive: true });
+  const retained = new Set(catalog.entries.map(entry => entry.state?.revisionPath).filter(Boolean));
+  for (const parentPath of [REVISIONS_ROOT, ARCHIVES_ROOT]) {
+    try {
+      const revisions = await getDirectoryAt(root, parentPath, false);
+      for await (const [name] of revisions.entries()) {
+        if (!retained.has(`${parentPath}/${name}`)) await revisions.removeEntry(name, { recursive: true });
       }
+    } catch (error) {
+      if (error?.name !== "NotFoundError") throw error;
     }
-  } catch (error) {
-    if (error?.name !== "NotFoundError") throw error;
   }
 }
 
 export function recoverInterruptedOperation() {
-  return withSiteOperation(recoverInterruptedOperationUnlocked);
+  return withContentMutation(recoverInterruptedOperationUnlocked);
 }
 
 async function recoverInterruptedOperationUnlocked() {

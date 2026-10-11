@@ -41,7 +41,7 @@ test("storage indicator respects verified site bytes and retains raw estimates i
   await page.reload();
   await expect(page.locator("#storageBarText")).toHaveText("20%");
   await page.locator("#viewerClose").click();
-  await expect(page.locator("#storageManaged")).toHaveText("Сайт GameSpace: 2,00 ГБ");
+  await expect(page.locator("#storageManaged")).toHaveText("Все архивы: 2,00 ГБ");
   await expect(page.locator("#storageQuota")).toHaveText("Квота браузера: 10,0 ГБ");
   await expect(page.locator("#storageUsage")).toContainText("не менее 2,00 ГБ");
   expect(await page.locator("#storageBar").evaluate(element => element.style.width)).toBe("20%");
@@ -52,7 +52,7 @@ test("storage indicator respects verified site bytes and retains raw estimates i
 
   await page.locator("#removeSiteButton").click();
   await expect(page.locator("#statusText")).toHaveText("Сайт удалён");
-  await expect(page.locator("#storageManaged")).toHaveText("Сайт GameSpace: не установлен");
+  await expect(page.locator("#storageManaged")).toHaveText("Все архивы: не установлены");
   await expect(page.locator("#storageBarText")).toHaveText("<0,1%");
 });
 

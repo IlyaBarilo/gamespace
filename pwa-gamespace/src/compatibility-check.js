@@ -5,7 +5,8 @@ const ORDER = ["launch", "import", "storefront", "game"];
 const copy = value => JSON.parse(JSON.stringify(value));
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
 export function compatibilityContentKey(state) {
-  return state?.activeRevision ? `${state.activeRevision}:${state.installedAt}` : "";
+  const revision = state?.archiveRevision || state?.activeRevision;
+  return revision ? `${revision}:${state.installedAt}` : "";
 }
 
 export function createCompatibilityCheck({ version, storage = () => globalThis.localStorage, now = Date.now } = {}) {

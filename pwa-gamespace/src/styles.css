@@ -2037,3 +2037,17 @@ body.is-viewing-site {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Archive library: keep names and actions readable at narrow menu widths. */
+.archive-list { display: grid; gap: 12px; margin-top: 18px; }
+.archive-entry { min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(3, 16, 32, .35); }
+.archive-entry.is-active { border-color: rgba(118, 212, 255, .5); background: rgba(0, 116, 184, .09); }
+.archive-entry-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.archive-entry h3 { margin: 0; min-width: 0; overflow-wrap: anywhere; font-size: 1rem; }
+.archive-entry-heading .storage-badge { flex: 0 0 auto; }
+.archive-entry-details, .archive-catalog-help, .archive-storage-notice { color: var(--muted); font-size: .82rem; line-height: 1.5; overflow-wrap: anywhere; }
+.archive-entry-details { margin: 8px 0 12px; }
+.archive-entry-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.archive-entry-actions .danger-button { margin: 0; }
+.archive-storage-notice { margin: 16px 0 0; padding: 12px; border: 1px solid rgba(251, 191, 36, .3); border-radius: 12px; }
+.archive-catalog-panel > .panel-heading { flex-wrap: wrap; }
