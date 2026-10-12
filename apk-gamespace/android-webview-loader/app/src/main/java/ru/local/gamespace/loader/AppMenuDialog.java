@@ -296,7 +296,7 @@ final class AppMenuDialog {
     }
 
     private View applicationCard() {
-        LinearLayout card = card("ОБОЛОЧКА APK", "Версия приложения");
+        LinearLayout card = card("ОБОЛОЧКА APK", "Обновление");
         card.addView(detailLine("Установлено", "GameSpace " + version));
         card.addView(detailLine("Сборка", appState.buildDate));
         card.addView(detailLine("Минимальная версия Android", appState.minAndroid));
