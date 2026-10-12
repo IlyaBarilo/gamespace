@@ -1,4 +1,4 @@
-import { formatBytes, formatDate } from "./format.js";
+import { formatBytes, formatDate, formatDuration } from "./format.js";
 
 export function renderArchiveCatalog(container, catalog, { busy, open, update, replace, rename, remove, restoreDemo }) {
   const fragment = document.createDocumentFragment();
@@ -48,6 +48,30 @@ export function renderArchiveCatalog(container, catalog, { busy, open, update, r
     }
     if (entry.state || entry.kind !== "demo") add(entry.kind === "demo" ? "Удалить файлы" : "Удалить", remove, "remove");
     row.append(heading, details, actions);
+    if (entry.state) {
+      const info = document.createElement("details");
+      info.className = "archive-entry-info menu-disclosure";
+      const summary = document.createElement("summary");
+      summary.textContent = "Сведения";
+      const fields = document.createElement("dl");
+      fields.className = "archive-info-fields";
+      for (const [label, value] of [
+        ["Последний файл", entry.state.archiveName || "—"],
+        ["Формат", (entry.state.archiveType || "—").toUpperCase()],
+        ["Операция", entry.state.operation === "fast" ? "Обновление без удаления" : "Полная установка"],
+        ["Время обработки", formatDuration(entry.state.operationDurationMs)],
+      ]) {
+        const field = document.createElement("div");
+        const term = document.createElement("dt");
+        const description = document.createElement("dd");
+        term.textContent = label;
+        description.textContent = value;
+        field.append(term, description);
+        fields.append(field);
+      }
+      info.append(summary, fields);
+      row.append(info);
+    }
     fragment.append(row);
   }
   container.replaceChildren(fragment);

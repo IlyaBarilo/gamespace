@@ -85,7 +85,7 @@ test("full replacement and incremental update only change the selected archive; 
   const second = (await registry(page)).activeId;
   await upload(page, await zip({ "index.html": "<!doctype html><h1>Replaced A</h1>" }), `[data-archive-id="${first}"] [data-archive-action="replace"]`);
   expect((await registry(page)).activeId).toBe(first);
-  await upload(page, await zip({ "marker.txt": "updated A" }), "#fastUpdateButton", "update.zip");
+  await upload(page, await zip({ "marker.txt": "updated A" }), ".archive-entry.is-active [data-archive-action=\"update\"]", "update.zip");
   expect((await contents(page, "marker.txt")).text).toBe("updated A");
   await row(page, second).locator('[data-archive-action="open"]').click();
   await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("Original B");

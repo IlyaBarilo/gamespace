@@ -28,9 +28,9 @@ import { ArchiveStatistics, createArchiveStatisticsStore, formatArchiveStatistic
 import { DiagnosticSession, connectDiagnosticSessions } from "./diagnostic-session.js";
 import { diagnosticPagePath, observeGameWindow } from "./game-diagnostics.js";
 import {
-  getVersionBatch,
+  orderedReleases,
+  isNewerRelease,
   normalizeReleaseDescription,
-  shouldExpandDescription,
 } from "./version-list.js";
 import {
   fetchLicenseDocument,
@@ -70,6 +70,7 @@ let toolbarTimer = null;
 let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
+let latestPwaRelease = null;
 let siteInterfaceRefreshTimer = null;
 let licenseModalPreviousFocus = null;
 let licenseDocumentRequest = 0;
@@ -410,12 +411,7 @@ function renderState() {
   const installed = Boolean(state?.revisionPath);
   elements.emptyState.hidden = installed;
   elements.installedState.hidden = !installed;
-  elements.restoreDemoButton.hidden = !installed;
   elements.openSiteButton.disabled = !installed || busy;
-  elements.fastUpdateButton.disabled = !installed || busy;
-  elements.fullUpdateButton.disabled = !installed || busy;
-  elements.removeSiteButton.disabled = !installed || busy;
-  elements.removeSiteButton.hidden = !installed;
   elements.storageVerifyButton.disabled = !installed || busy;
 
   elements.sharedLocalStorageSetting.checked = pendingGameLocalStorageMode ?? gameLocalStorageMode.shared;
@@ -435,23 +431,9 @@ function renderState() {
   });
   if (!installed) {
     elements.siteSummary.textContent = "Архив для запуска ещё не выбран";
-    elements.infoArchive.textContent = "—";
-    elements.infoFormat.textContent = "—";
-    elements.infoFiles.textContent = "—";
-    elements.infoWritten.textContent = "—";
-    elements.infoInstalled.textContent = "—";
-    elements.infoDuration.textContent = "—";
-    elements.infoMode.textContent = "—";
     return;
   }
   elements.siteSummary.textContent = `${state.archiveDisplayName || state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
-  elements.infoArchive.textContent = state.archiveName || "—";
-  elements.infoFormat.textContent = (state.archiveType || "—").toUpperCase();
-  elements.infoFiles.textContent = Number(state.files || 0).toLocaleString("ru-RU");
-  elements.infoWritten.textContent = formatBytes(state.writtenBytes || 0);
-  elements.infoInstalled.textContent = formatDate(state.installedAt);
-  elements.infoDuration.textContent = formatDuration(state.operationDurationMs);
-  elements.infoMode.textContent = state.operation === "fast" ? "Быстрое обновление" : "Полная установка";
 }
 
 function showProgress(title) {
@@ -1065,13 +1047,14 @@ async function refreshRuntimeState({ confirmHealth = false } = {}) {
   }
   if (elements.pwaCurrentVersion) {
     const active = runtimeState?.activeVersion || APP_VERSION;
-    elements.pwaCurrentVersion.textContent = `Активная версия: ${active}. Версия открытой оболочки: ${APP_VERSION}.`;
+    elements.pwaCurrentVersion.textContent = `Установлена версия ${active}.${active === APP_VERSION ? "" : ` Открыта оболочка ${APP_VERSION}.`}`;
   }
   if (elements.rollbackPwaButton) {
     elements.rollbackPwaButton.disabled = busy || !runtimeState?.previousVersion;
     elements.rollbackPwaButton.textContent = runtimeState?.previousVersion
       ? `Вернуться к версии ${runtimeState.previousVersion}`
       : "Предыдущая версия не сохранена";
+    elements.rollbackPwaButton.dataset.fixedDisabled = runtimeState?.previousVersion ? "false" : "true";
   }
   return runtimeState;
 }
@@ -1123,7 +1106,7 @@ async function fetchVersionCatalog() {
   return { latest: data.latest, versions };
 }
 
-function createReleaseOption(catalog, release, index, activeIndex, list) {
+function createReleaseOption(catalog, release, list) {
     const article = document.createElement("article");
     article.className = "release-option";
     const header = document.createElement("div");
@@ -1131,7 +1114,7 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     const copy = document.createElement("div");
     copy.className = "release-option-copy";
     const title = document.createElement("strong");
-    const current = release.version === runtimeState?.activeVersion;
+    const current = release.version === (runtimeState?.activeVersion || APP_VERSION);
     title.textContent = `GameSpace ${release.version}${release.version === catalog.latest ? " · последняя" : ""}${current ? " · установлена" : ""}`;
     const metadata = document.createElement("small");
     metadata.className = "release-metadata";
@@ -1141,18 +1124,24 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     if (release.runtime !== RUNTIME_SCRIPT) parts.push(`требуется ${release.runtime}`);
     metadata.textContent = parts.join(" · ") || "Опубликованный выпуск";
     copy.append(title, metadata);
-    const button = document.createElement("button");
+    const target = list === elements.landingVersionsList ? "landing" : "app";
+    // Reuse the update control for the latest card; there is only one install action.
+    const mainUpdate = target === "app" && release.version === catalog.latest
+      && !isNewerRelease(runtimeState?.activeVersion || APP_VERSION, release.version);
+    const button = mainUpdate ? elements.checkPwaUpdateButton : document.createElement("button");
     button.className = "version-secondary-button release-install-button";
     button.type = "button";
-    button.dataset.fixedDisabled = current ? "true" : "false";
-    button.disabled = current || busy;
-    button.textContent = current ? "Установлена" : "Установить";
-    const target = list === elements.landingVersionsList ? "landing" : "app";
-    if (!current) button.addEventListener("click", () => installPwaRelease(release, target));
+    button.dataset.fixedDisabled = mainUpdate ? "false" : current ? "true" : "false";
+    button.disabled = busy || (!mainUpdate && current);
+    if (mainUpdate) refreshPwaUpdateButton();
+    else {
+      button.textContent = current ? "Установлена" : `Установить версию ${release.version}`;
+      if (!current) button.addEventListener("click", () => installPwaRelease(release, target));
+    }
 
     const description = document.createElement("details");
     description.className = "release-description-panel";
-    description.open = shouldExpandDescription(index, activeIndex);
+    description.open = false;
     const descriptionToggle = document.createElement("summary");
     const descriptionText = document.createElement("div");
     descriptionText.className = "release-description";
@@ -1169,29 +1158,42 @@ function createReleaseOption(catalog, release, index, activeIndex, list) {
     return article;
 }
 
+function refreshPwaUpdateButton() {
+  const newer = latestPwaRelease && isNewerRelease(latestPwaRelease.version, runtimeState?.activeVersion || APP_VERSION);
+  elements.checkPwaUpdateButton.textContent = newer
+    ? `Обновить до версии ${latestPwaRelease.version}` : "Проверить обновление программы";
+  elements.recheckPwaUpdateButton.hidden = !newer;
+}
+
 function renderVersionCatalog(catalog, list) {
-  list.replaceChildren();
-  const activeIndex = catalog.versions.findIndex((release) => release.version === runtimeState?.activeVersion);
-  let offset = 0;
-  const appendNextBatch = () => {
-    list.querySelector(".release-more-button")?.remove();
-    const batch = getVersionBatch(catalog.versions, offset);
-    for (const [batchIndex, release] of batch.items.entries()) {
-      list.append(createReleaseOption(catalog, release, offset + batchIndex, activeIndex, list));
+  const releases = orderedReleases(catalog);
+  const app = list === elements.pwaVersionsList;
+  if (app) latestPwaRelease = releases[0];
+  const show = (index) => {
+    // Return the persistent control before replacing its current release card.
+    if (app) {
+      elements.pwaCheckActions.prepend(elements.checkPwaUpdateButton);
+      elements.checkPwaUpdateButton.classList.remove("release-install-button");
+      refreshPwaUpdateButton();
     }
-    offset = batch.nextOffset;
-    if (batch.remaining > 0) {
-      const moreButton = document.createElement("button");
-      moreButton.className = "version-secondary-button release-more-button";
-      moreButton.type = "button";
-      moreButton.disabled = busy;
-      moreButton.textContent = `Показать ещё (${batch.remaining})`;
-      moreButton.addEventListener("click", appendNextBatch);
-      list.append(moreButton);
-    }
-  }
-  appendNextBatch();
-  list.hidden = false;
+    list.replaceChildren(createReleaseOption(catalog, releases[index], list));
+    const navigation = document.createElement("div");
+    navigation.className = "compact-actions release-navigation";
+    const add = (text, next, className) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `version-secondary-button ${className}`;
+      button.textContent = text;
+      button.disabled = busy;
+      button.addEventListener("click", () => { if (!busy) show(next); });
+      navigation.append(button);
+    };
+    if (index < releases.length - 1) add("Предыдущая версия", index + 1, "release-previous-button");
+    if (index > 0) add("К последней версии", 0, "release-latest-button");
+    if (navigation.childElementCount) list.append(navigation);
+    list.hidden = false;
+  };
+  show(0);
 }
 
 async function installNewRuntime(release) {
@@ -1268,9 +1270,9 @@ async function checkForPwaUpdate(target = "app") {
     await refreshRuntimeState();
     const catalog = await fetchVersionCatalog();
     renderVersionCatalog(catalog, target === "landing" ? elements.landingVersionsList : elements.pwaVersionsList);
-    status.textContent = catalog.latest === runtimeState?.activeVersion
-      ? `Установлена последняя версия ${catalog.latest}. Можно выбрать прошлый выпуск.`
-      : `Последняя версия — ${catalog.latest}. Установка начнётся только после вашего выбора.`;
+    status.textContent = isNewerRelease(catalog.latest, runtimeState?.activeVersion || APP_VERSION)
+      ? `Доступно обновление ${catalog.latest}. Установка начнётся после нажатия кнопки и подтверждения.`
+      : `Установлена актуальная версия ${runtimeState?.activeVersion || APP_VERSION}.`;
   } catch (error) {
     status.textContent = `Не удалось проверить версии: ${errorMessage(error)}`;
     showError(error, { operation: "проверка версий PWA", stage: "pwa-catalog", stageLabel: "Загрузка каталога версий" });
@@ -1305,6 +1307,8 @@ async function initializeCapabilities() {
   if (!required) {
     elements.capabilityLabel.textContent = "Браузер не поддерживает обязательные функции";
     elements.capabilityLabel.dataset.tone = "bad";
+    elements.capabilityNotice.textContent = elements.capabilityLabel.textContent;
+    elements.capabilityNotice.hidden = false;
     setStatus("Полный режим недоступен", "bad");
     return;
   }
@@ -1313,6 +1317,8 @@ async function initializeCapabilities() {
     ? "7z, ZIP64, OPFS и автономный запуск доступны"
     : `ZIP64 доступен; 7z недоступен: ${sevenZip.reason}`;
   elements.capabilityLabel.dataset.tone = sevenZip.supported ? "good" : "warn";
+  elements.capabilityNotice.textContent = elements.capabilityLabel.textContent;
+  elements.capabilityNotice.hidden = sevenZip.supported;
 }
 
 async function initialize() {
@@ -1404,7 +1410,6 @@ async function initialize() {
   }
 }
 
-elements.chooseArchiveButton.addEventListener("click", () => chooseArchive("full"));
 for (const button of [elements.manualReportButton, elements.landingReportButton]) {
   button.addEventListener("click", () => {
     diagnosticSession.record("Ручной отчёт", "", true);
@@ -1445,12 +1450,13 @@ async function installBuiltinDemoSite({ force = false, openAfter = false } = {})
     setBusy(false);
   }
 }
-elements.demoButton.addEventListener("click", () => { void installBuiltinDemoSite(); });
-elements.restoreDemoButton.addEventListener("click", () => { void openCatalogArchive(DEMO_ARCHIVE_ID); });
-elements.fullUpdateButton.addEventListener("click", () => chooseArchive("full", state?.archiveId));
 elements.addArchiveButton.addEventListener("click", () => chooseArchive("full"));
-elements.fastUpdateButton.addEventListener("click", () => chooseArchive("fast"));
-elements.checkPwaUpdateButton.addEventListener("click", () => checkForPwaUpdate("app"));
+elements.checkPwaUpdateButton.addEventListener("click", () => {
+  if (latestPwaRelease && isNewerRelease(latestPwaRelease.version, runtimeState?.activeVersion || APP_VERSION)) {
+    void installPwaRelease(latestPwaRelease, "app");
+  } else void checkForPwaUpdate("app");
+});
+elements.recheckPwaUpdateButton.addEventListener("click", () => { void checkForPwaUpdate("app"); });
 elements.runtimeHistoryButton.addEventListener("click", () => {
   runtimeHistoryState = runtimeHistoryStore.load();
   diagnosticUI.open({
@@ -1587,9 +1593,6 @@ async function deleteCatalogArchive(entry) {
   } finally { setBusy(false); }
 }
 
-elements.removeSiteButton.addEventListener("click", () => {
-  void deleteCatalogArchive(archiveCatalog.entries.find(entry => entry.id === state?.archiveId));
-});
 
 elements.installButton.addEventListener("click", async () => {
   if (installPrompt) {

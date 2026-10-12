@@ -1,29 +1,21 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import {
-  getVersionBatch,
-  normalizeReleaseDescription,
-  shouldExpandDescription,
-} from "../src/version-list.js";
+import { compareReleaseVersions, isNewerRelease, orderedReleases, normalizeReleaseDescription } from "../src/version-list.js";
 
-test("shows versions in groups of three", () => {
-  const versions = ["7", "6", "5", "4", "3", "2", "1"];
-  const first = getVersionBatch(versions, 0);
-  assert.deepEqual(first, { items: ["7", "6", "5"], nextOffset: 3, remaining: 4 });
-  const second = getVersionBatch(versions, first.nextOffset);
-  assert.deepEqual(second, { items: ["4", "3", "2"], nextOffset: 6, remaining: 1 });
-  const third = getVersionBatch(versions, second.nextOffset);
-  assert.deepEqual(third, { items: ["1"], nextOffset: 7, remaining: 0 });
+test("catalog traversal starts at the official latest without changing its source", () => {
+  const catalog = { latest: "0.4.0", versions: ["0.3.9", "0.3.10", "0.4.0"].map(version => ({ version })) };
+  assert.deepEqual(orderedReleases(catalog).map(r => r.version), ["0.4.0", "0.3.10", "0.3.9"]);
+  assert.equal(catalog.versions[0].version, "0.3.9");
 });
 
-test("expands only versions newer than the active release", () => {
-  assert.equal(shouldExpandDescription(0, 2), true);
-  assert.equal(shouldExpandDescription(1, 2), true);
-  assert.equal(shouldExpandDescription(2, 2), false);
-  assert.equal(shouldExpandDescription(3, 2), false);
-  assert.equal(shouldExpandDescription(0, -1), true);
-  assert.equal(shouldExpandDescription(1, -1), false);
+test("update action compares version numbers and never offers a downgrade", () => {
+  assert.equal(isNewerRelease("0.3.10", "0.3.9"), true);
+  assert.equal(isNewerRelease("1.0.0", "0.99.99"), true);
+  assert.equal(isNewerRelease("0.3.9", "0.3.10"), false);
+  assert.equal(isNewerRelease("0.3.10", "0.3.10"), false);
+  assert.equal(compareReleaseVersions("1.0.0-rc.10", "1.0.0-rc.2"), 1);
+  assert.equal(compareReleaseVersions("1.0.0", "1.0.0-rc.10"), 1);
 });
 
 test("preserves release description line breaks", () => {
@@ -31,7 +23,7 @@ test("preserves release description line breaks", () => {
 });
 
 test("renders every release description above its install button", async () => {
-  const appSource = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
-  assert.match(appSource, /article\.append\(header, description, button\);/);
-  assert.doesNotMatch(appSource, /header\.append\(copy, button\);/);
+  const source = await readFile(new URL("../src/app.js", import.meta.url), "utf8");
+  assert.match(source, /article\.append\(header, description, button\);/);
+  assert.doesNotMatch(source, /header\.append\(copy, button\);/);
 });

@@ -113,7 +113,7 @@
               <h2>Можно начать без своего архива</h2>
             </div>
           </div>
-          <p>Откройте GameSpace со значка или во вкладке и нажмите «Установить демо-сайт» в настройках. После подготовки оболочки и установки демо встроенный каталог игр будет доступен без сети.</p>
+          <p>Откройте GameSpace со значка или во вкладке и выберите встроенное демо в списке «Мои архивы». После подготовки оболочки и установки демо встроенный каталог игр будет доступен без сети.</p>
           <p><strong>Демо можно оставить в приложении:</strong> для своей работы загрузите собственный архив. Переносить игры и материалы из демо в него нельзя.</p>
           <ul class="demo-points">
             <li><span>✓</span> Уже входит в приложение</li>
@@ -192,64 +192,12 @@
         <span id="statusText">Запуск приложения…</span>
       </div>
 
-      <section class="panel compatibility-panel" aria-label="Базовая проверка">
-        <button id="compatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
-        <p>Доступен с первого запуска, даже если архив ещё не установлен или возникла ошибка. Результаты проверки сохраняются отдельно для каждого архива.</p>
-      </section>
-
-      <div class="app-window-actions">
+      <div class="app-window-actions compact-actions">
+        <span id="installedState" hidden><button id="openSiteButton" class="primary-button" type="button">К играм</button></span>
         <button id="fullscreenButton" class="version-secondary-button" type="button" aria-pressed="false">На весь экран</button>
         <a id="browserInstallLink" class="version-secondary-button" href="./" hidden>Установка GameSpace</a>
-        <p id="browserLaunchHint" hidden>GameSpace открыт во вкладке. Сохраните эту страницу в закладки для повторного запуска. Для работы без сети сначала подготовьте оболочку и импортируйте архив или демо.</p>
+        <p id="browserLaunchHint" hidden>GameSpace открыт во вкладке. Сохраните страницу в закладки. Для работы без сети подготовьте оболочку и импортируйте архив или демо.</p>
       </div>
-
-      <section id="emptyState" class="setup-section">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">ПЕРВЫЙ ЗАПУСК</p>
-            <h2>Выберите, с чего начать</h2>
-          </div>
-          <p>Можно сразу установить встроенный демо-сайт или выбрать свой архив.</p>
-        </div>
-
-        <div class="setup-grid">
-          <article class="setup-card demo-setup-card">
-            <div class="setup-card-top">
-              <img src="./icons/gamespace-safe-192.png" alt="">
-              <span class="recommended-pill">РЕКОМЕНДУЕМ ДЛЯ ПРОВЕРКИ</span>
-            </div>
-            <h3>Встроенный демо-сайт</h3>
-            <p>Полный демонстрационный каталог уже находится внутри приложения. Его можно оставить для знакомства с GameSpace, а для своей работы загрузить собственный архив. Переносить материалы из демо в свой архив нельзя.</p>
-            <button id="demoButton" class="primary-button demo-install-button" type="button">
-              <span>Установить демо-сайт</span>
-              <small>Быстрый способ проверить GameSpace</small>
-            </button>
-          </article>
-
-          <article class="setup-card archive-setup-card">
-            <div class="setup-card-top">
-              <span class="archive-file-icon" aria-hidden="true">7z</span>
-              <span class="local-pill">ВАШ АРХИВ</span>
-            </div>
-            <h3>Сайт с устройства</h3>
-            <p>Выберите архив в памяти, на флешке или SD-карте. Файл никуда не отправляется.</p>
-            <button id="chooseArchiveButton" class="secondary-button" type="button">
-              <span>Добавить свой архив</span>
-              <small>site.7z или site.zip</small>
-            </button>
-          </article>
-        </div>
-      </section>
-
-      <section id="installedState" class="primary-card installed-card" hidden>
-        <div class="launch-orbit" aria-hidden="true"><span>▶</span></div>
-        <div>
-          <p class="section-kicker">ДОВЕРЕННЫЙ РЕЖИМ</p>
-          <h2>Готов к запуску</h2>
-          <p>Игра получает JavaScript и localStorage этого сайта. Открывайте только проверенные архивы; файлы остаются на этом устройстве.</p>
-        </div>
-        <button id="openSiteButton" class="primary-button launch-button" type="button">Открыть GameSpace</button>
-      </section>
 
       <section id="progressPanel" class="progress-card" aria-live="polite" hidden>
         <div class="progress-heading">
@@ -284,40 +232,24 @@
 
       <section id="archiveCatalogPanel" class="panel archive-catalog-panel" aria-labelledby="archiveCatalogTitle">
         <div class="panel-heading">
-          <div><p class="section-kicker">ЛОКАЛЬНЫЕ САЙТЫ</p><h2 id="archiveCatalogTitle">Мои архивы</h2></div>
+          <h2 id="archiveCatalogTitle">Мои архивы</h2>
           <button id="addArchiveButton" class="version-secondary-button" type="button">Добавить архив</button>
         </div>
-        <p class="archive-catalog-help">Добавляйте разные работы и их версии. Каждый архив хранится отдельно; последнее выбранное содержимое открывается при запуске.</p>
+        <p id="emptyState" class="archive-catalog-help">Выберите встроенное демо или добавьте свой архив с устройства.</p>
         <ul id="archiveList" class="archive-list" role="list" aria-label="Загруженные архивы и встроенное демо"></ul>
-        <p class="archive-catalog-help archive-actions-help">Обновить — добавить и заменить файлы без удаления остальных. Заменить — полностью заменить содержимое архива.</p>
-        <p class="archive-catalog-help">Просмотр доступен в одном окне GameSpace. Перед переключением, обновлением или удалением закройте просмотр в другом окне.</p>
+        <details class="menu-disclosure archive-catalog-help">
+          <summary>Как управлять архивами</summary>
+          <p>Обновить — добавить и заменить файлы без удаления остальных. Заменить — полностью заменить содержимое архива. У каждого архива свои сохранения localStorage и результаты проверки совместимости.</p>
+          <p>Открывайте только проверенные архивы: их JavaScript получает localStorage в доверенном режиме. Переносить материалы встроенного демо в свой архив нельзя.</p>
+          <p>Просмотр доступен в одном окне GameSpace. Перед переключением, обновлением или удалением закройте просмотр в другом окне.</p>
+        </details>
       </section>
 
-      <section id="archiveStoragePanel" class="panel archive-storage-panel" aria-labelledby="archiveStorageTitle">
-        <div class="panel-heading"><div><p class="section-kicker">ДАННЫЕ ИГР</p><h2 id="archiveStorageTitle">Сохранения игр</h2></div></div>
-        <div class="archive-localstorage-setting">
-          <label class="viewer-tab-setting" for="sharedLocalStorageSetting">
-            <input id="sharedLocalStorageSetting" type="checkbox">
-            <span>Единый localStorage</span>
-          </label>
-          <p id="localStorageModeStatus" role="status">У каждого архива свой localStorage.</p>
-          <details class="archive-localstorage-help">
-            <summary>Как переключаются сохранения</summary>
-            <p>При первом включении общим станет текущий набор. При повторном включении вернётся сохранённый общий набор. Выключение возвращает индивидуальные сохранения без объединения данных. Новые архивы начинают с пустого индивидуального набора.</p>
-          </details>
+      <section id="archiveStoragePanel" class="panel storage-panel archive-storage-panel" aria-labelledby="archiveStorageTitle">
+        <div class="panel-heading">
+          <h2 id="archiveStorageTitle">Память и сохранения</h2>
+          <span id="storagePersistent" class="storage-badge">Проверка…</span>
         </div>
-        <p id="archiveStorageNotice" class="archive-storage-notice">Другие хранилища игр остаются общими: IndexedDB, cookies, Cache Storage и файлы, которые игры создают через OPFS. sessionStorage зависит от окна браузера и не переключается по архивам. Настройки GameSpace и квота браузера общие.</p>
-      </section>
-
-      <section class="dashboard-grid">
-        <article class="panel storage-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">ХРАНИЛИЩЕ</p>
-              <h2>Память приложения</h2>
-            </div>
-            <span id="storagePersistent" class="storage-badge">Проверка…</span>
-          </div>
           <div class="storage-visual">
             <div class="storage-ring" id="storageRing">
               <span id="storageBarText">—</span>
@@ -333,134 +265,85 @@
           </div>
           <p id="storageRetention" class="storage-retention" role="status">Определяем режим хранения данных…</p>
           <p class="storage-retention-help">Квота не резервирует место на устройстве. Храните исходный архив отдельно: повторный импорт восстановит сайт, но не созданные в играх сохранения.</p>
-        </article>
 
-        <article class="panel actions-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">ОБНОВЛЕНИЯ</p>
-              <h2>Локальные архивы</h2>
-            </div>
-          </div>
-          <div class="action-stack">
-            <button id="fastUpdateButton" class="action-button" type="button">
-              <span class="action-symbol">↯</span>
-              <span><strong>Обновить выбранный архив</strong><small>Заменить только файлы из update-архива</small></span>
-            </button>
-            <button id="fullUpdateButton" class="action-button" type="button">
-              <span class="action-symbol">↻</span>
-              <span><strong>Заменить выбранный архив</strong><small>Полная проверка и замена только этой записи</small></span>
-            </button>
-            <button id="restoreDemoButton" class="action-button" type="button" hidden>
-              <span class="action-symbol">▶</span>
-              <span><strong>Открыть встроенное демо</strong><small>Свои архивы остаются в списке</small></span>
-            </button>
-          </div>
-        </article>
-
+        <div class="menu-subsection">
+        <div class="archive-localstorage-setting">
+          <label class="viewer-tab-setting" for="sharedLocalStorageSetting">
+            <input id="sharedLocalStorageSetting" type="checkbox">
+            <span>Единый localStorage</span>
+          </label>
+          <p id="localStorageModeStatus" role="status">У каждого архива свой localStorage.</p>
+          <details class="archive-localstorage-help">
+            <summary>Как переключаются сохранения</summary>
+            <p>При первом включении общим станет текущий набор. При повторном включении вернётся сохранённый общий набор. Выключение возвращает индивидуальные сохранения без объединения данных. Новые архивы начинают с пустого индивидуального набора.</p>
+          </details>
+        </div>
+        <p id="archiveStorageNotice" class="archive-storage-notice">Другие хранилища игр остаются общими: IndexedDB, cookies, Cache Storage и файлы, которые игры создают через OPFS. sessionStorage зависит от окна браузера и не переключается по архивам. Настройки GameSpace и квота браузера общие.</p>
+        </div>
       </section>
 
-      <section class="panel pwa-update-panel">
-        <div class="pwa-update-copy">
-          <p class="section-kicker">ОБОЛОЧКА PWA</p>
-          <h2>Версия приложения</h2>
-          <p id="pwaCurrentVersion">Установлена версия 0.3.0.</p>
-          <p id="runtimeEnvironment" class="runtime-environment">Среда запуска: определяется…</p>
-            <details class="browser-compatibility-note">
-              <summary>Если импортированная игра стала работать иначе</summary>
-              <p>Посмотрите историю браузера. Для независимого сравнения на Android используйте Chrome (Chromium) и Firefox (Gecko): установите PWA через меню второго браузера и заново импортируйте архив. Хранилища и сохранения разных браузеров не переносятся автоматически.</p>
-            </details>
-          <p id="pwaUpdateStatus">При запуске используется локальная версия. Подключение к серверу выполняется только по этой кнопке.</p>
-        </div>
-        <div class="pwa-version-actions">
-          <button id="checkPwaUpdateButton" class="action-button pwa-update-button" type="button">
-            <span class="action-symbol">↓</span>
-            <span><strong>Проверить версии PWA</strong><small>Требуется подключение к интернету</small></span>
-          </button>
-          <button id="runtimeHistoryButton" class="version-secondary-button" type="button">История браузера</button>
-          <button id="rollbackPwaButton" class="version-secondary-button" type="button" disabled>Вернуться к предыдущей версии</button>
-          <a id="recoveryLink" class="recovery-link" href="./__gamespace_recovery__/">Открыть страницу восстановления</a>
+      <section class="panel pwa-update-panel" aria-labelledby="programTitle">
+        <div class="panel-heading"><h2 id="programTitle">Программа</h2></div>
+        <p id="pwaCurrentVersion">Установлена версия 0.3.0.</p>
+        <p id="pwaUpdateStatus" role="status">Проверка обновления выполняется только по кнопке; нужен интернет.</p>
+        <div id="pwaCheckActions" class="compact-actions">
+          <button id="checkPwaUpdateButton" class="version-secondary-button" type="button">Проверить обновление программы</button>
+          <button id="recheckPwaUpdateButton" class="menu-text-button" type="button" hidden>Проверить ещё раз</button>
         </div>
         <div id="pwaVersionsList" class="release-list" hidden></div>
-      </section>
-
-      <section class="panel alternative-app-panel" aria-labelledby="alternativeAppTitle">
-        <div class="alternative-app-copy">
-          <p class="section-kicker">ДРУГАЯ ВЕРСИЯ</p>
-          <h2 id="alternativeAppTitle">GameSpace APK</h2>
-          <p>APK и PWA можно установить одновременно. Их локальные сайты, настройки и сохранения игр не переносятся автоматически.</p>
+        <div class="alternative-app-copy menu-subsection">
+          <a id="downloadApkLink" class="version-secondary-button alternative-app-button"
+            href="https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk"
+            target="_blank" rel="noopener noreferrer">Скачать APK для Android</a>
+          <details class="menu-disclosure"><summary>Об APK и PWA</summary><p>Можно установить одновременно. Их локальные сайты, настройки и сохранения игр не переносятся автоматически. APK скачивается с официальной страницы GitHub; требуется интернет.</p></details>
         </div>
-        <a id="downloadApkLink" class="action-button alternative-app-button"
-          href="https://github.com/IlyaBarilo/gamespace/releases/latest/download/GameSpace-latest.apk"
-          target="_blank" rel="noopener noreferrer">
-          <span class="action-symbol" aria-hidden="true">↓</span>
-          <span><strong>Скачать APK для Android</strong><small>Официальный файл последнего выпуска · требуется интернет</small></span>
-        </a>
-      </section>
-
-      <section class="panel details-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="section-kicker">СОСТОЯНИЕ</p>
-            <h2>Информация</h2>
+        <p id="capabilityNotice" class="capability-notice" role="status" hidden></p>
+        <details id="programDetails" class="menu-disclosure menu-subsection">
+          <summary>Восстановление и сведения о браузере</summary>
+          <p id="runtimeEnvironment" class="runtime-environment">Среда запуска: определяется…</p>
+          <p id="capabilityLabel" class="capability-badge">Проверяю браузер…</p>
+          <div class="compact-actions">
+            <button id="rollbackPwaButton" class="version-secondary-button" type="button" disabled>Вернуться к предыдущей версии</button>
+            <button id="runtimeHistoryButton" class="version-secondary-button" type="button">История браузера</button>
+            <a id="recoveryLink" class="recovery-link" href="./__gamespace_recovery__/">Страница восстановления</a>
           </div>
-          <span id="capabilityLabel" class="capability-badge">Проверяю браузер…</span>
+          <details class="menu-disclosure browser-compatibility-note">
+            <summary>Если игра стала работать иначе</summary>
+            <p>Посмотрите историю браузера. Для независимого сравнения на Android используйте Chrome (Chromium) и Firefox (Gecko): установите PWA через меню второго браузера и заново импортируйте архив. Хранилища и сохранения разных браузеров не переносятся автоматически.</p>
+          </details>
+        </details>
+      </section>
+
+      <section class="panel help-panel" aria-labelledby="helpTitle">
+        <h2 id="helpTitle">Проверка и помощь</h2>
+        <button id="compatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
+        <p class="menu-note">Доступен с первого запуска, в том числе после ошибки. Результаты сохраняются отдельно для каждого архива.</p>
+        <div class="menu-subsection" aria-labelledby="archiveStatisticsTitle">
+          <h3 id="archiveStatisticsTitle">Последняя обработка</h3>
+          <p id="archiveStatisticsSummary">Появится после установки или обновления из архива.</p>
+          <button id="archiveStatisticsButton" class="version-secondary-button" type="button" disabled>Посмотреть статистику</button>
         </div>
-        <dl class="details-list">
-          <div><dt>Архив</dt><dd id="infoArchive">—</dd></div>
-          <div><dt>Формат</dt><dd id="infoFormat">—</dd></div>
-          <div><dt>Файлов обработано</dt><dd id="infoFiles">—</dd></div>
-          <div><dt>Размер установленного сайта</dt><dd id="infoWritten">—</dd></div>
-          <div><dt>Дата операции</dt><dd id="infoInstalled">—</dd></div>
-          <div><dt>Время</dt><dd id="infoDuration">—</dd></div>
-          <div><dt>Последний режим</dt><dd id="infoMode">—</dd></div>
-        </dl>
-        <button id="removeSiteButton" class="danger-button" type="button">Удалить выбранный архив</button>
-      </section>
-
-      <section class="panel diagnostics-panel" aria-labelledby="archiveStatisticsTitle">
-        <p class="section-kicker">ПОСЛЕДНЯЯ ОБРАБОТКА</p>
-        <h2 id="archiveStatisticsTitle">Статистика архива</h2>
-        <p id="archiveStatisticsSummary">Появится после установки или обновления из архива.</p>
-        <button id="archiveStatisticsButton" class="version-secondary-button" type="button" disabled>Посмотреть статистику</button>
-      </section>
-
-      <section class="panel viewer-settings-panel" aria-labelledby="viewerSettingsTitle">
-        <div>
-          <p class="section-kicker">ПРОСМОТР САЙТА</p>
-          <h2 id="viewerSettingsTitle">Вкладка быстрого меню</h2>
-          <p>После скрытия верхней панели небольшая вкладка <strong>•••</strong> может оставаться вверху экрана и сразу открывать это меню.</p>
+        <div class="menu-subsection" aria-labelledby="viewerSettingsTitle">
+          <label id="viewerSettingsTitle" class="viewer-tab-setting" for="viewerMenuTabSetting">
+            <input id="viewerMenuTabSetting" type="checkbox">
+            <span>Показывать вкладку меню <strong>•••</strong></span>
+          </label>
+          <p class="menu-note">После скрытия верхней панели вкладка сразу открывает меню.</p>
         </div>
-        <label class="viewer-tab-setting" for="viewerMenuTabSetting">
-          <input id="viewerMenuTabSetting" type="checkbox">
-          <span>Показывать вкладку <strong>•••</strong></span>
-        </label>
-      </section>
-
-      <section class="panel diagnostics-panel" aria-labelledby="diagnosticsTitle">
-        <p class="section-kicker">ПОМОЩЬ ПРИ СБОЕ</p>
-        <h2 id="diagnosticsTitle">Последняя ошибка</h2>
-        <p id="lastErrorSummary">Сохранённых ошибок пока нет.</p>
-        <button id="lastErrorButton" class="version-secondary-button" type="button">Открыть диагностический отчёт</button>
-        <button id="manualReportButton" class="version-secondary-button diagnostic-trigger" type="button">Создать отчёт о проблеме</button>
-      </section>
-
-      <section class="panel licenses-panel">
-        <div class="licenses-copy">
-          <p class="section-kicker">О ПРИЛОЖЕНИИ</p>
-          <h2>Лицензии</h2>
-          <p>MIT License, условия использования фирменных и демонстрационных материалов, а также лицензии сторонних компонентов.</p>
-        </div>
-        <button id="openLicensesButton" class="action-button license-open-button" type="button">
-          <span class="action-symbol">§</span>
-          <span><strong>Открыть лицензии</strong><small>Документы доступны без интернета</small></span>
-        </button>
+        <details class="menu-disclosure menu-subsection" aria-labelledby="diagnosticsTitle">
+          <summary id="diagnosticsTitle">Последняя ошибка и отчёт о проблеме</summary>
+          <p id="lastErrorSummary">Сохранённых ошибок пока нет.</p>
+          <div class="compact-actions">
+            <button id="lastErrorButton" class="version-secondary-button" type="button">Открыть диагностический отчёт</button>
+            <button id="manualReportButton" class="version-secondary-button diagnostic-trigger" type="button">Создать отчёт о проблеме</button>
+          </div>
+        </details>
       </section>
 
       <footer class="app-footer">
         <span>GameSpace PWA · версия 0.3.0</span>
         <a class="author-link" href="https://barilo.ru" target="_blank" rel="noopener noreferrer">Автор: Илья Барило · Ilya Barilo · barilo.ru</a>
-        <span>Архивы обрабатываются только на устройстве</span>
+        <button id="openLicensesButton" class="menu-text-button" type="button">Лицензии</button>
       </footer>
 
       <input id="archiveInput" type="file" accept=".7z,.zip,application/x-7z-compressed,application/zip" hidden>
@@ -476,7 +359,7 @@
       <ol class="compatibility-steps">
         <li><strong>Запуск приложения: <span id="compatibilityStep_launch"></span></strong><span>Установите PWA и откройте её значок. Локальный просмотр во вкладке не подтверждает установку.</span></li>
         <li><strong>Импорт архива: <span id="compatibilityStep_import"></span></strong><span>Закройте окно и установите встроенное демо или свой архив. Дождитесь завершения полной установки.</span></li>
-        <li><strong>Загрузка витрины: <span id="compatibilityStep_storefront"></span></strong><span>Нажмите «Открыть GameSpace» и дождитесь появления витрины игр.</span></li>
+        <li><strong>Загрузка витрины: <span id="compatibilityStep_storefront"></span></strong><span>Нажмите «К играм» и дождитесь появления витрины игр.</span></li>
         <li><strong>Переход в игру: <span id="compatibilityStep_game"></span></strong><span>Откройте одну из игр из витрины внутри GameSpace. Проходить игру для проверки не требуется.</span></li>
       </ol>
       <p id="compatibilityWarning" role="status"></p>

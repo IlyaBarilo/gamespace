@@ -14,25 +14,16 @@ async function getSiteFrame(page) {
 }
 
 async function expectViewerFrameGeometry(page, landscape) {
-  const geometry = await page.locator(".viewer-content-frame").evaluate((element) => {
+  await expect(page.locator("#viewer")).toBeVisible();
+  await expect(page.locator(".viewer-content-frame")).toBeVisible();
+  // Reopening waits for storage/worker preparation. A hidden loading indicator
+  // alone is not readiness: it also remains hidden before the viewer is shown.
+  await expect.poll(async () => page.locator(".viewer-content-frame").evaluate((element, landscape) => {
     const rect = element.getBoundingClientRect();
-    return {
-      left: rect.left,
-      width: rect.width,
-      height: rect.height,
-      windowWidth: window.innerWidth,
-      windowHeight: window.innerHeight,
-    };
-  });
-
-  expect(Math.abs(geometry.height - geometry.windowHeight)).toBeLessThanOrEqual(1);
-  if (landscape) {
-    expect(Math.abs(geometry.width - geometry.height * 10 / 16)).toBeLessThanOrEqual(1);
-    expect(Math.abs(geometry.left - (geometry.windowWidth - geometry.width) / 2)).toBeLessThanOrEqual(1);
-  } else {
-    expect(Math.abs(geometry.width - geometry.windowWidth)).toBeLessThanOrEqual(1);
-    expect(Math.abs(geometry.left)).toBeLessThanOrEqual(1);
-  }
+    const expectedWidth = landscape ? window.innerHeight * 10 / 16 : window.innerWidth;
+    const expectedLeft = landscape ? (window.innerWidth - expectedWidth) / 2 : 0;
+    return Math.max(Math.abs(rect.height - window.innerHeight), Math.abs(rect.width - expectedWidth), Math.abs(rect.left - expectedLeft));
+  }, landscape)).toBeLessThanOrEqual(1);
 }
 
 test("installs demo, applies update and opens the site offline", async ({ page, context }) => {
@@ -41,12 +32,15 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await page.goto("./");
   await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
 
-  await page.locator("#demoButton").click();
+  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
   await expect(page.locator("#installedState")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
+  await expect(page.locator("#viewer")).toBeVisible();
+  await expect(page.locator("#viewerLoading")).toBeHidden();
+  await page.locator("#viewerClose").click();
 
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("#fastUpdateButton").click();
+  await page.locator(".archive-entry.is-active [data-archive-action=\"update\"]").click();
   await (await chooser).setFiles(fileURLToPath(new URL("../test/fixtures/gamespace-update.zip", import.meta.url)));
   await expect(page.locator("#progressPanel")).toBeVisible();
   await expect(page.locator("#progressPhase")).toHaveText("Готово", { timeout: 90_000 });
@@ -112,6 +106,7 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await expect(page.locator("#viewer")).toBeHidden();
   await expect(page.locator("html")).not.toHaveClass(/is-viewing-site/);
   await expect(page.locator("body")).not.toHaveClass(/is-viewing-site/);
+  await page.locator("#diagnosticsTitle").click();
   await page.locator("#lastErrorButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Viewer menu diagnostic fixture/);
   await page.locator("#diagnosticClose").click();
@@ -122,6 +117,8 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await page.locator("#viewerMenuTabSetting").check();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   await page.locator("#openSiteButton").click();
+  await expect(page.locator("#viewer")).toBeVisible();
+  await expect(page.locator("#siteFrame")).toBeVisible();
   await expect(page.locator("#viewerLoading")).toBeHidden();
   await expect(page.locator("#viewer")).not.toHaveClass(/is-portrait-frame-mode/);
   await expectViewerFrameGeometry(page, false);

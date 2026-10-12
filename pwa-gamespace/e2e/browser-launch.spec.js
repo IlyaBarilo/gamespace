@@ -22,9 +22,8 @@ test("browser launch imports 7z, records a successful check and keeps its mode i
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.screenshot({ path: testInfo.outputPath("browser-settings-desktop.png"), fullPage: true });
 
-  await page.locator("#demoButton").click();
-  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе", { timeout: 90_000 });
-  await page.locator("#openSiteButton").click();
+  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
+  await expect(page.locator("#viewer")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#viewerLoading")).toBeHidden();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("gamespace:compatibility-check:v1")).data.steps.storefront)).toBe("success");
   await page.locator("#viewerFullscreen").click();
@@ -62,7 +61,7 @@ test("installed display and browser display share imported content and game save
   await zip.add("index.html", new TextReader('<!doctype html><p id="saved"></p><script>document.querySelector("#saved").textContent=localStorage.getItem("browser-save")||"empty";</script>'));
   const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("#chooseArchiveButton").click();
+  await page.locator("#addArchiveButton").click();
   await (await chooser).setFiles({ name: "browser-site.zip", mimeType: "application/zip", buffer });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await page.evaluate(() => localStorage.setItem("browser-save", "saved in browser"));
@@ -95,7 +94,7 @@ test("fullscreen denial gives a fallback without preventing import", async ({ pa
   await page.locator("#fullscreenButton").click();
   expect(hint).toContain("F11");
   await expect(page.locator("#fullscreenButton")).toHaveAttribute("aria-pressed", "false");
-  await expect(page.locator("#chooseArchiveButton")).toBeEnabled();
+  await expect(page.locator("#addArchiveButton")).toBeEnabled();
 });
 
 test("a saved browser URL opens content after a cold offline browser restart", async ({ baseURL }) => {
@@ -111,7 +110,7 @@ test("a saved browser URL opens content after a cold offline browser restart", a
     const zip = new ZipWriter(new BlobWriter());
     await zip.add("index.html", new TextReader("<!doctype html><h1>Browser offline content</h1>"));
     const chooser = page.waitForEvent("filechooser");
-    await page.locator("#chooseArchiveButton").click();
+    await page.locator("#addArchiveButton").click();
     await (await chooser).setFiles({ name: "offline.zip", mimeType: "application/zip", buffer: Buffer.from(await (await zip.close()).arrayBuffer()) });
     await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     await page.evaluate(() => localStorage.setItem("cold-browser-save", "preserved"));

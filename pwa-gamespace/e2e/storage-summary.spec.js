@@ -15,7 +15,7 @@ test("storage indicator respects verified site bytes and retains raw estimates i
   await zip.add("index.html", new TextReader("<!doctype html><title>Storage fixture</title>"));
   const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("#chooseArchiveButton").click();
+  await page.locator("#addArchiveButton").click();
   await (await chooser).setFiles({ name: "storage-fixture.zip", mimeType: "application/zip", buffer });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
 
@@ -46,11 +46,12 @@ test("storage indicator respects verified site bytes and retains raw estimates i
   await expect(page.locator("#storageUsage")).toContainText("не менее 2,00 ГБ");
   expect(await page.locator("#storageBar").evaluate(element => element.style.width)).toBe("20%");
   expect(await page.locator("#storageRing").evaluate(element => element.style.getPropertyValue("--fill"))).toBe("72deg");
+  await page.locator("#diagnosticsTitle").click();
   await page.locator("#manualReportButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Последняя оценка использования, байт: 10485760/);
   await page.locator("#diagnosticClose").click();
 
-  await page.locator("#removeSiteButton").click();
+  await page.locator(".archive-entry.is-active [data-archive-action=\"remove\"]").click();
   await expect(page.locator("#statusText")).toHaveText("Сайт удалён");
   await expect(page.locator("#storageManaged")).toHaveText("Все архивы: не установлены");
   await expect(page.locator("#storageBarText")).toHaveText("<0,1%");
@@ -100,7 +101,7 @@ for (const granted of [true, false]) {
     await zip.add("index.html", new TextReader("<!doctype html><title>Persistence fixture</title>"));
     const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
     const chooser = page.waitForEvent("filechooser");
-    await page.locator("#chooseArchiveButton").click();
+    await page.locator("#addArchiveButton").click();
     await (await chooser).setFiles({ name: "persistence-fixture.zip", mimeType: "application/zip", buffer });
     await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     await expect(page.locator("#storagePersistent")).toHaveText(granted ? "Постоянное" : "Обычное");

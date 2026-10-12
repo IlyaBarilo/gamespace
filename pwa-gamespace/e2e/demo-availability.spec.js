@@ -12,7 +12,7 @@ test("bundled demo remains a separate offline entry after a custom archive", asy
   const buffer = Buffer.from(await (await writer.close()).arrayBuffer());
   page.on("dialog", dialog => dialog.accept());
   const chooser = page.waitForEvent("filechooser");
-  await page.locator("#chooseArchiveButton").click();
+  await page.locator("#addArchiveButton").click();
   await (await chooser).setFiles({ name: "custom-site.zip", mimeType: "application/zip", buffer });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   const custom = page.locator('.archive-entry').filter({ has: page.locator('h3', { hasText: 'custom-site.zip' }) });
@@ -21,7 +21,7 @@ test("bundled demo remains a separate offline entry after a custom archive", asy
   await expect(page.locator("#viewer")).toBeVisible();
   await page.locator("#viewerClose").click();
   await demo.locator('[data-archive-action="open"]').click();
-  await expect(page.locator("#infoArchive")).toHaveText("Встроенный демо-сайт (demo.7z)", { timeout: 90_000 });
+  await expect(demo.locator(".archive-entry-info dd").first()).toHaveText("Встроенный демо-сайт (demo.7z)", { timeout: 90_000 });
   await expect(page.locator("#viewer")).toBeVisible();
   expect(await page.evaluate(async () => (await fetch("./__gamespace_content__/games/tictac/game.html")).ok)).toBe(true);
   await page.locator("#viewerClose").click();

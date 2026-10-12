@@ -97,7 +97,7 @@ test("failed replacement preserves a passed report; successful updates and delet
   await open(page, a); await close(page);
   expect(await report(page)).toContain("ИТОГ: базовая проверка пройдена");
   await closeReport(page);
-  await upload(page, "Update", "#fastUpdateButton", { "asset.txt": "new asset" });
+  await upload(page, "Update", ".archive-entry.is-active [data-archive-action=\"update\"]", { "asset.txt": "new asset" });
   expect(await report(page)).toContain("импорт: не выполнено");
   await closeReport(page);
   await open(page, b); await close(page);

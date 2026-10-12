@@ -9,8 +9,8 @@ test("diagnostic controls exist on both app and landing surfaces, with manual-co
   }
   assert.match(html, /<textarea id="diagnosticText" readonly/);
   assert.match(html, /Автоматической отправки нет/);
-  assert.match(html, /<details class="browser-compatibility-note">\s*<summary>Если импортированная игра стала работать иначе<\/summary>/);
-  assert.doesNotMatch(html, /<details class="browser-compatibility-note" open>/);
+  assert.match(html, /<details class="menu-disclosure browser-compatibility-note">\s*<summary>Если игра стала работать иначе<\/summary>/);
+  assert.doesNotMatch(html, /<details class="menu-disclosure browser-compatibility-note" open>/);
   assert.match(html, /На Android: откройте меню браузера и выберите «Установить приложение»/);
   assert.doesNotMatch(html, /«Установить приложение» или «Добавить на главный экран»/);
   const ui = await readFile(new URL("../src/diagnostic-ui.js", import.meta.url), "utf8");
@@ -25,8 +25,8 @@ test("install action distinguishes a browser prompt from manual installation", a
   assert.match(app, /Как установить GameSpace/);
   assert.match(app, /Через меню браузера/);
   assert.match(app, /installPrompt[\s\S]*Открыть окно установки/);
-  assert.match(html, /ДОВЕРЕННЫЙ РЕЖИМ/);
-  assert.match(html, /JavaScript и localStorage/);
+  assert.match(html, /в доверенном режиме/);
+  assert.match(html, /JavaScript получает localStorage/);
   assert.doesNotMatch(html, /СОВМЕСТИМЫЙ РЕЖИМ/);
 });
 

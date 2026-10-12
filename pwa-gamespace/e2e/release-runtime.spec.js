@@ -45,7 +45,7 @@ test("cold browser restart opens the built release and imported site without a n
     await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true }).catch(async error => {
       throw new Error(`${error.message}\nInitialization detail: ${await page.locator("#errorText").textContent()}`);
     });
-    await page.locator("#demoButton").click();
+    await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
     await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     expect((await runtime(page, "GET_RUNTIME_STATE")).state.activeVersion).not.toContain("dev");
     await context.close();
@@ -67,12 +67,21 @@ test("production UI installs a verified release and can roll back offline", asyn
   const versions = await (await request.get("/__e2e_versions__")).json();
   await openApp(page);
   expect(await page.locator("#e2eUpdateFixture").count()).toBe(0);
+  const catalog = await (await request.get("versions.json")).json();
+  catalog.latest = versions.goodVersion;
+  await page.evaluate(catalog => {
+    const original = window.fetch.bind(window);
+    window.fetch = (...args) => new URL(String(args[0]), location.href).pathname.endsWith("/versions.json")
+      ? Promise.resolve(new Response(JSON.stringify(catalog), { headers: { "Content-Type": "application/json" } }))
+      : original(...args);
+  }, catalog);
   await page.locator("#checkPwaUpdateButton").click();
   const card = page.locator("#pwaVersionsList .release-option").filter({ has: page.locator("strong", { hasText: `GameSpace ${versions.goodVersion}` }) });
   await card.locator("button").click();
   await expect(page.locator("#appHeaderVersion")).toHaveText(versions.goodVersion);
   await expect.poll(async () => (await runtime(page, "GET_RUNTIME_STATE")).state.pendingVersion).toBeNull();
   await context.setOffline(true);
+  await page.locator("#programDetails > summary").click();
   await page.locator("#rollbackPwaButton").click();
   await expect(page.locator("#appHeaderVersion")).toHaveText(versions.version);
 });
@@ -96,7 +105,7 @@ test("an installed release evicted by the three-release size budget survives res
   try {
     const first = context.pages()[0]; await installedWindow(first); await first.goto(baseURL);
     await expect(first.locator("#statusText")).toContainText("готово", { ignoreCase: true });
-    await choose(first, "#chooseArchiveButton", await zipFiles({ "index.html": content }));
+    await choose(first, "#addArchiveButton", await zipFiles({ "index.html": content }));
     await expect(first.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     await first.locator("#openSiteButton").click();
     await expect(first.locator("#viewer")).toBeVisible();
@@ -125,6 +134,7 @@ test("an installed release evicted by the three-release size budget survives res
     await context.setOffline(true);
     await restarted.reload();
     await checkContentAndSave(restarted);
+    await restarted.locator("#programDetails > summary").click();
     await restarted.locator("#rollbackPwaButton").click();
     await expect(restarted.locator("#appHeaderVersion")).toHaveText(version);
     await checkContentAndSave(restarted);
@@ -160,7 +170,7 @@ test("a fully downloaded release that fails its first startup rolls back on the 
 test("7z system files are removed before installed-content verification", async ({ page, request }) => {
   const archive = await (await request.get("/__e2e_archive__")).body();
   await openApp(page);
-  await choose(page, "#chooseArchiveButton", archive, "system-files.7z");
+  await choose(page, "#addArchiveButton", archive, "system-files.7z");
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   expect(await page.evaluate(async () => {
     const root = await navigator.storage.getDirectory();
@@ -198,17 +208,17 @@ test("another window waits for an active import instead of deleting its staging 
 
 test("corrupt ZIP update preserves the installed content", async ({ page }) => {
   await openApp(page);
-  await choose(page, "#chooseArchiveButton", await zipFiles({ "index.html": "ORIGINAL" }));
+  await choose(page, "#addArchiveButton", await zipFiles({ "index.html": "ORIGINAL" }));
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   const changed = await zipFiles({ "index.html": "CHANGED!" }); changed[changed.indexOf(Buffer.from("CHANGED!"))] ^= 1;
-  await choose(page, "#fastUpdateButton", changed);
+  await choose(page, ".archive-entry.is-active [data-archive-action=\"update\"]", changed);
   await expect(page.locator("#statusText")).toHaveText("Не удалось обработать архив");
   expect(await page.evaluate(async () => (await fetch("./__gamespace_content__/index.html")).text())).toBe("ORIGINAL");
 });
 
 test("fast update preserves exact totals without visiting unrelated content and releases the screen lock", async ({ page }) => {
   await openApp(page);
-  await choose(page, "#chooseArchiveButton", await zipFiles({ "index.html": "old", "untouched/keep.txt": "keep" }));
+  await choose(page, "#addArchiveButton", await zipFiles({ "index.html": "old", "untouched/keep.txt": "keep" }));
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await page.evaluate(async () => {
     const originalRoot = await navigator.storage.getDirectory();
@@ -234,7 +244,7 @@ test("fast update preserves exact totals without visiting unrelated content and 
       return sentinel;
     } } });
   });
-  await choose(page, "#fastUpdateButton", await zipFiles({ "index.html": "new", "added.txt": "added" }));
+  await choose(page, ".archive-entry.is-active [data-archive-action=\"update\"]", await zipFiles({ "index.html": "new", "added.txt": "added" }));
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await expect.poll(() => page.evaluate(async () => {
     const db = await new Promise(resolve => { const r = indexedDB.open("gamespace-pwa", 1); r.onsuccess = () => resolve(r.result); });

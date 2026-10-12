@@ -82,7 +82,7 @@ test("demo failure is brief; compatibility remains accessible during download an
       ? new Promise(resolve => { window.finishDemoFixture = () => resolve(new Response("private diagnostic detail", { status: 503 })); })
       : original(...args);
   });
-  await page.locator("#demoButton").click();
+  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
   try {
     await expect(page.locator("#compatibilityButton")).toBeEnabled();
     const pending = await openReport(page);
@@ -102,9 +102,8 @@ test("full demo and game transition pass; a recorded game error downgrades a ref
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
   await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
-  await page.locator("#demoButton").click();
-  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе", { timeout: 90_000 });
-  await page.locator("#openSiteButton").click();
+  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
+  await expect(page.locator("#viewer")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#viewerLoading")).toBeHidden();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("gamespace:compatibility-check:v1")).data.steps.storefront)).toBe("success");
   const frame = page.frameLocator("#siteFrame");

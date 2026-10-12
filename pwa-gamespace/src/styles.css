@@ -2072,3 +2072,73 @@ body.is-viewing-site {
   .archive-entry-actions button { min-height: 44px; }
   .archive-localstorage-setting .viewer-tab-setting { min-height: 44px; }
 }
+
+/* Compact installed menu: four blocks, disclosure for secondary information. */
+.app-shell { width: min(960px, calc(100% - 24px)); padding-top: max(14px, env(safe-area-inset-top)); }
+.app-shell > .panel, .app-shell > .progress-card, .app-shell > .error-card { margin-top: 12px; padding: 12px 14px; border-radius: 14px; }
+.app-shell .panel-heading { flex-wrap: wrap; gap: 8px; margin: 0; }
+.app-shell h2 { margin: 0; font-size: 1.12rem; }
+.app-shell h3 { font-size: .94rem; }
+.app-shell .hero { gap: 12px; padding: 0; }
+.app-shell .hero .eyebrow { margin-bottom: 5px; }
+.app-shell .hero-summary { margin-top: 6px; }
+.app-shell .status-line { margin: 10px 0; padding: 9px 12px; }
+.compact-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.app-shell .app-window-actions { margin: 10px 0 0; }
+.app-shell .app-window-actions > p { flex-basis: 100%; margin: 0; }
+.app-shell .version-secondary-button, .app-shell .recovery-link, .app-shell .primary-button,
+.app-shell .storage-verify-button { min-height: 36px; padding: 7px 11px; font-size: .82rem; line-height: 1.35; border-radius: 9px; white-space: normal; overflow-wrap: anywhere; }
+.app-shell .archive-entry-actions button { min-height: 32px; padding: 5px 9px; font-size: .78rem; }
+.app-shell .pwa-update-panel { display: block; }
+.app-shell .pwa-update-panel > p { margin: 8px 0; font-size: .84rem; line-height: 1.5; }
+.app-shell #pwaCurrentVersion { color: var(--blue-bright); font-weight: 700; }
+.app-shell #pwaUpdateStatus { color: var(--muted); }
+.menu-disclosure { font-size: .82rem; color: var(--muted); line-height: 1.5; overflow-wrap: anywhere; }
+.menu-disclosure summary { cursor: pointer; color: var(--blue-bright); font-weight: 650; width: fit-content; }
+.menu-disclosure summary:focus-visible { outline: 2px solid var(--blue-bright); outline-offset: 3px; }
+.menu-disclosure p, .menu-note { margin: 7px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.menu-subsection { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.menu-subsection h3 { margin: 0; }
+.menu-subsection .compact-actions { margin-top: 8px; }
+.app-shell .storage-visual { margin-top: 10px; gap: 14px; grid-template-columns: 94px minmax(0, 1fr); }
+.app-shell .storage-ring { width: 94px; height: 94px; flex-shrink: 0; }
+.app-shell .storage-ring::before { width: 72px; height: 72px; }
+.app-shell .storage-ring span { grid-area: 1 / 1; font-size: 1rem; }
+.app-shell .storage-copy { gap: 5px; min-width: 0; }
+.app-shell .storage-retention, .app-shell .storage-retention-help { margin-top: 9px; padding: 8px 10px; font-size: .8rem; }
+.app-shell .archive-localstorage-setting { margin-top: 0; }
+.app-shell .archive-storage-notice { margin-top: 8px; padding: 7px 9px; font-size: .78rem; }
+.archive-entry-info { margin-top: 7px; }
+.archive-info-fields { margin: 7px 0 0; font-size: .78rem; }
+.archive-info-fields > div { display: grid; grid-template-columns: minmax(100px, .3fr) minmax(0, 1fr); gap: 6px; margin-top: 4px; }
+.archive-info-fields dt { color: var(--muted); }
+.archive-info-fields dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
+.app-shell .release-option { padding: 10px 12px; gap: 0; }
+.app-shell .release-description-panel { margin-top: 8px; padding-top: 7px; }
+.app-shell .release-description { padding: 8px 10px; margin-top: 7px; }
+.app-shell .release-install-button { margin-top: 9px; }
+.app-shell .alternative-app-copy { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.app-shell .alternative-app-copy details { flex: 1 1 180px; }
+.app-shell .alternative-app-copy p { font-size: .82rem; }
+.app-shell .browser-compatibility-note { padding: 0; border: 0; background: transparent; }
+.app-shell .capability-badge { width: fit-content; max-width: 100%; line-height: 1.5; overflow-wrap: anywhere; }
+.capability-notice { color: #ffd47c; border-left: 3px solid #ffd47c; padding-left: 9px; }
+.app-shell .help-panel > button { margin-top: 10px; }
+.app-shell #archiveStatisticsSummary { font-size: .82rem; margin: 7px 0; color: var(--muted); overflow-wrap: anywhere; }
+.app-shell .viewer-tab-setting { min-height: 32px; padding: 0; border: 0; background: transparent; justify-content: flex-start; }
+.menu-text-button { min-height: 32px; padding: 4px 0; background: transparent; color: var(--blue-bright); font: inherit; font-size: .82rem; text-decoration: underline; text-underline-offset: 3px; }
+.app-shell .app-footer { flex-wrap: wrap; gap: 8px 18px; margin-top: 14px; padding-top: 12px; }
+@media (max-width: 420px) {
+  .app-shell > .panel { padding: 12px; }
+  .app-shell .storage-visual { gap: 10px; grid-template-columns: 80px minmax(0, 1fr); }
+  .app-shell .storage-ring { width: 80px; height: 80px; }
+  .app-shell .storage-ring::before { width: 62px; height: 62px; }
+  .archive-info-fields > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+@media (pointer: coarse) {
+  .app-shell button, .app-shell .archive-entry-actions button, .app-shell .version-secondary-button, .app-shell .recovery-link,
+  .app-shell .viewer-tab-setting, .menu-disclosure summary { min-height: 44px; }
+  .menu-disclosure summary { display: flex; align-items: center; }
+  .menu-disclosure summary::before { content: "▸"; margin-right: 6px; }
+  .menu-disclosure[open] > summary::before { content: "▾"; }
+}

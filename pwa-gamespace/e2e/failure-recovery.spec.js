@@ -17,9 +17,12 @@ async function openApp(page) {
 }
 
 async function installDemo(page) {
-  await page.locator("#demoButton").click();
+  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
   await expect(page.locator("#installedState")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
+  await expect(page.locator("#viewer")).toBeVisible();
+  await expect(page.locator("#viewerLoading")).toBeHidden();
+  await page.locator("#viewerClose").click();
 }
 
 async function chooseFile(page, button, file) {
@@ -37,11 +40,15 @@ async function readContent(page, path) {
 
 test("a corrupt full archive keeps the previously installed site", async ({ page }) => {
   await openApp(page);
-  await installDemo(page);
+  await chooseFile(page, "#addArchiveButton", {
+    name: "original.zip", mimeType: "application/zip",
+    buffer: await createZip({ "index.html": "<!doctype html><h1>Original site</h1>" }),
+  });
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   const original = await readContent(page, "index.html");
   expect(original.status).toBe(200);
 
-  await chooseFile(page, "#fullUpdateButton", {
+  await chooseFile(page, ".archive-entry.is-active [data-archive-action=\"replace\"]", {
     name: "corrupt.zip",
     mimeType: "application/zip",
     buffer: Buffer.from("this is not a zip archive"),
@@ -65,7 +72,7 @@ test("a known insufficient quota rejects an archive before extraction", async ({
     "asset.txt": "small file",
   });
 
-  await chooseFile(page, "#chooseArchiveButton", {
+  await chooseFile(page, "#addArchiveButton", {
     name: "quota-fixture.zip",
     mimeType: "application/zip",
     buffer: archive,
@@ -160,7 +167,7 @@ test("startup recovery restores an interrupted update from its journal", async (
 test("site removal clears metadata and makes content unavailable", async ({ page }) => {
   await openApp(page);
   await installDemo(page);
-  await page.locator("#removeSiteButton").click();
+  await page.locator(".archive-entry.is-active [data-archive-action=\"remove\"]").click();
   await expect(page.locator("#statusText")).toHaveText("Сайт удалён", { timeout: 30_000 });
   await expect(page.locator("#emptyState")).toBeVisible();
   await expect(page.locator("#installedState")).toBeHidden();
@@ -210,7 +217,7 @@ test("the cancel button aborts a running ZIP installation and removes partial da
   }
   const archive = await createZip(entries);
 
-  await chooseFile(page, "#chooseArchiveButton", {
+  await chooseFile(page, "#addArchiveButton", {
     name: "cancellation-fixture.zip",
     mimeType: "application/zip",
     buffer: archive,
