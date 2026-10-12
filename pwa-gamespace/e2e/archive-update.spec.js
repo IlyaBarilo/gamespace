@@ -11,7 +11,7 @@ async function app(page) {
   page.on("dialog", dialog => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
 }
 async function choose(page, button, entries, name = "update.zip") {
   const chooser = page.waitForEvent("filechooser"); await page.locator(button).click();
@@ -65,7 +65,7 @@ test("row update merges an inactive archive, selects it with its saves and leave
   await expect(page.locator("#archiveList")).toHaveRole("list");
   await expect(page.locator("#archiveList > li")).toHaveCount(3);
   await expect(row(page, b)).toHaveAttribute("aria-current", "true");
-  await expect(row(page, b).locator(".storage-badge")).toHaveText("Текущий архив");
+  await expect(row(page, b).locator(".archive-entry-status")).toHaveText("Текущий архив");
   await expect(page.locator("#archiveList #sharedLocalStorageSetting")).toHaveCount(0);
   await expect(page.locator("#archiveStoragePanel #sharedLocalStorageSetting")).toBeVisible();
   await choose(page, `[data-archive-id="${a}"] [data-archive-action="update"]`, { "asset.txt": "Updated A", "new.txt": "Added A" });

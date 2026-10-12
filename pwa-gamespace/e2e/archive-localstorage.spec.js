@@ -8,7 +8,7 @@ async function app(page) {
   page.on("dialog", dialog => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
 }
 async function add(page, version) {
   const writer = new ZipWriter(new BlobWriter("application/zip"));

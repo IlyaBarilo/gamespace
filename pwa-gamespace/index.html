@@ -113,14 +113,14 @@
               <h2>Можно начать без своего архива</h2>
             </div>
           </div>
-          <p>Откройте GameSpace со значка или во вкладке и выберите встроенное демо в списке «Мои архивы». После подготовки оболочки и установки демо встроенный каталог игр будет доступен без сети.</p>
+          <p>Откройте GameSpace со значка или во вкладке — встроенное демо автоматически появится готовым в списке «Мои архивы». При первом запуске демо подготовится автоматически; затем каталог игр будет доступен без сети.</p>
           <p><strong>Демо можно оставить в приложении:</strong> для своей работы загрузите собственный архив. Переносить игры и материалы из демо в него нельзя.</p>
           <ul class="demo-points">
             <li><span>✓</span> Уже входит в приложение</li>
-            <li><span>✓</span> Устанавливается одним нажатием</li>
+            <li><span>✓</span> Подготавливается автоматически</li>
             <li><span>✓</span> Показывает возможности GameSpace</li>
           </ul>
-          <div class="demo-next-step">Откройте GameSpace — затем выберите демо</div>
+          <div class="demo-next-step">Откройте GameSpace — демо уже будет готово</div>
         </aside>
       </section>
 
@@ -149,7 +149,7 @@
         </div>
         <ol>
           <li><span>1</span><div><strong>Откройте GameSpace</strong><small>Установите приложение или нажмите «Открыть в браузере».</small></div></li>
-          <li><span>2</span><div><strong>Попробуйте демо или выберите архив</strong><small>Демо уже встроено, а ваш файл никуда не загружается.</small></div></li>
+          <li><span>2</span><div><strong>Попробуйте демо или выберите архив</strong><small>Демо готовится автоматически, а ваш файл никуда не загружается.</small></div></li>
           <li><span>3</span><div><strong>Открывайте сайт без интернета</strong><small>Все файлы сохраняются локально на устройстве.</small></div></li>
         </ol>
       </section>
@@ -183,7 +183,7 @@
             <h1>GameSpace</h1>
             <span id="appHeaderVersion" class="app-header-version"></span>
           </div>
-          <p id="siteSummary" class="hero-summary">Основной сайт ещё не установлен</p>
+          <p id="siteSummary" class="hero-summary">Установленный архив: подготовка демо…</p>
         </div>
       </header>
 
@@ -235,7 +235,7 @@
           <h2 id="archiveCatalogTitle">Мои архивы</h2>
           <button id="addArchiveButton" class="version-secondary-button" type="button">Добавить архив</button>
         </div>
-        <p id="emptyState" class="archive-catalog-help">Выберите встроенное демо или добавьте свой архив с устройства.</p>
+        <p id="emptyState" class="archive-catalog-help">Встроенное демо готовится автоматически. Также можно добавить свой архив с устройства.</p>
         <ul id="archiveList" class="archive-list" role="list" aria-label="Загруженные архивы и встроенное демо"></ul>
         <details class="menu-disclosure archive-catalog-help">
           <summary>Как управлять архивами</summary>
@@ -257,6 +257,7 @@
             <div class="storage-copy">
               <strong id="storageManaged">Все архивы: —</strong>
               <span id="storageFiles">— файлов в OPFS</span>
+              <span id="storageDemo">В том числе демо: —</span>
               <span id="storageUsage">Оценка браузера: —</span>
               <span id="storageQuota">Квота браузера: —</span>
               <div class="bar-track"><span id="storageBar"></span></div>
@@ -358,7 +359,7 @@
       <p id="compatibilitySummary" role="status"></p>
       <ol class="compatibility-steps">
         <li><strong>Запуск приложения: <span id="compatibilityStep_launch"></span></strong><span>Установите PWA и откройте её значок. Локальный просмотр во вкладке не подтверждает установку.</span></li>
-        <li><strong>Импорт архива: <span id="compatibilityStep_import"></span></strong><span>Закройте окно и установите встроенное демо или свой архив. Дождитесь завершения полной установки.</span></li>
+        <li><strong>Импорт архива: <span id="compatibilityStep_import"></span></strong><span>Демо устанавливается автоматически при первом запуске. Если импорт уже выполнен, откройте витрину и игру. Для повторной проверки демо нажмите «Восстановить демо»; для своего архива выполните полную установку.</span></li>
         <li><strong>Загрузка витрины: <span id="compatibilityStep_storefront"></span></strong><span>Нажмите «К играм» и дождитесь появления витрины игр.</span></li>
         <li><strong>Переход в игру: <span id="compatibilityStep_game"></span></strong><span>Откройте одну из игр из витрины внутри GameSpace. Проходить игру для проверки не требуется.</span></li>
       </ol>

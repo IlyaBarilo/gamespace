@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { formatBytes } from "../src/format.js";
 import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 
 test("storage indicator respects verified site bytes and retains raw estimates in reports", async ({ page }) => {
@@ -10,7 +11,7 @@ test("storage indicator respects verified site bytes and retains raw estimates i
     });
   });
   await page.goto("./");
-  await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
   const zip = new ZipWriter(new BlobWriter("application/zip"));
   await zip.add("index.html", new TextReader("<!doctype html><title>Storage fixture</title>"));
   const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
@@ -44,8 +45,14 @@ test("storage indicator respects verified site bytes and retains raw estimates i
   await expect(page.locator("#storageManaged")).toHaveText("Все архивы: 2,00 ГБ");
   await expect(page.locator("#storageQuota")).toHaveText("Квота браузера: 10,0 ГБ");
   await expect(page.locator("#storageUsage")).toContainText("не менее 2,00 ГБ");
-  expect(await page.locator("#storageBar").evaluate(element => element.style.width)).toBe("20%");
-  expect(await page.locator("#storageRing").evaluate(element => element.style.getPropertyValue("--fill"))).toBe("72deg");
+  const demoBytes = await page.evaluate(async () => {
+    const db = await new Promise(resolve => { const r = indexedDB.open("gamespace-pwa", 1); r.onsuccess = () => resolve(r.result); });
+    const catalog = await new Promise(resolve => { const r = db.transaction("app").objectStore("app").get("archive-catalog-v1"); r.onsuccess = () => resolve(r.result); });
+    db.close(); return catalog.entries.find(entry => entry.id === "builtin-demo").state.writtenBytes;
+  });
+  const percent = (2 * 1024 ** 3 + demoBytes) / (10 * 1024 ** 3) * 100;
+  expect(Number.parseFloat(await page.locator("#storageBar").evaluate(element => element.style.width))).toBeCloseTo(percent, 3);
+  expect(Number.parseFloat(await page.locator("#storageRing").evaluate(element => element.style.getPropertyValue("--fill")))).toBeCloseTo(percent * 3.6, 3);
   await page.locator("#diagnosticsTitle").click();
   await page.locator("#manualReportButton").click();
   await expect(page.locator("#diagnosticText")).toHaveValue(/Последняя оценка использования, байт: 10485760/);
@@ -53,7 +60,7 @@ test("storage indicator respects verified site bytes and retains raw estimates i
 
   await page.locator(".archive-entry.is-active [data-archive-action=\"remove\"]").click();
   await expect(page.locator("#statusText")).toHaveText("Сайт удалён");
-  await expect(page.locator("#storageManaged")).toHaveText("Все архивы: не установлены");
+  await expect(page.locator("#storageManaged")).toHaveText(`Все архивы: ${formatBytes(demoBytes)}`);
   await expect(page.locator("#storageBarText")).toHaveText("<0,1%");
 });
 
@@ -67,7 +74,7 @@ test("unavailable browser storage estimates do not fail app startup", async ({ p
     }
   });
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await expect(page.locator("#storageBarText")).toHaveText("—");
   await expect(page.locator("#storageQuota")).toHaveText("Квота браузера: не сообщается");
   await expect(page.locator("#storagePersistent")).toHaveText("Не определено");
@@ -93,9 +100,8 @@ for (const granted of [true, false]) {
       });
     }, granted);
     await page.goto("./");
-    await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
-    await expect(page.locator("#storagePersistent")).toHaveText("Обычное");
-    await expect(page.locator("#storageRetention")).toContainText("может автоматически удалить");
+    await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
+    await expect(page.locator("#storagePersistent")).toHaveText(granted ? "Постоянное" : "Обычное");
 
     const zip = new ZipWriter(new BlobWriter("application/zip"));
     await zip.add("index.html", new TextReader("<!doctype html><title>Persistence fixture</title>"));

@@ -25,7 +25,7 @@ import {
 import { activateCatalogWithLocalStorage, recoverGameLocalStorage } from "./archive-localstorage.js";
 import { throwIfAborted } from "./abort.js";
 import { withSiteOperation, withContentMutation } from "./site-operation-lock.js";
-import { ARCHIVES_ROOT, catalogContentState, createArchiveCatalog, detachCatalogArchive, storeArchiveInCatalog, validateArchiveCatalog } from "./archive-catalog.js";
+import { DEMO_ARCHIVE_ID, ARCHIVES_ROOT, catalogContentState, createArchiveCatalog, detachCatalogArchive, storeArchiveInCatalog, validateArchiveCatalog } from "./archive-catalog.js";
 
 const APP_ROOT = "gamespace";
 const REVISIONS_ROOT = `${APP_ROOT}/revisions`;
@@ -109,7 +109,7 @@ export function installFullArchive(file, onEvent, options = {}) {
   });
 }
 
-async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = null, kind = "user" } = {}) {
+async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = null, kind = "user", makeActive = true, builtinDemoVersion = null } = {}) {
   const diagnostics = new OperationDiagnostics("полная установка", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let revisionPath = null;
@@ -126,6 +126,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = n
     const catalog = await initializeArchiveCatalogUnlocked();
     const previousEntry = archiveId ? catalog.entries.find(item => item.id === archiveId) : null;
     if (archiveId && !previousEntry) throw new Error("Выбранный архив уже удалён. Выберите его заново.");
+    if (previousEntry?.kind === "demo" && !builtinDemoVersion) throw new Error("Встроенное демо можно восстановить только из пакета программы.");
     const revision = jobId();
     const id = archiveId || `archive-${revision}`;
     revisionPath = `${ARCHIVES_ROOT}/${revision}`;
@@ -146,6 +147,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = n
 
     const state = {
       schema: 1,
+      ...(builtinDemoVersion ? { builtinDemoVersion } : {}),
       activeRevision: revision,
       archiveId: id,
       revisionPath,
@@ -165,7 +167,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = n
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
     throwIfAborted(signal);
-    const updatedCatalog = storeArchiveInCatalog(catalog, state, { id, kind });
+    const updatedCatalog = storeArchiveInCatalog(catalog, state, { id, kind, makeActive });
     await activateCatalogWithLocalStorage(updatedCatalog);
     committed = true;
     emitServiceWorkerStateChanged();
@@ -175,7 +177,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = n
       await cleanupAfterCommit(() => removePath(root, previousEntry.state.revisionPath), onEvent, "Очистка предыдущей ревизии после успешной установки");
     }
     await cleanupAfterCommit(() => cleanupOrphansUnlocked(), onEvent, "Очистка временных файлов после успешной установки");
-    return catalogContentState(updatedCatalog);
+    return catalogContentState({ ...updatedCatalog, activeId: id });
   } catch (error) {
     const failure = diagnostics.failure(error);
     if (revisionPath && !committed) {
@@ -217,6 +219,7 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId, ta
     if (targetArchiveId && !state) throw new Error("У выбранного архива нет загруженных файлов. Замените его полным архивом.");
     if (archiveId && state?.archiveId !== archiveId) throw new Error("Выбранный архив изменился в другом окне. Выберите его заново.");
     if (!state?.revisionPath) throw new Error("Сначала добавьте и выберите архив.");
+    if (state.archiveId === DEMO_ARCHIVE_ID) throw new Error("Встроенное демо нельзя изменять архивом обновления.");
     if (!hasVerifiedStatistics(state)) {
       onEvent({ type: "phase", phase: "site-verify", label: "Проверяю исходную статистику установленного сайта…" });
       state = (await refreshInstalledSiteStatisticsUnlocked(targetArchiveId ? state : null, { persist: !targetArchiveId })).state;
@@ -404,6 +407,7 @@ async function removeCatalogArchiveUnlocked(id) {
   const catalog = await initializeArchiveCatalogUnlocked();
   const entry = catalog.entries.find(item => item.id === id);
   if (!entry) return;
+  if (entry.kind === "demo") throw new Error("Встроенное демо нельзя удалить.");
   if (!entry.state?.revisionPath) {
     await activateCatalogWithLocalStorage(detachCatalogArchive(catalog, id), { discardId: id });
     emitServiceWorkerStateChanged();

@@ -16,6 +16,7 @@ import {
   setSharedArchiveLocalStorage,
 } from "./import-manager.js";
 import { DEMO_ARCHIVE_ID, createArchiveCatalog, summarizeArchiveCatalog } from "./archive-catalog.js";
+import { fileExists, getOpfsRoot } from "./opfs.js";
 import { getShellLocalStorage } from "./shell-localstorage.js";
 import { readGameLocalStorageMode } from "./archive-localstorage.js";
 import { renderArchiveCatalog } from "./archive-catalog-ui.js";
@@ -430,10 +431,10 @@ function renderState() {
     restoreDemo: () => { void installBuiltinDemoSite({ force: true }); },
   });
   if (!installed) {
-    elements.siteSummary.textContent = "Архив для запуска ещё не выбран";
+    elements.siteSummary.textContent = "Установленный архив: пока отсутствует";
     return;
   }
-  elements.siteSummary.textContent = `${state.archiveDisplayName || state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
+  elements.siteSummary.textContent = `Установлен архив: ${state.archiveDisplayName || state.archiveName || "Локальный сайт"} · ${formatBytes(state.writtenBytes || 0)}`;
 }
 
 function showProgress(title) {
@@ -545,13 +546,13 @@ async function chooseArchive(mode, archiveId = null) {
   elements.archiveInput.click();
 }
 
-async function importSelectedFile(file, source = "локальный архив") {
-  if (!file || busy) return false;
+async function importSelectedFile(file, source = "локальный архив", { builtin = false, initializing = false } = {}) {
+  if (!file || (busy && !initializing)) return false;
   const isUpdate = pendingMode === "fast";
   const targetId = pendingArchiveId;
   const updateTarget = pendingUpdateTarget;
   const target = archiveCatalog.entries.find(entry => entry.id === targetId);
-  const confirmed = window.confirm(isUpdate
+  const confirmed = builtin || window.confirm(isUpdate
     ? `Обновить архив «${target?.name || "выбранный архив"}» содержимым «${file.name}»? Новые файлы добавятся, совпадающие заменятся, остальные сохранятся.${updateTarget ? " После успешного обновления этот архив станет текущим." : ""} Используйте только доверенный архив.`
     : targetId
       ? `Заменить файлы архива «${target?.name || "выбранный архив"}» содержимым «${file.name}»? Другие архивы сохранятся. Используйте только доверенный архив.`
@@ -575,11 +576,13 @@ async function importSelectedFile(file, source = "локальный архив"
   archiveStatistics = new ArchiveStatistics(file, diagnosticContext.operation);
   try {
     diagnosticSession.begin(diagnosticContext.operation, file.name);
-    state = isUpdate
+    const importedState = isUpdate
       ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal, ...(updateTarget ? { targetArchiveId: targetId } : { archiveId: targetId }) })
-      : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId, kind: source === "демо" ? "demo" : "user" });
+      : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId, kind: builtin ? "demo" : "user", makeActive: !builtin, builtinDemoVersion: builtin ? APP_VERSION : null });
+    compatibilityCheck.finishImport(compatibilityImportToken, importedState, isUpdate);
+    state = builtin ? await readState() : importedState;
+    if (builtin && state?.archiveId !== importedState.archiveId) compatibilityCheck.selectArchive(state);
     diagnosticSession.site(state);
-    compatibilityCheck.finishImport(compatibilityImportToken, state, isUpdate);
     diagnosticContext.stage = "interface-refresh";
     diagnosticContext.stageLabel = "Обновление интерфейса после успешной установки сайта";
     archiveStatistics.nextPhase(diagnosticContext.stageLabel);
@@ -618,7 +621,7 @@ async function importSelectedFile(file, source = "локальный архив"
     refreshArchiveStatistics();
     diagnosticSession.finish(outcome);
     activeImportController = null;
-    setBusy(false);
+    if (!initializing) setBusy(false);
   }
   return outcome === "успешно" ? true : undefined;
 }
@@ -855,6 +858,10 @@ async function refreshStorage() {
   // Read current metadata after awaiting the browser: an import or removal may
   // have completed while an earlier estimate was still pending.
   const totals = summarizeArchiveCatalog(archiveCatalog);
+  const demo = archiveCatalog.entries.find(entry => entry.id === DEMO_ARCHIVE_ID)?.state;
+  elements.storageDemo.textContent = demo
+    ? `В том числе демо: ${formatBytes(demo.writtenBytes || 0)} · ${Number(demo.files || 0).toLocaleString("ru-RU")} файлов`
+    : "Встроенное демо: пока не подготовлено";
   const managedBytes = totals.bytes;
   const managedFiles = totals.files;
   const summary = summarizeStorage(managedBytes, estimate);
@@ -874,6 +881,7 @@ async function refreshStorage() {
   catch { /* Persistence status can be unavailable independently of the quota. */ }
   elements.storagePersistent.textContent = persisted === true ? "Постоянное"
     : persisted === false ? "Обычное" : "Не определено";
+  elements.storagePersistent.dataset.tone = persisted === true ? "good" : persisted === false ? "warn" : "neutral";
   elements.storagePersistent.setAttribute("aria-label", `Режим хранения: ${elements.storagePersistent.textContent}`);
   elements.storageRetention.dataset.mode = persisted === true ? "persistent"
     : persisted === false ? "best-effort" : "unknown";
@@ -1310,7 +1318,7 @@ async function initializeCapabilities() {
     elements.capabilityNotice.textContent = elements.capabilityLabel.textContent;
     elements.capabilityNotice.hidden = false;
     setStatus("Полный режим недоступен", "bad");
-    return;
+    return false;
   }
   const sevenZip = await probeSevenZipSupport();
   elements.capabilityLabel.textContent = sevenZip.supported
@@ -1319,6 +1327,7 @@ async function initializeCapabilities() {
   elements.capabilityLabel.dataset.tone = sevenZip.supported ? "good" : "warn";
   elements.capabilityNotice.textContent = elements.capabilityLabel.textContent;
   elements.capabilityNotice.hidden = sevenZip.supported;
+  return sevenZip.supported;
 }
 
 async function initialize() {
@@ -1382,24 +1391,21 @@ async function initialize() {
     gameLocalStorageMode = await readGameLocalStorageMode();
     renderState();
 
-    if (state && navigator.serviceWorker?.controller) {
-      initialViewerAttempted = true;
-      initialViewerOpened = await openViewer();
-      finishBoot();
-    } else if (!state) {
-      finishBoot();
-    }
-
+    const hadInstalledState = Boolean(state);
     await ensureServiceWorker();
     await refreshRuntimeState({ confirmHealth: true });
-    if (state && !initialViewerAttempted) {
+    const canPrepareDemo = await initializeCapabilities();
+    if (canPrepareDemo) {
+      await installBuiltinDemoSite({ initializing: true });
+      await synchronizeSiteInterface({ reloadState: true });
+    }
+    if (hadInstalledState && state) {
       initialViewerAttempted = true;
       initialViewerOpened = await openViewer();
-      finishBoot();
     }
-
-    await Promise.all([refreshStorage(), initializeCapabilities()]);
-    if (state && !initialViewerOpened) setStatus("Локальный сайт пока не открыт", "bad");
+    finishBoot();
+    await refreshStorage();
+    if (initialViewerAttempted && state && !initialViewerOpened) setStatus("Локальный сайт пока не открыт", "bad");
     else setStatus(state ? "Сайт готов к автономной работе" : "Приложение готово к импорту", "good");
   } catch (error) {
     finishBoot();
@@ -1416,10 +1422,14 @@ for (const button of [elements.manualReportButton, elements.landingReportButton]
     diagnosticUI.manual({ operation: busy ? "текущая операция продолжается" : "проверка состояния", previousSite: state ? "установлен" : "не установлен" });
   });
 }
-async function installBuiltinDemoSite({ force = false, openAfter = false } = {}) {
-  if (busy) return false;
+async function installBuiltinDemoSite({ force = false, openAfter = false, initializing = false } = {}) {
+  if (busy && !initializing) return false;
   const demo = archiveCatalog.entries.find(entry => entry.id === DEMO_ARCHIVE_ID);
-  if (demo?.state && !force) return openCatalogArchive(DEMO_ARCHIVE_ID);
+  if (demo?.state?.builtinDemoVersion === APP_VERSION && !force) {
+    const present = await withSiteOperation(async () => fileExists(await getOpfsRoot(), `${demo.state.revisionPath}/${demo.state.indexPath}`));
+    if (present) return true;
+  }
+  await compatibilityEnvironment;
   const demoCheckToken = compatibilityCheck.beginImport({ source: "demo", format: "7z" });
   const startedAt = Date.now();
   setBusy(true);
@@ -1434,20 +1444,23 @@ async function installBuiltinDemoSite({ force = false, openAfter = false } = {})
     pendingUpdateTarget = false;
     pendingArchiveId = DEMO_ARCHIVE_ID;
     diagnosticSession.finish("демо получено");
-    setBusy(false);
+    if (!initializing) setBusy(false);
     const accepted = await importSelectedFile(new File([blob], "Встроенный демо-сайт (demo.7z)", {
       type: "application/x-7z-compressed",
       lastModified: Date.now(),
-    }), "демо");
+    }), "демо", { builtin: true, initializing });
     if (accepted === false) compatibilityCheck.reset("Установка демо отменена. Можно начать проверку позже.");
-    if (accepted && openAfter) await openViewer();
+    if (accepted && openAfter) {
+      setBusy(false);
+      await openCatalogArchive(DEMO_ARCHIVE_ID);
+    }
     return accepted;
   } catch (error) {
     compatibilityCheck.fail("import", "demo", { token: demoCheckToken });
     showError(error, { operation: "встроенное демо", stage: "demo-read", stageLabel: "Получение встроенного demo.7z", startedAt });
   } finally {
     diagnosticSession.finish("получение демо остановлено");
-    setBusy(false);
+    if (!initializing) setBusy(false);
   }
 }
 elements.addArchiveButton.addEventListener("click", () => chooseArchive("full"));
@@ -1568,10 +1581,8 @@ async function renameCatalogArchive(entry) {
 }
 
 async function deleteCatalogArchive(entry) {
-  if (busy || !entry) return;
-  const message = entry.kind === "demo"
-    ? "Удалить распакованные файлы встроенного демо? Демо останется в списке для повторной подготовки. Его индивидуальный localStorage будет удалён; общий набор сохранится."
-    : `Удалить архив «${entry.name}» и его распакованные файлы? Его индивидуальный localStorage будет удалён. Другие архивы и общий набор сохранятся.`;
+  if (busy || !entry || entry.kind === "demo") return;
+  const message = `Удалить архив «${entry.name}» и его распакованные файлы? Его индивидуальный localStorage будет удалён. Другие архивы и общий набор сохранятся.`;
   if (!window.confirm(message)) return;
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);

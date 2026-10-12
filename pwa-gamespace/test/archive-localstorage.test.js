@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { activateCatalogWithLocalStorage, archiveStorageSlot, recoverGameLocalStorage, restoreGameLocalStorage, snapshotGameLocalStorage } from "../src/archive-localstorage.js";
-import { createArchiveCatalog, storeArchiveInCatalog } from "../src/archive-catalog.js";
+import { createArchiveCatalog, storeArchiveInCatalog, DEMO_ARCHIVE_ID } from "../src/archive-catalog.js";
 
 function setup(t) {
   const first = { archiveId: "a", activeRevision: "a", revisionPath: "gamespace/archives/a", archiveName: "work.zip", installedAt: 1 };
@@ -151,4 +151,18 @@ test("a missing shared profile or a corrupt dataset fails before native data is 
   assert.throws(() => restoreGameLocalStorage([["gamespace:viewer-menu-tab:v1", "0"]]), /повреждён/);
   assert.throws(() => restoreGameLocalStorage([["score", "1"], ["score", "2"]]), /повреждён/);
   assert.equal(storage.getItem("score"), "A");
+});
+
+test("preparing an inactive demo preserves native saves, ownership and the shared-mode setting", async t => {
+  const { catalog, select, values, data } = setup(t);
+  await select("a");
+  values.set("score", "latest native save");
+  const before = new Map(values);
+  const demo = { archiveId: DEMO_ARCHIVE_ID, activeRevision: "demo", revisionPath: "gamespace/archives/demo", installedAt: 2 };
+  const prepared = storeArchiveInCatalog({ ...catalog, activeId: "a" }, demo, { kind: "demo", makeActive: false });
+  await activateCatalogWithLocalStorage(prepared);
+  assert.deepEqual(values, before);
+  assert.equal(data.get(controlKey).ownerId, "a");
+  assert.equal(data.get(controlKey).shared, false);
+  assert.equal(data.get("archive-catalog-v1").activeId, "a");
 });

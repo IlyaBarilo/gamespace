@@ -28,14 +28,14 @@ export function catalogContentState(catalog) {
     activeRevision: catalog.legacyRevision || entry.state.activeRevision };
 }
 
-export function storeArchiveInCatalog(catalog, state, { id = state.archiveId, name, kind = "user" } = {}) {
+export function storeArchiveInCatalog(catalog, state, { id = state.archiveId, name, kind = "user", makeActive = true } = {}) {
   if (!id) throw new Error("Не указан архив для сохранения.");
   const previous = catalog.entries.find(item => item.id === id);
   const entry = { id, kind: previous?.kind || kind,
     name: previous?.name || name || state.archiveName || "Мой архив",
     createdAt: previous?.createdAt || state.installedAt, state: normalizeArchiveState(state, id) };
   const entries = previous ? catalog.entries.map(item => item.id === id ? entry : item) : [...catalog.entries, entry];
-  return { ...catalog, entries, activeId: id };
+  return { ...catalog, entries, activeId: makeActive ? id : catalog.activeId || id };
 }
 
 export function detachCatalogArchive(catalog, id) {

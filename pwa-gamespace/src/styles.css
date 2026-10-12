@@ -2142,3 +2142,36 @@ body.is-viewing-site {
   .menu-disclosure summary::before { content: "▸"; margin-right: 6px; }
   .menu-disclosure[open] > summary::before { content: "▾"; }
 }
+
+/* Status indicators describe state and deliberately have no button outline. */
+.app-shell .storage-badge, .app-shell .capability-badge, .archive-entry-status {
+  display: inline-flex; align-items: center; gap: 6px; padding: 0;
+  border: 0; border-radius: 0; background: none; box-shadow: none;
+  color: var(--muted); font-size: .75rem; font-weight: 600; letter-spacing: 0;
+  line-height: 1.4; width: auto; cursor: default;
+}
+.app-shell .storage-badge::before, .app-shell .capability-badge::before, .archive-entry-status::before {
+  content: ""; width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: currentColor;
+}
+.app-shell [data-tone="good"].storage-badge, .app-shell [data-tone="good"].capability-badge,
+.archive-entry-status[data-tone="good"] { color: var(--green); }
+.app-shell [data-tone="warn"].storage-badge, .app-shell [data-tone="warn"].capability-badge,
+.app-shell [data-tone="bad"].capability-badge, .archive-entry-status[data-tone="warn"] { color: #ffd47c; }
+.archive-entry-heading .archive-entry-status { flex: 0 0 auto; font-size: .73rem; }
+/* Native checkbox semantics, keyboard control and focus are preserved. */
+.viewer-tab-setting input {
+  appearance: none; -webkit-appearance: none; position: relative; flex: 0 0 20px;
+  width: 20px; height: 20px; border: 1px solid rgba(118, 212, 255, .6); border-radius: 5px;
+  background: rgba(12, 43, 82, .8); cursor: pointer;
+}
+.viewer-tab-setting input:checked { background: var(--blue-bright); border-color: var(--blue-bright); }
+.viewer-tab-setting input:checked::after {
+  content: ""; position: absolute; left: 6px; top: 3px; width: 5px; height: 9px;
+  border: solid #071a36; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.viewer-tab-setting input:focus-visible { outline: 3px solid rgba(118, 212, 255, .8); outline-offset: 3px; }
+.viewer-tab-setting input:disabled { opacity: .45; cursor: default; }
+@media (forced-colors: active) {
+  .viewer-tab-setting input { appearance: auto; -webkit-appearance: auto; }
+  .viewer-tab-setting input::after { display: none; }
+}

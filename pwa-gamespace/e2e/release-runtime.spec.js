@@ -10,7 +10,8 @@ async function installedWindow(page) {
 }
 async function openApp(page) {
   await installedWindow(page); await page.goto("./");
-  await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
+  await expect(page.locator("#addArchiveButton")).toBeEnabled();
 }
 async function runtime(page, type, data = {}) {
   return page.evaluate(async ({ type, data }) => {
@@ -42,7 +43,7 @@ test("cold browser restart opens the built release and imported site without a n
   let context = await chromium.launchPersistentContext(profile, { headless: true });
   try {
     const page = context.pages()[0]; await installedWindow(page); await page.goto(baseURL);
-    await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true }).catch(async error => {
+    await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/).catch(async error => {
       throw new Error(`${error.message}\nInitialization detail: ${await page.locator("#errorText").textContent()}`);
     });
     await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
@@ -81,6 +82,9 @@ test("production UI installs a verified release and can roll back offline", asyn
   await expect(page.locator("#appHeaderVersion")).toHaveText(versions.goodVersion);
   await expect.poll(async () => (await runtime(page, "GET_RUNTIME_STATE")).state.pendingVersion).toBeNull();
   await context.setOffline(true);
+  await expect(page.locator("#viewer")).toBeVisible();
+  await expect(page.locator("#viewerLoading")).toBeHidden();
+  await page.locator("#viewerClose").click();
   await page.locator("#programDetails > summary").click();
   await page.locator("#rollbackPwaButton").click();
   await expect(page.locator("#appHeaderVersion")).toHaveText(versions.version);
@@ -104,7 +108,7 @@ test("an installed release evicted by the three-release size budget survives res
   }
   try {
     const first = context.pages()[0]; await installedWindow(first); await first.goto(baseURL);
-    await expect(first.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+    await expect(first.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
     await choose(first, "#addArchiveButton", await zipFiles({ "index.html": content }));
     await expect(first.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     await first.locator("#openSiteButton").click();
@@ -153,7 +157,7 @@ test("a release with invalid SHA-256 leaves the working version active", async (
   const result = await runtime(page, "INSTALL_RELEASE", { manifestUrl: "./releases/corrupt/release.json" });
   expect(result.ok).toBe(false); expect(result.error).toContain("SHA-256");
   expect((await runtime(page, "GET_RUNTIME_STATE")).state.activeVersion).toBe(before.state.activeVersion);
-  await page.reload(); await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await page.reload(); await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
 });
 
 test("a fully downloaded release that fails its first startup rolls back on the next launch", async ({ page, request, context }) => {
@@ -202,7 +206,7 @@ test("another window waits for an active import instead of deleting its staging 
     return (await revisions.getDirectoryHandle("in-progress")).kind;
   })).toBe("directory");
   await page.evaluate(() => window.finishOperation());
-  await expect(second.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await expect(second.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
   await second.close();
 });
 

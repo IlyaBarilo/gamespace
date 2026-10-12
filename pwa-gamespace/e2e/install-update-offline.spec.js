@@ -30,14 +30,14 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
 
-  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
-  await expect(page.locator("#installedState")).toBeVisible({ timeout: 90_000 });
+  const demoBuffer = await page.evaluate(async () => [...new Uint8Array(await (await fetch("./demo.7z")).arrayBuffer())]);
+  const importChooser = page.waitForEvent("filechooser");
+  await page.locator("#addArchiveButton").click();
+  await (await importChooser).setFiles({ name: "test-site.7z", mimeType: "application/x-7z-compressed", buffer: Buffer.from(demoBuffer) });
+  await expect(page.locator("#siteSummary")).toContainText("test-site.7z");
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
-  await expect(page.locator("#viewer")).toBeVisible();
-  await expect(page.locator("#viewerLoading")).toBeHidden();
-  await page.locator("#viewerClose").click();
 
   const chooser = page.waitForEvent("filechooser");
   await page.locator(".archive-entry.is-active [data-archive-action=\"update\"]").click();

@@ -15,7 +15,7 @@ test("browser launch imports 7z, records a successful check and keeps its mode i
   await page.screenshot({ path: testInfo.outputPath("landing-mobile.png"), fullPage: true });
   await page.locator("#openBrowserButton").click();
   await expect(page).toHaveURL(/\?launch=browser$/);
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await expect(page.locator("#browserLaunchHint")).toBeVisible();
   await expect(page.locator("#browserInstallLink")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("browser-settings-mobile.png"), fullPage: true });
@@ -56,7 +56,7 @@ test("browser launch imports 7z, records a successful check and keeps its mode i
 test("installed display and browser display share imported content and game saves in one Chromium profile", async ({ page }) => {
   page.on("dialog", dialog => dialog.accept());
   await page.goto("./?launch=browser");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   const zip = new ZipWriter(new BlobWriter());
   await zip.add("index.html", new TextReader('<!doctype html><p id="saved"></p><script>document.querySelector("#saved").textContent=localStorage.getItem("browser-save")||"empty";</script>'));
   const buffer = Buffer.from(await (await zip.close()).arrayBuffer());
@@ -85,7 +85,7 @@ test("installed display and browser display share imported content and game save
 
 test("fullscreen denial gives a fallback without preventing import", async ({ page }) => {
   await page.goto("./?launch=browser");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await page.evaluate(() => {
     document.documentElement.requestFullscreen = () => Promise.reject(new Error("denied"));
   });
@@ -106,7 +106,7 @@ test("a saved browser URL opens content after a cold offline browser restart", a
     const page = context.pages()[0];
     page.on("dialog", dialog => dialog.accept());
     await page.goto(browserUrl);
-    await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+    await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
     const zip = new ZipWriter(new BlobWriter());
     await zip.add("index.html", new TextReader("<!doctype html><h1>Browser offline content</h1>"));
     const chooser = page.waitForEvent("filechooser");

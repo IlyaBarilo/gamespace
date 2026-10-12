@@ -4,7 +4,7 @@ import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 async function openApp(page) {
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
 }
 async function addArchive(page, name) {
   const zip = new ZipWriter(new BlobWriter());
@@ -126,7 +126,9 @@ for (const phone of [false, true]) {
 
 test("missing browser capabilities remain visible outside folded program details", async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, "Worker", { configurable: true, value: undefined }));
-  await openApp(page);
+  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+  await page.goto("./");
+  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
   await expect(page.locator("#programDetails")).not.toHaveAttribute("open", "");
   await expect(page.locator("#capabilityNotice")).toBeVisible();
   await expect(page.locator("#capabilityNotice")).toContainText("не поддерживает");

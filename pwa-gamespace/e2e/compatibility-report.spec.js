@@ -68,26 +68,19 @@ test.describe("Android form fallback", () => {
   }
 });
 
-test("demo failure is brief; compatibility remains accessible during download and after failure", async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
-  await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
-  const frozen = await openReport(page);
-  await page.locator("#compatibilityClose").click();
-  // The Service Worker serves demo.7z from its cache, bypassing Playwright network routes.
-  // Hold the page's fetch result to exercise the real UI and failure handler deterministically.
-  await page.evaluate(() => {
+test("automatic demo failure is brief; reports remain accessible during preparation and after failure", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => true });
     const original = window.fetch.bind(window);
     window.fetch = (...args) => new URL(String(args[0]), location.href).pathname.endsWith("/demo.7z")
       ? new Promise(resolve => { window.finishDemoFixture = () => resolve(new Response("private diagnostic detail", { status: 503 })); })
       : original(...args);
   });
-  await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
+  await page.goto("./");
+  await expect.poll(() => page.evaluate(() => typeof window.finishDemoFixture)).toBe("function");
   try {
     await expect(page.locator("#compatibilityButton")).toBeEnabled();
-    const pending = await openReport(page);
-    expect(pending).not.toBe(frozen);
-    expect(pending).toContain("импорт: не проверено");
+    expect(await openReport(page)).toContain("импорт: не проверено");
     await expect(page.locator("#compatibilityReset")).toBeDisabled();
     expect(await refreshReport(page)).toContain("импорт: не проверено");
   } finally { await page.evaluate(() => window.finishDemoFixture?.()); }
@@ -101,7 +94,7 @@ test("full demo and game transition pass; a recorded game error downgrades a ref
   page.on("dialog", dialog => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText("Приложение готово к импорту");
+  await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await page.locator("[data-archive-id=\"builtin-demo\"] [data-archive-action=\"open\"]").click();
   await expect(page.locator("#viewer")).toBeVisible({ timeout: 90_000 });
   await expect(page.locator("#viewerLoading")).toBeHidden();

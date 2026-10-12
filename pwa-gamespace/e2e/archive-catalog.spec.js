@@ -10,7 +10,8 @@ async function app(page) {
   page.on("dialog", dialog => dialog.accept(dialog.type() === "prompt" ? "Работа студента — версия 1" : undefined));
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toHaveText(/готово|Локальный сайт пока не открыт/i);
+  await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту|Локальный сайт пока не открыт)$/);
+  await expect(page.locator("#addArchiveButton")).toBeEnabled();
 }
 async function upload(page, buffer, button = "#addArchiveButton", name = "work.zip") {
   const chooser = page.waitForEvent("filechooser");
@@ -45,7 +46,7 @@ test("archives with equal names switch offline, retain independent files and can
   await expect(page.locator(".archive-entry")).toHaveCount(3);
   const catalog = await registry(page);
   const totalBytes = catalog.entries.reduce((total, entry) => total + (entry.state?.writtenBytes || 0), 0);
-  await expect(page.locator("#storageFiles")).toContainText("архивов: 2");
+  await expect(page.locator("#storageFiles")).toContainText("архивов: 3");
   expect(totalBytes).toBeGreaterThan(catalog.entries.find(entry => entry.id === second).state.writtenBytes);
   await row(page, first).locator('[data-archive-action="rename"]').click();
   await expect(row(page, first).locator("h3")).toHaveText("Работа студента — версия 1");
@@ -71,8 +72,9 @@ test("archives with equal names switch offline, retain independent files and can
   await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("Version B");
   await page.locator("#viewerClose").click();
   await row(page, second).locator('[data-archive-action="remove"]').click();
-  await expect(page.locator("#emptyState")).toBeVisible();
-  expect((await contents(page)).status).toBe(404);
+  await expect(page.locator("#emptyState")).toBeHidden();
+  expect((await registry(page)).activeId).toBe("builtin-demo");
+  expect((await contents(page)).status).toBe(200);
   await expect(row(page, "builtin-demo")).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem("student-save"))).toBeNull();
 });

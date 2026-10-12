@@ -13,7 +13,8 @@ async function openApp(page) {
   page.on("dialog", (dialog) => dialog.accept());
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
-  await expect(page.locator("#statusText")).toContainText("готово", { ignoreCase: true });
+  await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
+  await expect(page.locator("#addArchiveButton")).toBeEnabled();
 }
 
 async function installDemo(page) {
@@ -80,7 +81,7 @@ test("a known insufficient quota rejects an archive before extraction", async ({
 
   await expect(page.locator("#statusText")).toHaveText("Не удалось обработать архив", { timeout: 30_000 });
   await expect(page.locator("#errorText")).toContainText("Недостаточно доступной квоты");
-  await expect(page.locator("#emptyState")).toBeVisible();
+  await expect(page.locator("#emptyState")).toBeHidden();
 });
 
 test("startup recovery restores an interrupted update from its journal", async ({ page }) => {
@@ -164,14 +165,19 @@ test("startup recovery restores an interrupted update from its journal", async (
   })).toBeNull();
 });
 
-test("site removal clears metadata and makes content unavailable", async ({ page }) => {
+test("site removal clears the custom entry and preserves the prepared demo", async ({ page }) => {
   await openApp(page);
-  await installDemo(page);
+  await chooseFile(page, "#addArchiveButton", {
+    name: "removable.zip", mimeType: "application/zip",
+    buffer: await createZip({ "index.html": "<!doctype html><h1>Removable</h1>" }),
+  });
+  await expect(page.locator("#siteSummary")).toContainText("removable.zip");
   await page.locator(".archive-entry.is-active [data-archive-action=\"remove\"]").click();
-  await expect(page.locator("#statusText")).toHaveText("Сайт удалён", { timeout: 30_000 });
-  await expect(page.locator("#emptyState")).toBeVisible();
-  await expect(page.locator("#installedState")).toBeHidden();
-  expect((await readContent(page, "index.html")).status).toBe(404);
+  await expect(page.locator("#statusText")).toHaveText("Сайт удалён");
+  await expect(page.locator("#emptyState")).toBeHidden();
+  await expect(page.locator("#installedState")).toBeVisible();
+  await expect(page.locator('[data-archive-id="builtin-demo"]')).toHaveAttribute("aria-current", "true");
+  expect((await readContent(page, "index.html")).status).toBe(200);
 });
 
 test("the cancel button aborts a running ZIP installation and removes partial data", async ({ page }) => {
@@ -225,7 +231,7 @@ test("the cancel button aborts a running ZIP installation and removes partial da
   await expect(page.locator("#progressFile")).not.toHaveText("", { timeout: 30_000 });
   await page.evaluate(() => document.querySelector("#progressCancelButton").click());
 
-  await expect(page.locator("#statusText")).toHaveText("Установка отменена", { timeout: 30_000 });
+  await expect(page.locator("#statusText")).toHaveText("Операция отменена, предыдущий сайт сохранён", { timeout: 30_000 });
   await expect(page.locator("#errorPanel")).toBeHidden();
-  await expect(page.locator("#emptyState")).toBeVisible();
+  await expect(page.locator("#emptyState")).toBeHidden();
 });

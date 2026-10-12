@@ -16,14 +16,15 @@ export function renderArchiveCatalog(container, catalog, { busy, open, update, r
     title.id = `archive-title-${entry.id}`;
     row.setAttribute("aria-labelledby", title.id);
     const badge = document.createElement("span");
-    badge.className = "storage-badge";
+    badge.className = "archive-entry-status menu-status";
+    badge.dataset.tone = active ? "good" : entry.state ? "neutral" : "warn";
     badge.textContent = active ? "Текущий архив" : entry.kind === "demo" ? "Демо" : entry.state ? "Загружен" : "Нет файлов";
     heading.append(title, badge);
     const details = document.createElement("p");
     details.className = "archive-entry-details";
     details.textContent = entry.state
       ? `${formatBytes(entry.state.writtenBytes || 0)} · ${Number(entry.state.files || 0).toLocaleString("ru-RU")} файлов · ${formatDate(entry.state.installedAt)}`
-      : entry.kind === "demo" ? "Доступно без интернета. Файлы будут подготовлены при первом открытии." : "Файлы отсутствуют. Замените архив для восстановления.";
+      : entry.kind === "demo" ? "Демо пока не подготовлено. Откройте его для повторной автоматической подготовки." : "Файлы отсутствуют. Замените архив для восстановления.";
     const actions = document.createElement("div");
     actions.className = "archive-entry-actions";
     const add = (text, action, name, disabled = false) => {
@@ -38,15 +39,15 @@ export function renderArchiveCatalog(container, catalog, { busy, open, update, r
       button.addEventListener("click", () => action(entry));
       actions.append(button);
     };
-    add(entry.state ? "Открыть" : entry.kind === "demo" ? "Подготовить и открыть" : "Открыть", open, "open", !entry.state && entry.kind !== "demo");
-    if (entry.state) add("Обновить", update, "update");
+    add("Открыть", open, "open", !entry.state && entry.kind !== "demo");
+    if (entry.state && entry.kind !== "demo") add("Обновить", update, "update");
     if (entry.kind === "demo") {
       if (entry.state) add("Восстановить демо", restoreDemo, "restore");
     } else {
       add("Заменить", replace, "replace");
       add("Переименовать", rename, "rename");
     }
-    if (entry.state || entry.kind !== "demo") add(entry.kind === "demo" ? "Удалить файлы" : "Удалить", remove, "remove");
+    if (entry.kind !== "demo") add("Удалить", remove, "remove");
     row.append(heading, details, actions);
     if (entry.state) {
       const info = document.createElement("details");

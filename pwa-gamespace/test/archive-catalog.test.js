@@ -61,3 +61,17 @@ test("invalid or aliased catalog paths fail closed before cleanup can remove fil
   catalog = storeArchiveInCatalog(catalog, { ...state("one"), revisionPath: "gamespace/archives/../other" });
   assert.throws(() => validateArchiveCatalog(catalog), /каталог/);
 });
+
+test("preparing demo retains a selected user archive and contributes to totals", () => {
+  const catalog = storeArchiveInCatalog(createArchiveCatalog(), state("one"));
+  const updated = storeArchiveInCatalog(catalog, state(DEMO_ARCHIVE_ID), { kind: "demo", makeActive: false });
+  assert.equal(updated.activeId, "one");
+  assert.deepEqual(catalogContentState(updated), catalogContentState(catalog));
+  assert.deepEqual(summarizeArchiveCatalog(updated), { bytes: 200, files: 4, installed: 2 });
+});
+
+test("automatic demo becomes current when there was no selected archive", () => {
+  const catalog = storeArchiveInCatalog(createArchiveCatalog(), state(DEMO_ARCHIVE_ID), { kind: "demo", makeActive: false });
+  assert.equal(catalog.activeId, DEMO_ARCHIVE_ID);
+  assert.equal(catalogContentState(catalog).archiveId, DEMO_ARCHIVE_ID);
+});
