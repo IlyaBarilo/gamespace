@@ -194,7 +194,7 @@ export function applyUpdateArchive(file, onEvent, options = {}) {
   });
 }
 
-async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId } = {}) {
+async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId, targetArchiveId } = {}) {
   const diagnostics = new OperationDiagnostics("быстрое обновление", { file });
   onEvent = diagnosticEvents(diagnostics, onEvent);
   let state;
@@ -212,13 +212,14 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId } =
     onEvent({ type: "phase", phase: "recovery", label: "Проверка незавершённого обновления" });
     await recoverInterruptedOperationUnlocked();
     onEvent({ type: "phase", phase: "state-read", label: "Чтение установленного сайта и подготовка обновления" });
-    await initializeArchiveCatalogUnlocked();
-    state = await readState();
+    const catalog = await initializeArchiveCatalogUnlocked();
+    state = targetArchiveId ? catalogContentState({ ...catalog, activeId: targetArchiveId }) : await readState();
+    if (targetArchiveId && !state) throw new Error("У выбранного архива нет загруженных файлов. Замените его полным архивом.");
     if (archiveId && state?.archiveId !== archiveId) throw new Error("Выбранный архив изменился в другом окне. Выберите его заново.");
     if (!state?.revisionPath) throw new Error("Сначала добавьте и выберите архив.");
     if (!hasVerifiedStatistics(state)) {
       onEvent({ type: "phase", phase: "site-verify", label: "Проверяю исходную статистику установленного сайта…" });
-      state = (await refreshInstalledSiteStatisticsUnlocked()).state;
+      state = (await refreshInstalledSiteStatisticsUnlocked(targetArchiveId ? state : null, { persist: !targetArchiveId })).state;
     }
     const updateId = jobId();
     updatePath = `${UPDATES_ROOT}/${updateId}`;
@@ -291,13 +292,20 @@ async function applyUpdateArchiveUnlocked(file, onEvent, { signal, archiveId } =
     };
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю результат обновления…" });
     throwIfAborted(signal);
-    await commitStateAndClearOperationJournal(updatedState);
+    let committedState = updatedState;
+    if (targetArchiveId) {
+      // Keep the current selection and native saves until the merge and index
+      // validation succeed. Switching saves is part of the final catalog commit.
+      const updatedCatalog = storeArchiveInCatalog(catalog, updatedState, { id: targetArchiveId });
+      await activateCatalogWithLocalStorage(updatedCatalog, { clearJournal: true });
+      committedState = catalogContentState(updatedCatalog);
+    } else await commitStateAndClearOperationJournal(updatedState);
     ownsJournal = false;
     mergeJournal = null;
     emitServiceWorkerStateChanged();
     await cleanupAfterCommit(() => removePath(root, updatePath), onEvent, "Очистка временного обновления после успешной установки");
     await cleanupAfterCommit(() => removePath(root, rollbackPath), onEvent, "Очистка резервных файлов после успешной установки");
-    return updatedState;
+    return committedState;
   } catch (error) {
     const failure = diagnostics.failure(error);
     let rollbackComplete = !error.rollbackIncomplete;
@@ -458,8 +466,8 @@ export function refreshInstalledSiteStatistics() {
   });
 }
 
-async function refreshInstalledSiteStatisticsUnlocked() {
-  const installedState = await readState();
+async function refreshInstalledSiteStatisticsUnlocked(providedState = null, { persist = true } = {}) {
+  const installedState = providedState || await readState();
   if (!installedState?.revisionPath) return { state: installedState, files: 0, bytes: 0 };
   const root = await getOpfsRoot();
   const directory = await getDirectoryAt(root, installedState.revisionPath, false);
@@ -473,7 +481,7 @@ async function refreshInstalledSiteStatisticsUnlocked() {
     writtenBytes: stored.bytes,
     storageVerifiedAt: Date.now(),
   };
-  await writeState(updatedState);
+  if (persist) await writeState(updatedState);
   return { state: updatedState, ...stored };
 }
 

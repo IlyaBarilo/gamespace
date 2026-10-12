@@ -60,6 +60,7 @@ let archiveCatalog = createArchiveCatalog();
 let gameLocalStorageMode = { shared: false, initialized: false, pending: false };
 let pendingGameLocalStorageMode = null;
 let pendingArchiveId = null;
+let pendingUpdateTarget = false;
 let releaseContentView = null;
 let viewerOpening = false;
 let pendingMode = "full";
@@ -422,10 +423,11 @@ function renderState() {
   elements.localStorageModeStatus.textContent = pendingGameLocalStorageMode !== null
     ? "Переключаю набор сохранений localStorage…"
     : gameLocalStorageMode.shared
-    ? "Общий набор localStorage используется всеми архивами и сохраняется при переключении. Индивидуальные наборы сохранены отдельно. Одноимённые записи игр могут пересекаться."
-    : "У каждого архива свой localStorage. Переключение восстанавливает его сохранения; новые архивы начинают с пустого набора.";
+    ? "Все архивы используют общий набор localStorage. Индивидуальные наборы сохранены; одноимённые записи игр могут пересекаться."
+    : "У каждого архива свой localStorage. При переключении возвращаются его сохранения.";
   renderArchiveCatalog(elements.archiveList, archiveCatalog, { busy,
     open: entry => { void openCatalogArchive(entry.id); },
+    update: entry => chooseArchive("fast", entry.id),
     replace: entry => chooseArchive("full", entry.id),
     rename: entry => { void renameCatalogArchive(entry); },
     remove: entry => { void deleteCatalogArchive(entry); },
@@ -555,6 +557,7 @@ async function chooseArchive(mode, archiveId = null) {
   if (busy) return;
   diagnosticSession.record("Выбор архива", mode);
   pendingMode = mode;
+  pendingUpdateTarget = mode === "fast" && archiveId !== null;
   pendingArchiveId = archiveId || (mode === "fast" ? state?.archiveId : null);
   elements.archiveInput.value = "";
   elements.archiveInput.click();
@@ -564,9 +567,10 @@ async function importSelectedFile(file, source = "локальный архив"
   if (!file || busy) return false;
   const isUpdate = pendingMode === "fast";
   const targetId = pendingArchiveId;
+  const updateTarget = pendingUpdateTarget;
   const target = archiveCatalog.entries.find(entry => entry.id === targetId);
   const confirmed = window.confirm(isUpdate
-    ? `Применить обновление «${file.name}» к архиву «${target?.name || "выбранный архив"}»? Используйте только доверенный архив. Изменённые файлы защищены журналом отката.`
+    ? `Обновить архив «${target?.name || "выбранный архив"}» содержимым «${file.name}»? Новые файлы добавятся, совпадающие заменятся, остальные сохранятся.${updateTarget ? " После успешного обновления этот архив станет текущим." : ""} Используйте только доверенный архив.`
     : targetId
       ? `Заменить файлы архива «${target?.name || "выбранный архив"}» содержимым «${file.name}»? Другие архивы сохранятся. Используйте только доверенный архив.`
       : `Добавить архив «${file.name}» отдельной записью? Используйте только доверенный источник: архив может содержать исполняемый JavaScript. Сам GameSpace не отправляет архив в сеть.`);
@@ -590,7 +594,7 @@ async function importSelectedFile(file, source = "локальный архив"
   try {
     diagnosticSession.begin(diagnosticContext.operation, file.name);
     state = isUpdate
-      ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId })
+      ? await applyUpdateArchive(file, handleImportEvent, { signal: activeImportController.signal, ...(updateTarget ? { targetArchiveId: targetId } : { archiveId: targetId }) })
       : await installFullArchive(file, handleImportEvent, { signal: activeImportController.signal, archiveId: targetId, kind: source === "демо" ? "demo" : "user" });
     diagnosticSession.site(state);
     compatibilityCheck.finishImport(compatibilityImportToken, state, isUpdate);
@@ -1422,6 +1426,7 @@ async function installBuiltinDemoSite({ force = false, openAfter = false } = {})
     if (!response.ok) throw new Error(`Встроенный demo.7z недоступен: HTTP ${response.status}.`);
     const blob = await response.blob();
     pendingMode = "full";
+    pendingUpdateTarget = false;
     pendingArchiveId = DEMO_ARCHIVE_ID;
     diagnosticSession.finish("демо получено");
     setBusy(false);

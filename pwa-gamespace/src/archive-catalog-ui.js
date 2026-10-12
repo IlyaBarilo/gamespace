@@ -1,20 +1,23 @@
 import { formatBytes, formatDate } from "./format.js";
 
-export function renderArchiveCatalog(container, catalog, { busy, open, replace, rename, remove, restoreDemo }) {
+export function renderArchiveCatalog(container, catalog, { busy, open, update, replace, rename, remove, restoreDemo }) {
   const fragment = document.createDocumentFragment();
   for (const entry of catalog.entries) {
-    const row = document.createElement("article");
+    const row = document.createElement("li");
     row.className = "archive-entry";
     row.dataset.archiveId = entry.id;
     const active = entry.id === catalog.activeId;
     row.classList.toggle("is-active", active);
+    if (active) row.setAttribute("aria-current", "true");
     const heading = document.createElement("div");
     heading.className = "archive-entry-heading";
     const title = document.createElement("h3");
     title.textContent = entry.name;
+    title.id = `archive-title-${entry.id}`;
+    row.setAttribute("aria-labelledby", title.id);
     const badge = document.createElement("span");
     badge.className = "storage-badge";
-    badge.textContent = active ? "Выбран" : entry.kind === "demo" ? "Встроенный" : "Архив";
+    badge.textContent = active ? "Текущий архив" : entry.kind === "demo" ? "Демо" : entry.state ? "Загружен" : "Нет файлов";
     heading.append(title, badge);
     const details = document.createElement("p");
     details.className = "archive-entry-details";
@@ -30,10 +33,13 @@ export function renderArchiveCatalog(container, catalog, { busy, open, replace, 
       button.dataset.archiveAction = name;
       button.textContent = text;
       button.disabled = busy || disabled;
+      if (name === "update") button.title = "Добавить новые и заменить совпадающие файлы; остальные сохранятся.";
+      if (name === "replace") button.title = "Полностью заменить содержимое этого архива.";
       button.addEventListener("click", () => action(entry));
       actions.append(button);
     };
     add(entry.state ? "Открыть" : entry.kind === "demo" ? "Подготовить и открыть" : "Открыть", open, "open", !entry.state && entry.kind !== "demo");
+    if (entry.state) add("Обновить", update, "update");
     if (entry.kind === "demo") {
       if (entry.state) add("Восстановить демо", restoreDemo, "restore");
     } else {

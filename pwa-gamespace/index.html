@@ -288,17 +288,25 @@
           <button id="addArchiveButton" class="version-secondary-button" type="button">Добавить архив</button>
         </div>
         <p class="archive-catalog-help">Добавляйте разные работы и их версии. Каждый архив хранится отдельно; последнее выбранное содержимое открывается при запуске.</p>
-        <div id="archiveList" class="archive-list"></div>
+        <ul id="archiveList" class="archive-list" role="list" aria-label="Загруженные архивы и встроенное демо"></ul>
+        <p class="archive-catalog-help archive-actions-help">Обновить — добавить и заменить файлы без удаления остальных. Заменить — полностью заменить содержимое архива.</p>
+        <p class="archive-catalog-help">Просмотр доступен в одном окне GameSpace. Перед переключением, обновлением или удалением закройте просмотр в другом окне.</p>
+      </section>
+
+      <section id="archiveStoragePanel" class="panel archive-storage-panel" aria-labelledby="archiveStorageTitle">
+        <div class="panel-heading"><div><p class="section-kicker">ДАННЫЕ ИГР</p><h2 id="archiveStorageTitle">Сохранения игр</h2></div></div>
         <div class="archive-localstorage-setting">
           <label class="viewer-tab-setting" for="sharedLocalStorageSetting">
             <input id="sharedLocalStorageSetting" type="checkbox">
             <span>Единый localStorage</span>
           </label>
           <p id="localStorageModeStatus" role="status">У каждого архива свой localStorage.</p>
-          <p class="archive-catalog-help">При первом включении общим станет текущий набор. При повторном включении вернётся сохранённый общий набор. Выключение возвращает индивидуальные сохранения без объединения данных.</p>
+          <details class="archive-localstorage-help">
+            <summary>Как переключаются сохранения</summary>
+            <p>При первом включении общим станет текущий набор. При повторном включении вернётся сохранённый общий набор. Выключение возвращает индивидуальные сохранения без объединения данных. Новые архивы начинают с пустого индивидуального набора.</p>
+          </details>
         </div>
         <p id="archiveStorageNotice" class="archive-storage-notice">Другие хранилища игр остаются общими: IndexedDB, cookies, Cache Storage и файлы, которые игры создают через OPFS. sessionStorage зависит от окна браузера и не переключается по архивам. Настройки GameSpace и квота браузера общие.</p>
-        <p class="archive-catalog-help">Просмотр доступен в одном окне GameSpace. Перед переключением, обновлением или удалением закройте просмотр в другом окне.</p>
       </section>
 
       <section class="dashboard-grid">
