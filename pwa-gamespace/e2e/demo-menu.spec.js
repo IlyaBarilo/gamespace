@@ -35,18 +35,20 @@ for (const viewport of [{ width: 1920, height: 1080 }, { width: 390, height: 844
     await expect(page.locator("#viewer")).toBeHidden();
     await expect(page.locator("#appShell")).toBeVisible();
     await expect(page.locator("#addArchiveButton")).toBeEnabled();
+    await expect(page.locator("#appMenuClose")).toBeEnabled();
     await expect(page.locator("#siteFrame")).toHaveAttribute("src", "about:blank");
     await page.locator("#compatibilityButton").click();
     await expect(page.locator("#compatibilityStep_game")).toHaveText("пока не выполнено");
     await page.locator("#compatibilityClose").click();
 
     await context.setOffline(true);
-    await page.locator('[data-archive-id="builtin-demo"] [data-archive-action="open"]').click();
+    await page.locator("#appMenuClose").click();
     await expect(page.frameLocator("#siteFrame").locator("#demoMenuButton")).toBeVisible();
     expect(await page.frameLocator("#siteFrame").locator("#demoMenuButton").evaluate(() => localStorage.getItem("demo-menu-save"))).toBe("LEVEL 5");
     await page.frameLocator("#siteFrame").locator("#demoMenuButton").click();
     await expect(page.locator("#viewer")).toBeHidden();
     await expect(page.locator("#addArchiveButton")).toBeEnabled();
+    await expect(page.locator("#appMenuClose")).toBeEnabled();
   });
 }
 

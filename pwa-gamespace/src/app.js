@@ -413,6 +413,7 @@ function renderState() {
   elements.emptyState.hidden = installed;
   elements.installedState.hidden = !installed;
   elements.openSiteButton.disabled = !installed || busy;
+  elements.appMenuClose.disabled = !installed || busy;
   elements.storageVerifyButton.disabled = !installed || busy;
 
   elements.sharedLocalStorageSetting.checked = pendingGameLocalStorageMode ?? gameLocalStorageMode.shared;
@@ -1514,6 +1515,7 @@ elements.archiveStatisticsButton.addEventListener("click", () => {
 });
 elements.archiveInput.addEventListener("change", () => importSelectedFile(elements.archiveInput.files?.[0]));
 elements.openSiteButton.addEventListener("click", () => { void openViewer(); });
+elements.appMenuClose.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerBack.addEventListener("click", () => {
   returnViewerToIndex("toolbarBack");

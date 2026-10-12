@@ -120,6 +120,10 @@ for (const phone of [false, true]) {
       await page.locator("#compatibilityClose").click();
       await expect(page.locator("#progressPanel")).toBeHidden();
       await page.locator("#appShell").screenshot({ path: testInfo.outputPath(phone ? "compact-menu-mobile.png" : "compact-menu-desktop.png") });
+      await expect(page.locator("#appMenuClose")).toBeEnabled();
+      await page.locator("#appMenuClose").click();
+      await expect(page.locator("#viewer")).toBeVisible();
+      await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("Учебная работа — версия 2.zip");
     });
   });
 }
@@ -132,6 +136,7 @@ test("missing browser capabilities remain visible outside folded program details
   await expect(page.locator("#programDetails")).not.toHaveAttribute("open", "");
   await expect(page.locator("#capabilityNotice")).toBeVisible();
   await expect(page.locator("#capabilityNotice")).toContainText("не поддерживает");
+  await expect(page.locator("#appMenuClose")).toBeDisabled();
   await expect(page.locator("#compatibilityButton")).toBeEnabled();
 });
 
