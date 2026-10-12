@@ -1,3 +1,5 @@
+import { getShellLocalStorage } from "./shell-localstorage.js";
+
 const STORAGE_KEY = "gamespace:runtime-history:v1";
 const HISTORY_LIMIT = 20;
 
@@ -38,7 +40,7 @@ function validEntries(raw) {
   });
 }
 
-export function createRuntimeHistoryStore(storage = () => globalThis.localStorage) {
+export function createRuntimeHistoryStore(storage = () => getShellLocalStorage()) {
   let memory = null;
   let warning = "";
 

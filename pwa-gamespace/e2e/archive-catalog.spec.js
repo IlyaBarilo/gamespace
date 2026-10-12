@@ -36,7 +36,7 @@ async function registry(page) {
 test("archives with equal names switch offline, retain independent files and can be renamed/deleted", async ({ page, context }, testInfo) => {
   await app(page);
   await expect(row(page, "builtin-demo")).toBeVisible();
-  await expect(page.locator("#archiveStorageNotice")).toContainText("Сохранения игр пока общие");
+  await expect(page.locator("#archiveStorageNotice")).toContainText("Другие хранилища игр остаются общими");
   await upload(page, await zip({ "index.html": "<!doctype html><h1>Version A</h1>", "asset.txt": "A" }));
   const first = (await registry(page)).activeId;
   await upload(page, await zip({ "index.html": "<!doctype html><h1>Version B</h1>", "asset.txt": "B" }));
@@ -62,7 +62,7 @@ test("archives with equal names switch offline, retain independent files and can
   await page.locator("#viewerClose").click();
   await row(page, second).locator('[data-archive-action="open"]').click();
   await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("Version B");
-  expect(await page.locator("#siteFrame").evaluate(e => e.contentWindow.localStorage.getItem("student-save"))).toBe("shared-at-stage-one");
+  expect(await page.locator("#siteFrame").evaluate(e => e.contentWindow.localStorage.getItem("student-save"))).toBeNull();
   await page.locator("#viewerClose").click();
   await row(page, first).locator('[data-archive-action="remove"]').click();
   await expect(row(page, first)).toHaveCount(0);
@@ -74,7 +74,7 @@ test("archives with equal names switch offline, retain independent files and can
   await expect(page.locator("#emptyState")).toBeVisible();
   expect((await contents(page)).status).toBe(404);
   await expect(row(page, "builtin-demo")).toBeVisible();
-  expect(await page.evaluate(() => localStorage.getItem("student-save"))).toBe("shared-at-stage-one");
+  expect(await page.evaluate(() => localStorage.getItem("student-save"))).toBeNull();
 });
 
 test("full replacement and incremental update only change the selected archive; failed addition preserves the catalog", async ({ page }) => {

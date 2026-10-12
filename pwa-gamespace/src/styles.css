@@ -2051,3 +2051,7 @@ body.is-viewing-site {
 .archive-entry-actions .danger-button { margin: 0; }
 .archive-storage-notice { margin: 16px 0 0; padding: 12px; border: 1px solid rgba(251, 191, 36, .3); border-radius: 12px; }
 .archive-catalog-panel > .panel-heading { flex-wrap: wrap; }
+
+.archive-localstorage-setting { margin-top: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(0, 116, 184, .08); }
+.archive-localstorage-setting .viewer-tab-setting { justify-content: flex-start; }
+.archive-localstorage-setting > p { margin: 9px 0 0; font-size: .82rem; line-height: 1.5; color: var(--muted); }

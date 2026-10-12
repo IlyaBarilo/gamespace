@@ -6,6 +6,8 @@ const STORE_NAME = "app";
 const STATE_KEY = "state";
 const JOURNAL_KEY = "operation-journal";
 const CATALOG_KEY = "archive-catalog-v1";
+const GAME_STORAGE_KEY = "archive-localstorage-v1";
+const GAME_PROFILE_PREFIX = "archive-localstorage-profile-v1:";
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -141,7 +143,7 @@ export async function readArchiveCatalog() {
   } finally { database.close(); }
 }
 
-export function writeArchiveCatalog(catalog, { journal, clearJournal = false } = {}) {
+export function writeArchiveCatalog(catalog, { journal, clearJournal = false, localStorageCommit } = {}) {
   return withStore("readwrite", store => {
     store.put(catalog, CATALOG_KEY);
     const state = catalogContentState(catalog);
@@ -149,5 +151,30 @@ export function writeArchiveCatalog(catalog, { journal, clearJournal = false } =
     else store.delete(STATE_KEY);
     if (journal) store.put(journal, JOURNAL_KEY);
     if (clearJournal) store.delete(JOURNAL_KEY);
+    if (localStorageCommit) putGameLocalStorage(store, localStorageCommit);
   });
+}
+
+async function readAppValue(key) {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const request = database.transaction(STORE_NAME, "readonly").objectStore(STORE_NAME).get(key);
+      request.onsuccess = () => resolve(request.result ?? null);
+      request.onerror = () => reject(request.error || new Error("Не удалось прочитать сохранения игр."));
+    });
+  } finally { database.close(); }
+}
+
+export function readGameLocalStorageControl() { return readAppValue(GAME_STORAGE_KEY); }
+export function readGameLocalStorageProfile(slot) { return readAppValue(GAME_PROFILE_PREFIX + slot); }
+
+function putGameLocalStorage(store, { control, profiles = [], deleteProfiles = [] }) {
+  store.put(control, GAME_STORAGE_KEY);
+  for (const profile of profiles) store.put({ schema: 1, entries: profile.entries }, GAME_PROFILE_PREFIX + profile.slot);
+  for (const slot of deleteProfiles) store.delete(GAME_PROFILE_PREFIX + slot);
+}
+
+export function saveGameLocalStorage(commit) {
+  return withStore("readwrite", store => putGameLocalStorage(store, commit));
 }

@@ -1,3 +1,5 @@
+import { getShellLocalStorage } from "./shell-localstorage.js";
+
 import { safeDiagnosticText } from "./diagnostics.js";
 
 const PREFIX = "gamespace:activity:v1:";
@@ -8,7 +10,7 @@ const INTERVAL = 5000;
 // A separate record per page prevents a second window from erasing an active operation.
 // These are diagnostic hints, never an installation/rollback source of truth.
 export class DiagnosticSession {
-  constructor({ storage = () => globalThis.localStorage, now = Date.now, owner = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` } = {}) {
+  constructor({ storage = () => getShellLocalStorage(), now = Date.now, owner = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}` } = {}) {
     this.storage = storage;
     this.now = now;
     this.owner = owner;

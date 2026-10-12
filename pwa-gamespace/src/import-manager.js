@@ -22,6 +22,7 @@ import {
   summarizeDirectory,
   summarizeMergeStorage,
 } from "./opfs.js";
+import { activateCatalogWithLocalStorage, recoverGameLocalStorage } from "./archive-localstorage.js";
 import { throwIfAborted } from "./abort.js";
 import { withSiteOperation, withContentMutation } from "./site-operation-lock.js";
 import { ARCHIVES_ROOT, catalogContentState, createArchiveCatalog, detachCatalogArchive, storeArchiveInCatalog, validateArchiveCatalog } from "./archive-catalog.js";
@@ -165,7 +166,7 @@ async function installFullArchiveUnlocked(file, onEvent, { signal, archiveId = n
     onEvent({ type: "phase", phase: "state-save", label: "Сохраняю новую установленную ревизию…" });
     throwIfAborted(signal);
     const updatedCatalog = storeArchiveInCatalog(catalog, state, { id, kind });
-    await writeArchiveCatalog(updatedCatalog);
+    await activateCatalogWithLocalStorage(updatedCatalog);
     committed = true;
     emitServiceWorkerStateChanged();
 
@@ -369,7 +370,7 @@ export function selectInstalledArchive(id) {
       throw new Error("Стартовая страница архива отсутствует. Замените его полную версию.");
     }
     const updated = { ...catalog, activeId: id };
-    await writeArchiveCatalog(updated);
+    await activateCatalogWithLocalStorage(updated);
     emitServiceWorkerStateChanged();
     return catalogContentState(updated);
   });
@@ -396,12 +397,13 @@ async function removeCatalogArchiveUnlocked(id) {
   const entry = catalog.entries.find(item => item.id === id);
   if (!entry) return;
   if (!entry.state?.revisionPath) {
-    await writeArchiveCatalog(detachCatalogArchive(catalog, id));
+    await activateCatalogWithLocalStorage(detachCatalogArchive(catalog, id), { discardId: id });
     emitServiceWorkerStateChanged();
     return;
   }
   // Registry, worker pointer and deletion intent are committed together.
-  await writeArchiveCatalog(detachCatalogArchive(catalog, id), {
+  await activateCatalogWithLocalStorage(detachCatalogArchive(catalog, id), {
+    discardId: id,
     journal: { schema: 1, type: "site-delete", startedAt: Date.now(), revisionPath: entry.state.revisionPath },
   });
   emitServiceWorkerStateChanged();
@@ -503,6 +505,7 @@ export function recoverInterruptedOperation() {
 }
 
 async function recoverInterruptedOperationUnlocked() {
+  await recoverGameLocalStorage();
   const journal = await readOperationJournal();
   if (!journal) return false;
   const root = await getOpfsRoot();
@@ -529,4 +532,23 @@ async function recoverInterruptedOperationUnlocked() {
     return true;
   }
   throw new Error("Неизвестный журнал восстановления. Данные сохранены для диагностики.");
+}
+
+
+export function prepareInstalledArchiveLocalStorage() {
+  return withSiteOperation(async () => {
+    const catalog = await initializeArchiveCatalogUnlocked();
+    await activateCatalogWithLocalStorage(catalog);
+  });
+}
+
+export function setSharedArchiveLocalStorage(shared, expectedArchiveId = null) {
+  return withContentMutation(async () => {
+    await recoverInterruptedOperationUnlocked();
+    const catalog = await initializeArchiveCatalogUnlocked();
+    if (expectedArchiveId && catalog.activeId !== expectedArchiveId) {
+      throw new Error("Выбранный архив изменился в другом окне. Повторите настройку для нужного архива.");
+    }
+    await activateCatalogWithLocalStorage(catalog, { shared: Boolean(shared) });
+  });
 }

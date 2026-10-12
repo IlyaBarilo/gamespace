@@ -12,8 +12,12 @@ import {
   selectInstalledArchive,
   renameInstalledArchive,
   removeInstalledArchive,
+  prepareInstalledArchiveLocalStorage,
+  setSharedArchiveLocalStorage,
 } from "./import-manager.js";
 import { DEMO_ARCHIVE_ID, createArchiveCatalog, summarizeArchiveCatalog } from "./archive-catalog.js";
+import { getShellLocalStorage } from "./shell-localstorage.js";
+import { readGameLocalStorageMode } from "./archive-localstorage.js";
 import { renderArchiveCatalog } from "./archive-catalog-ui.js";
 import { acquireContentView } from "./site-operation-lock.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
@@ -53,6 +57,8 @@ const elements = Object.fromEntries(
 
 let state = null;
 let archiveCatalog = createArchiveCatalog();
+let gameLocalStorageMode = { shared: false, initialized: false, pending: false };
+let pendingGameLocalStorageMode = null;
 let pendingArchiveId = null;
 let releaseContentView = null;
 let viewerOpening = false;
@@ -88,12 +94,12 @@ const runtimeHistoryStore = createRuntimeHistoryStore();
 let runtimeHistoryState = runtimeHistoryStore.load();
 
 function readViewerMenuTabSetting() {
-  try { return localStorage.getItem(VIEWER_MENU_TAB_KEY) === "1"; }
+  try { return getShellLocalStorage().getItem(VIEWER_MENU_TAB_KEY) === "1"; }
   catch { return false; }
 }
 
 function writeViewerMenuTabSetting(enabled) {
-  try { localStorage.setItem(VIEWER_MENU_TAB_KEY, enabled ? "1" : "0"); }
+  try { getShellLocalStorage().setItem(VIEWER_MENU_TAB_KEY, enabled ? "1" : "0"); }
   catch { /* The current session still uses the selected value. */ }
 }
 
@@ -396,6 +402,13 @@ function renderState() {
   elements.removeSiteButton.hidden = !installed;
   elements.storageVerifyButton.disabled = !installed || busy;
 
+  elements.sharedLocalStorageSetting.checked = pendingGameLocalStorageMode ?? gameLocalStorageMode.shared;
+  elements.sharedLocalStorageSetting.disabled = busy || gameLocalStorageMode.pending;
+  elements.localStorageModeStatus.textContent = pendingGameLocalStorageMode !== null
+    ? "Переключаю набор сохранений localStorage…"
+    : gameLocalStorageMode.shared
+    ? "Общий набор localStorage используется всеми архивами и сохраняется при переключении. Индивидуальные наборы сохранены отдельно. Одноимённые записи игр могут пересекаться."
+    : "У каждого архива свой localStorage. Переключение восстанавливает его сохранения; новые архивы начинают с пустого набора.";
   renderArchiveCatalog(elements.archiveList, archiveCatalog, { busy,
     open: entry => { void openCatalogArchive(entry.id); },
     replace: entry => chooseArchive("full", entry.id),
@@ -705,6 +718,8 @@ async function openViewer() {
     state = await readInstalledSiteState();
     if (!state) throw new Error("Архив для запуска не выбран. Откройте его из списка.");
     if (expectedArchiveId && state.archiveId !== expectedArchiveId) throw new Error("Выбранный архив изменился в другом окне. Откройте нужный архив из списка.");
+    await prepareInstalledArchiveLocalStorage();
+    gameLocalStorageMode = await readGameLocalStorageMode();
     await ensureServiceWorker();
     if (!navigator.serviceWorker.controller) {
       throw new Error("Локальный сайт нельзя открыть до активации Service Worker.");
@@ -871,6 +886,7 @@ async function synchronizeSiteInterface({ reloadState = false } = {}) {
   if (reloadState) {
     archiveCatalog = await readInstalledArchiveCatalog();
     state = await readState();
+    gameLocalStorageMode = await readGameLocalStorageMode();
   }
   renderState();
   await refreshStorage();
@@ -1313,6 +1329,7 @@ async function initialize() {
   let initialViewerAttempted = false;
   try {
     state = await readState();
+    gameLocalStorageMode = await readGameLocalStorageMode();
     if (!state && (await readOperationJournal())?.type === "site-delete") diagnosticSession.site(null);
     if (!state && diagnosticSession.previousSite()) {
       saveBackgroundIssue(new Error("Ранее сохранялась установленная версия сайта, но её записи в IndexedDB теперь нет. Причина удаления неизвестна."), { stage: "site-state-missing", stageLabel: "Проверка сведений об установленном сайте" });
@@ -1334,6 +1351,7 @@ async function initialize() {
       state = result.state;
     }
     archiveCatalog = await readInstalledArchiveCatalog();
+    gameLocalStorageMode = await readGameLocalStorageMode();
     renderState();
 
     if (state && navigator.serviceWorker?.controller) {
@@ -1452,6 +1470,23 @@ elements.viewerBack.addEventListener("click", () => {
 });
 elements.viewerClose.addEventListener("click", closeViewer);
 elements.viewerMenuTab.addEventListener("click", closeViewer);
+elements.sharedLocalStorageSetting.addEventListener("change", async () => {
+  const shared = elements.sharedLocalStorageSetting.checked;
+  if (busy) { elements.sharedLocalStorageSetting.checked = pendingGameLocalStorageMode ?? gameLocalStorageMode.shared; return; }
+  pendingGameLocalStorageMode = shared;
+  setBusy(true);
+  setStatus("Переключаю сохранения localStorage", "neutral");
+  try {
+    await setSharedArchiveLocalStorage(shared, state?.archiveId);
+    await synchronizeSiteInterface({ reloadState: true });
+    setStatus(shared ? "Включён единый localStorage" : "Включён раздельный localStorage", "good");
+  } catch (error) {
+    gameLocalStorageMode = await readGameLocalStorageMode().catch(() => gameLocalStorageMode);
+    showError(error, { operation: "переключение сохранений", stage: "localstorage-switch", stageLabel: "Переключение localStorage" });
+    setStatus("Настройка localStorage не изменена", "bad");
+  } finally { pendingGameLocalStorageMode = null; setBusy(false); }
+});
+
 elements.viewerMenuTabSetting.addEventListener("change", () => {
   viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
   writeViewerMenuTabSetting(viewerMenuTabEnabled);
@@ -1506,8 +1541,8 @@ async function renameCatalogArchive(entry) {
 async function deleteCatalogArchive(entry) {
   if (busy || !entry) return;
   const message = entry.kind === "demo"
-    ? "Удалить распакованные файлы встроенного демо? Демо останется в списке для повторной подготовки. Общие сохранения игр сохранятся."
-    : `Удалить архив «${entry.name}» и его распакованные файлы? Другие архивы и общие сохранения игр сохранятся.`;
+    ? "Удалить распакованные файлы встроенного демо? Демо останется в списке для повторной подготовки. Его индивидуальный localStorage будет удалён; общий набор сохранится."
+    : `Удалить архив «${entry.name}» и его распакованные файлы? Его индивидуальный localStorage будет удалён. Другие архивы и общий набор сохранятся.`;
   if (!window.confirm(message)) return;
   const wasActive = archiveCatalog.activeId === entry.id;
   cancelScheduledSiteInterfaceRefresh();

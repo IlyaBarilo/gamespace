@@ -1,3 +1,5 @@
+import { getShellLocalStorage } from "./shell-localstorage.js";
+
 const STORAGE_KEY = "gamespace:last-error:v1";
 export const MAX_REPORT_CHARS = 24_000;
 const MAX_MESSAGES = 20;
@@ -192,7 +194,7 @@ export function createDiagnosticReport(error, environment = {}, fallback = {}) {
 }
 
 // Diagnostics are intentionally device-local, independent of IndexedDB/OPFS and site deletion.
-export function createLastReportStore(getStorage = () => globalThis.localStorage) {
+export function createLastReportStore(getStorage = () => getShellLocalStorage()) {
   let memory = null;
   let warning = "";
   return {

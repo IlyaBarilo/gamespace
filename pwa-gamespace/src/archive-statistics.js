@@ -1,3 +1,5 @@
+import { getShellLocalStorage } from "./shell-localstorage.js";
+
 import { safeDiagnosticText } from "./diagnostics.js";
 
 const now = () => performance.now();
@@ -139,7 +141,7 @@ export function formatArchiveStatistics(report) {
   return lines.join("\n");
 }
 
-export function createArchiveStatisticsStore(storage = () => globalThis.localStorage) {
+export function createArchiveStatisticsStore(storage = () => getShellLocalStorage()) {
   const key = "gamespace:last-archive-statistics:v1";
   let memory = null;
   let warning = "";

@@ -48,7 +48,9 @@ function setup(t, options = {}) {
     });
     return request;
   } };
-  for (const [name, value] of Object.entries({ indexedDB, navigator: { locks: { request: async (_name, _options, action) => action() }, storage: { getDirectory: async () => root } } })) {
+  const storage = new Map();
+  const localStorage = { get length() { return storage.size; }, key: index => [...storage.keys()][index] ?? null, getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)), removeItem: key => storage.delete(key) };
+  for (const [name, value] of Object.entries({ indexedDB, localStorage, navigator: { locks: { request: async (_name, _options, action) => action() }, storage: { getDirectory: async () => root } } })) {
     const previous = Object.getOwnPropertyDescriptor(globalThis, name);
     Object.defineProperty(globalThis, name, { configurable: true, value });
     t.after(() => previous ? Object.defineProperty(globalThis, name, previous) : delete globalThis[name]);

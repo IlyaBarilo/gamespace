@@ -1,3 +1,5 @@
+import { getShellLocalStorage } from "./shell-localstorage.js";
+
 import { formatCompatibilityBody } from "./compatibility-report.js";
 
 const KEY = "gamespace:compatibility-check:v1";
@@ -9,7 +11,7 @@ export function compatibilityContentKey(state) {
   return revision ? `${revision}:${state.installedAt}` : "";
 }
 
-export function createCompatibilityCheck({ version, storage = () => globalThis.localStorage, now = Date.now } = {}) {
+export function createCompatibilityCheck({ version, storage = () => getShellLocalStorage(), now = Date.now } = {}) {
   let context = null;
   let memory = null;
   let warning = "";
