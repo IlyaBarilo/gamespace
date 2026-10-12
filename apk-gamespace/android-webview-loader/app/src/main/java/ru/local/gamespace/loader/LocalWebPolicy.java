@@ -5,6 +5,7 @@ import java.net.URI;
 /** Shared local-origin policy for both WebViews; update URLs are never local content. */
 final class LocalWebPolicy {
     static final String ORIGIN = "https://content.gamespace.local";
+    static final String APP_MENU_URL = "gamespace://menu";
     static final String CSP = "default-src 'self' data: blob:; "
         + "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; "
         + "style-src 'self' 'unsafe-inline' data: blob:; "
@@ -25,5 +26,9 @@ final class LocalWebPolicy {
     static boolean isInMemoryUrl(String value) {
         if (value == null) return false;
         return value.startsWith("about:") || value.startsWith("data:") || value.startsWith("blob:") || value.startsWith("javascript:");
+    }
+
+    static boolean canOpenAppMenu(String target, String pageUrl) {
+        return APP_MENU_URL.equals(target) && isInternalUrl(pageUrl);
     }
 }

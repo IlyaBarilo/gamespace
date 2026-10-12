@@ -4038,6 +4038,14 @@ public class MainActivity extends Activity {
         }
     }
 
+    private boolean handleAppMenuUrl(WebView view, String url) {
+        if (!LocalWebPolicy.APP_MENU_URL.equals(url)) return false;
+        if (view == getVisibleSiteWebView() && LocalWebPolicy.canOpenAppMenu(url, view.getUrl())) {
+            showAppMenu();
+        }
+        return true;
+    }
+
     private class DiagnosticSiteClient extends WebViewClient {
         private Runnable loadTimeout;
 
@@ -4081,6 +4089,8 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) { compatibilityCheck.pageError(isCurrentIndexUrl(url), "page"); }
             }
             if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
+            // Advertise a single local menu command; imported pages receive no Java interface.
+            view.evaluateJavascript("window.dispatchEvent(new CustomEvent('gamespaceMenuAvailable',{detail:{host:'apk'}}));", null);
             // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
             view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
             updateSystemBackCallbackRegistration();
@@ -4185,6 +4195,7 @@ public class MainActivity extends Activity {
     private class HomeSiteClient extends DiagnosticSiteClient {
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if (handleAppMenuUrl(view, url)) return true;
             return handleHomeUrl(url);
         }
 
@@ -4194,6 +4205,7 @@ public class MainActivity extends Activity {
                 if (!request.isForMainFrame()) {
                     return false;
                 }
+                if (handleAppMenuUrl(view, request.getUrl().toString())) return true;
                 return handleHomeUrl(request.getUrl().toString());
             }
             return false;
@@ -4263,6 +4275,7 @@ public class MainActivity extends Activity {
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if (handleAppMenuUrl(view, url)) return true;
             return handleContentUrl(url);
         }
 
@@ -4272,6 +4285,7 @@ public class MainActivity extends Activity {
                 if (!request.isForMainFrame()) {
                     return false;
                 }
+                if (handleAppMenuUrl(view, request.getUrl().toString())) return true;
                 return handleContentUrl(request.getUrl().toString());
             }
             return false;

@@ -112,6 +112,8 @@ $checks = @{
     "internet purpose is accurate" = 'Интернет используется только при ручной проверке обновлений приложения\.'
     "menu tab disabled by default" = 'getBoolean\(PREF_SHOW_MENU_TAB, false\)'
     "menu tab opens app menu directly" = 'createMenuTabButton\(\)[\s\S]*?showAppMenu\(\);'
+    "local page advertises app menu without a native interface" = 'onPageFinished\(WebView view, String url\)[\s\S]*?!localSiteRequestHandler\.isInternalUrl\(url\)[\s\S]*?evaluateJavascript\("window\.dispatchEvent\(new CustomEvent\(''gamespaceMenuAvailable'',\{detail:\{host:''apk''\}'
+    "page menu command requires the visible local WebView" = 'handleAppMenuUrl\(WebView view, String url\)[\s\S]*?view == getVisibleSiteWebView\(\) && LocalWebPolicy\.canOpenAppMenu\(url, view\.getUrl\(\)\)[\s\S]*?showAppMenu\(\)'
     "menu tab appears only after toolbar hides" = 'hideTopBar\(\)[\s\S]*?updateMenuTabVisibility\(\);'
     "menu tab setting is persisted" = 'putBoolean\(PREF_SHOW_MENU_TAB, enabled\)\.apply\(\)'
     "temporary toolbar has a back button before settings" = 'backButton = createToolbarIconButton\(R\.drawable\.ic_toolbar_back, "Назад"\)[\s\S]*?toolbar\.addView\(backButton[\s\S]*?menuButton = createToolbarIconButton\(R\.drawable\.ic_toolbar_sliders'
@@ -132,6 +134,9 @@ $checks = @{
 }
 foreach ($entry in $checks.GetEnumerator()) {
     if ($activity -notmatch $entry.Value) { throw "Missing diagnostic wiring: $($entry.Key)" }
+}
+if ([regex]::Matches($activity, 'if \(handleAppMenuUrl\(view, (url|request\.getUrl\(\)\.toString\(\))\)\) return true;').Count -ne 4) {
+    throw "Both local WebViews must handle the menu command in legacy and main-frame navigation callbacks."
 }
 if ($activity -match 'finally\s*\{\s*context\.stage\s*=') {
     throw "Resource cleanup must not overwrite the original failure stage."

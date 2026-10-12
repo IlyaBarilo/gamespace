@@ -154,6 +154,13 @@ public final class AppUpdateTest {
         }
         expect(LocalWebPolicy.isInMemoryUrl("blob:https://content.gamespace.local/id") && LocalWebPolicy.isInMemoryUrl("data:text/plain,local"), "offline in-memory resources retained");
         expect(!LocalWebPolicy.isInMemoryUrl("https://example.org/") && !LocalWebPolicy.isInMemoryUrl("file:///test"), "external scheme not in-memory");
+        expect(LocalWebPolicy.canOpenAppMenu("gamespace://menu", LocalWebPolicy.ORIGIN + "/index.html?ui=mobile"), "local storefront can open app menu");
+        for (String page : new String[] {null, "", "about:blank", "javascript:void(0)", "data:text/html,menu", "blob:" + LocalWebPolicy.ORIGIN + "/id", "file:///index.html", "https://example.org/index.html", "https://content.gamespace.local.evil.invalid/"}) {
+            expect(!LocalWebPolicy.canOpenAppMenu("gamespace://menu", page), "menu command requires the actual local HTTPS page");
+        }
+        for (String target : new String[] {null, "", "gamespace://menu/", "gamespace://menu?install=1", "gamespace://menu#x", "gamespace://install", "https://example.org/menu"}) {
+            expect(!LocalWebPolicy.canOpenAppMenu(target, LocalWebPolicy.ORIGIN + "/"), "only the fixed menu command is accepted");
+        }
     }
 
     private static String entry(String version, String tag, int code) {

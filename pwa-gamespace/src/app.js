@@ -788,8 +788,13 @@ function handleViewerMessage(event) {
   if (elements.viewer.hidden
     || event.source !== elements.siteFrame.contentWindow
     || event.origin !== location.origin
-    || event.data?.type !== "gameExit"
     || !viewerIndexUrl) return;
+
+  if (event.data?.type === "gamespaceOpenMenu") {
+    closeViewer();
+    return;
+  }
+  if (event.data?.type !== "gameExit") return;
 
   try {
     if (elements.siteFrame.contentWindow.location.pathname === new URL(viewerIndexUrl).pathname) return;
@@ -814,6 +819,10 @@ function attachFrameGuards() {
     detachGameDiagnostics = observeGameWindow(frameWindow, (error, context) => saveBackgroundIssue(error, { operation: "просмотр игры", ...context }));
     const checkedUrl = frameWindow.location.href;
     compatibilityPageUrl = checkedUrl;
+    if (frameDocument?.contentType === "text/html"
+      && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
+      frameWindow.dispatchEvent(new frameWindow.CustomEvent("gamespaceMenuAvailable", { detail: { host: "pwa" } }));
+    }
     if (new URL(checkedUrl).origin === location.origin) {
       void withTimeout(fetch(checkedUrl, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка страницы не завершилась за 15 секунд.").then((response) => {
         if (elements.viewer.hidden || frameWindow.location.href !== checkedUrl) return;
