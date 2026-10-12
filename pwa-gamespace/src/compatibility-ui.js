@@ -3,7 +3,7 @@ import { COMPATIBILITY_FORM_URL, createCompatibilityReport } from "./compatibili
 const LABELS = { success: "выполнено", recorded: "выполнено", not_performed: "пока не выполнено",
   not_checked: "пока не проверено", error: "ошибка", interrupted: "прервано" };
 
-export function createCompatibilityUI(elements, { snapshot, buildInput, isBusy, reset, launchMode }) {
+export function createCompatibilityUI(elements, { snapshot, buildInput, isBusy, reset, launchMode, scopeLabel = () => "" }) {
   const dialog = elements.compatibilityDialog;
   let report = "";
   let generating = false;
@@ -14,6 +14,7 @@ export function createCompatibilityUI(elements, { snapshot, buildInput, isBusy, 
   elements.compatibilityFormLink.href = COMPATIBILITY_FORM_URL;
   function refresh() {
     const check = snapshot();
+    elements.compatibilityScope.textContent = scopeLabel();
     const steps = check.data.steps;
     const installed = launchMode() === "installed";
     for (const key of ["launch", "import", "storefront", "game"]) {
@@ -90,7 +91,7 @@ export function createCompatibilityUI(elements, { snapshot, buildInput, isBusy, 
   elements.compatibilityClose.addEventListener("click", close);
   dialog.addEventListener("close", restoreFocus);
   elements.compatibilityReset.addEventListener("click", () => {
-    if (isBusy() || !window.confirm("Начать новую проверку? Её результаты будут сброшены. Установленный сайт и сохранения останутся на месте.")) return;
+    if (isBusy() || !window.confirm("Начать новую проверку? Результаты только этой проверки будут сброшены. Установленные архивы и сохранения останутся на месте.")) return;
     reset();
     void generate();
   });

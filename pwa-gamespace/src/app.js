@@ -1,5 +1,5 @@
 import "./styles.css";
-import { readOperationJournal, readState } from "./db.js";
+import { readArchiveCatalog, readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import { summarizeStorage, formatStoragePercent } from "./storage-summary.js";
 import {
@@ -19,7 +19,7 @@ import { DEMO_ARCHIVE_ID, createArchiveCatalog, summarizeArchiveCatalog } from "
 import { getShellLocalStorage } from "./shell-localstorage.js";
 import { readGameLocalStorageMode } from "./archive-localstorage.js";
 import { renderArchiveCatalog } from "./archive-catalog-ui.js";
-import { acquireContentView } from "./site-operation-lock.js";
+import { acquireContentView, withSiteOperation } from "./site-operation-lock.js";
 import { probeSevenZipSupport } from "./archive/sevenzip-client.js";
 import { ensureServiceWorkerControlsPage } from "./service-worker-control.js";
 import { ProgressEstimator } from "./progress-estimator.js";
@@ -45,7 +45,7 @@ import { createRuntimeHistoryStore, formatRuntimeHistory } from "./runtime-histo
 import { isAllowedExternalUrl } from "./navigation-policy.js";
 import { isAbortError } from "./abort.js";
 import { createScreenWakeLock } from "./screen-wake-lock.js";
-import { createCompatibilityCheck, compatibilityErrorCategory } from "./compatibility-check.js";
+import { createCompatibilityCheck, compatibilityContentKey, compatibilityErrorCategory } from "./compatibility-check.js";
 import { createCompatibilityUI } from "./compatibility-ui.js";
 import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
 import { diagnosticErrorCode } from "./diagnostics.js";
@@ -139,6 +139,12 @@ const compatibilityUI = createCompatibilityUI(elements, {
   isBusy: () => busy,
   reset: () => compatibilityCheck.reset(),
   launchMode: () => realPwaLaunchMode(),
+  scopeLabel: () => {
+    const check = compatibilityCheck.snapshot();
+    if (check.attempt) return "Последняя попытка импорта. Результаты уже загруженных архивов сохранены отдельно.";
+    const entry = archiveCatalog.entries.find(item => item.id === check.archiveId);
+    return entry ? `Архив: ${entry.name}. Результаты сохраняются отдельно для этого архива.` : "Архив ещё не выбран. Проверку можно начать с импорта демо или своего архива.";
+  },
   async buildInput() {
     const environment = await compatibilityEnvironment;
     try { compatibilityCheck.reconcileContent(await readState()); }
@@ -150,6 +156,15 @@ const compatibilityUI = createCompatibilityUI(elements, {
       formedAtMs: date.getTime(), utcOffsetMinutes: -date.getTimezoneOffset() };
   },
 });
+
+async function cleanupArchiveChecks() {
+  // Read and prune under the same lock as imports/deletions. A catalog snapshot
+  // obtained before another window's commit must not delete its new check.
+  await withSiteOperation(async () => {
+    const catalog = await readArchiveCatalog();
+    if (catalog) compatibilityCheck.retainArchives(catalog.entries.map(entry => entry.id));
+  });
+}
 
 function compatibilityPageFailure(category) {
   if (!state?.activeRevision || compatibilityCheck.snapshot().pending) return;
@@ -718,6 +733,7 @@ async function openViewer() {
     state = await readInstalledSiteState();
     if (!state) throw new Error("Архив для запуска не выбран. Откройте его из списка.");
     if (expectedArchiveId && state.archiveId !== expectedArchiveId) throw new Error("Выбранный архив изменился в другом окне. Откройте нужный архив из списка.");
+    compatibilityCheck.selectArchive(state);
     await prepareInstalledArchiveLocalStorage();
     gameLocalStorageMode = await readGameLocalStorageMode();
     await ensureServiceWorker();
@@ -746,7 +762,7 @@ async function openViewer() {
     showViewerToolbar();
     return true;
   } catch (error) {
-    if (error.code !== "GS-VIEWER-BUSY") compatibilityPageFailure("page");
+    if (error.code !== "GS-VIEWER-BUSY" && state?.archiveId === expectedArchiveId) compatibilityPageFailure("page");
     showError(error, { operation: "открытие сайта", stage: "viewer-open", stageLabel: "Подготовка автономного просмотра" });
     setStatus("Локальный сайт пока не открыт", "bad");
     closeViewer();
@@ -885,6 +901,7 @@ async function refreshStorage() {
 async function synchronizeSiteInterface({ reloadState = false } = {}) {
   if (reloadState) {
     archiveCatalog = await readInstalledArchiveCatalog();
+    await cleanupArchiveChecks();
     state = await readState();
     gameLocalStorageMode = await readGameLocalStorageMode();
   }
@@ -1344,7 +1361,8 @@ async function initialize() {
     }
     archiveCatalog = await readInstalledArchiveCatalog();
     state = await readInstalledSiteState();
-    compatibilityCheck.reconcileContent(state);
+    await cleanupArchiveChecks();
+    compatibilityCheck.selectArchive(state);
     diagnosticSession.site(state);
     if (state && !state.storageVerifiedAt) {
       const result = await refreshInstalledSiteStatistics();
@@ -1515,7 +1533,7 @@ async function openCatalogArchive(id) {
   closeViewer();
   try {
     state = await selectInstalledArchive(id);
-    compatibilityCheck.reconcileContent(state);
+    compatibilityCheck.selectArchive(state);
     diagnosticSession.site(state);
     await synchronizeSiteInterface({ reloadState: true });
     return await openViewer();
@@ -1544,7 +1562,6 @@ async function deleteCatalogArchive(entry) {
     ? "Удалить распакованные файлы встроенного демо? Демо останется в списке для повторной подготовки. Его индивидуальный localStorage будет удалён; общий набор сохранится."
     : `Удалить архив «${entry.name}» и его распакованные файлы? Его индивидуальный localStorage будет удалён. Другие архивы и общий набор сохранятся.`;
   if (!window.confirm(message)) return;
-  const wasActive = archiveCatalog.activeId === entry.id;
   cancelScheduledSiteInterfaceRefresh();
   setBusy(true);
   closeViewer();
@@ -1552,8 +1569,9 @@ async function deleteCatalogArchive(entry) {
   try {
     diagnosticSession.begin("удаление архива");
     await removeInstalledArchive(entry.id);
-    if (wasActive) compatibilityCheck.reset("Архив удалён. Начните новую проверку выбранного содержимого.");
+    compatibilityCheck.forgetArchive(entry.id, entry.state ? compatibilityContentKey(entry.state) : null);
     await synchronizeSiteInterface({ reloadState: true });
+    compatibilityCheck.selectArchive(state);
     diagnosticSession.site(state);
     setStatus("Сайт удалён", "neutral");
     diagnosticSession.finish("успешно");

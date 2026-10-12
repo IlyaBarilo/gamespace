@@ -194,7 +194,7 @@
 
       <section class="panel compatibility-panel" aria-label="Базовая проверка">
         <button id="compatibilityButton" class="version-secondary-button compatibility-trigger" type="button">Отчёт о совместимости</button>
-        <p>Доступен с первого запуска, даже если архив ещё не установлен или возникла ошибка.</p>
+        <p>Доступен с первого запуска, даже если архив ещё не установлен или возникла ошибка. Результаты проверки сохраняются отдельно для каждого архива.</p>
       </section>
 
       <div class="app-window-actions">
@@ -463,6 +463,7 @@
         <h2 id="compatibilityTitle">Проверка совместимости</h2>
         <button id="compatibilityClose" class="version-secondary-button" type="button">Закрыть</button>
       </div>
+      <p id="compatibilityScope"></p>
       <p id="compatibilitySummary" role="status"></p>
       <ol class="compatibility-steps">
         <li><strong>Запуск приложения: <span id="compatibilityStep_launch"></span></strong><span>Установите PWA и откройте её значок. Локальный просмотр во вкладке не подтверждает установку.</span></li>

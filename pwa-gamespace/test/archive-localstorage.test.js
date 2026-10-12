@@ -54,6 +54,7 @@ const controlKey = "archive-localstorage-v1";
 test("old saves belong to the selected archive; different archives restore their own native keys", async t => {
   const { select, storage, values } = setup(t);
   await select("a");
+  storage.setItem("gamespace:compatibility-check:archive:v1:id:a", "observed A");
   storage.setItem("score", "latest A");
   await select("b");
   assert.equal(storage.getItem("score"), null);
@@ -64,6 +65,7 @@ test("old saves belong to the selected archive; different archives restore their
   assert.deepEqual(gameValues(), new Map([["score", "B"], ["__proto__", "safe value"], ["", "empty key"]]));
   assert.equal(values.get("gamespace:viewer-menu-tab:v1"), "1");
   assert.equal(values.get("gamespace:activity:v1:owner"), "common");
+  assert.equal(values.get("gamespace:compatibility-check:archive:v1:id:a"), "observed A");
 });
 
 test("shared mode seeds once, preserves individual sets and reuses the saved common set", async t => {

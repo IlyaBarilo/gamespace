@@ -30,3 +30,16 @@ test("intentional shell removal is honoured after a later native clear", t => {
   values.clear();
   assert.equal(shell.getItem("gamespace:last-installed:v1"), null);
 });
+
+
+test("per-archive checks are shell-owned and survive native game clearing without entering game profiles", t => {
+  const { values } = setup(t);
+  const shell = getShellLocalStorage();
+  const key = "gamespace:compatibility-check:archive:v1:id:work-a";
+  shell.setItem(key, "observed steps");
+  values.clear();
+  assert.equal(shell.getItem(key), "observed steps");
+  shell.removeItem(key);
+  values.clear();
+  assert.equal(shell.getItem(key), null);
+});
