@@ -89,6 +89,8 @@ public class MainActivity extends Activity {
     private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
     private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
+    private static final String PREF_SHOW_FPS = "show_canvas_fps";
+    private String canvasFpsRuntime;
     private volatile String lastArchiveStatistics;
     private static final String PREF_BASE_PATH = "base_path";
     private static final String PREF_INDEX_PATH = "index_path";
@@ -312,6 +314,7 @@ public class MainActivity extends Activity {
         WebView visibleWebView = getVisibleSiteWebView();
         if (visibleWebView != null) {
             visibleWebView.onResume();
+            updateCanvasFps(visibleWebView);
             if (visibleWebView == homeWebView && !contentLoadPending) {
                 resumeHomePageMedia();
             }
@@ -334,6 +337,7 @@ public class MainActivity extends Activity {
                 pauseHomePageMedia();
             }
             visibleWebView.onPause();
+            stopCanvasFps(visibleWebView);
         }
         if (contentLoadPending && webView != null) {
             webView.onPause();
@@ -804,6 +808,29 @@ public class MainActivity extends Activity {
         return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SHOW_MENU_TAB, false);
     }
 
+    private boolean isCanvasFpsEnabled() {
+        return getPrefs().getBoolean(PREF_SHOW_FPS, false);
+    }
+
+    private void stopCanvasFps(WebView view) {
+        if (view != null) view.evaluateJavascript("if(window.__gamespaceCanvasFps)window.__gamespaceCanvasFps.stop();", null);
+    }
+
+    private void updateCanvasFps(WebView view) {
+        if (view == null) return;
+        if (!isCanvasFpsEnabled() || view != getVisibleSiteWebView()
+                || !localSiteRequestHandler.isInternalUrl(view.getUrl())) {
+            stopCanvasFps(view);
+            return;
+        }
+        try {
+            if (canvasFpsRuntime == null) canvasFpsRuntime = readAssetText("canvas-fps-runtime.js");
+            view.evaluateJavascript(canvasFpsRuntime + "\nif(document.contentType==='text/html')GameSpaceCanvasFps.start(window);", null);
+        } catch (Exception ignored) {
+            // Optional instrumentation cannot block opening an installed game.
+        }
+    }
+
     private void updateMenuTabVisibility() {
         if (menuTabButton == null) {
             return;
@@ -836,6 +863,7 @@ public class MainActivity extends Activity {
         boolean contentWasActive = contentLoadPending
             || (webView != null && webView.getVisibility() != View.GONE);
         if (webView != null) {
+            stopCanvasFps(webView);
             if (contentWasActive) {
                 clearContentWebView();
             } else {
@@ -847,6 +875,7 @@ public class MainActivity extends Activity {
             homeWebView.setVisibility(View.VISIBLE);
             homeWebView.onResume();
             resumeHomePageMedia();
+            updateCanvasFps(homeWebView);
         }
         updateSystemBackCallbackRegistration();
     }
@@ -857,6 +886,7 @@ public class MainActivity extends Activity {
         contentVisualCallbackPending = false;
         hidePageLoadingOverlay();
         if (homeWebView != null) {
+            stopCanvasFps(homeWebView);
             if (!wasPending) {
                 pauseHomePageMedia();
             }
@@ -866,11 +896,14 @@ public class MainActivity extends Activity {
         if (webView != null) {
             webView.setVisibility(View.VISIBLE);
             webView.onResume();
+            updateCanvasFps(webView);
         }
         updateSystemBackCallbackRegistration();
     }
 
     private void hideSiteWebViews() {
+        stopCanvasFps(homeWebView);
+        stopCanvasFps(webView);
         boolean loadWasPending = contentLoadPending;
         cancelPendingContentLoadState();
         if (homeWebView != null) {
@@ -1328,6 +1361,7 @@ public class MainActivity extends Activity {
         final boolean installed = currentIndexFile != null && currentIndexFile.isFile();
         final String runtimeEnvironmentItem = "Среда запуска: " + getWebViewEnvironmentText(false);
         final String menuTabItem = "Вкладка ••• после скрытия: " + (isMenuTabEnabled() ? "включена" : "выключена");
+        final String fpsItem = "Показывать FPS отрисовки";
         final String[] items = busy ? new String[] {"Создать отчёт о проблеме", "Последняя ошибка", "Отчёт о совместимости"}
             : installed
             ? new String[] {"Открыть GameSpace", "Быстро обновить из архива", "Полное обновление из архива", "Загрузить встроенный демо-сайт", "Перезагрузить сайт", "Перепроверить файлы", menuTabItem, "Обновление приложения", "Информация", "Открыть PWA-версию", runtimeEnvironmentItem, "Статистика архива", "Отчёт о совместимости", "Создать отчёт о проблеме", "Последняя ошибка", "Лицензии", "Очистить сайт"}
@@ -1336,7 +1370,7 @@ public class MainActivity extends Activity {
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
+            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
             buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
                 @Override
                 public void onAction(String item) {
@@ -1371,6 +1405,10 @@ public class MainActivity extends Activity {
                         Toast.makeText(MainActivity.this,
                             enabled ? "Вкладка ••• будет показана после скрытия панели" : "Вкладка ••• отключена",
                             Toast.LENGTH_SHORT).show();
+                    } else if (fpsItem.equals(item)) {
+                        getPrefs().edit().putBoolean(PREF_SHOW_FPS, !isCanvasFpsEnabled()).apply();
+                        updateCanvasFps(homeWebView);
+                        updateCanvasFps(webView);
                     } else if ("Информация".equals(item)) {
                         showInfoDialog();
                     } else if ("Открыть PWA-версию".equals(item)) {
@@ -4091,6 +4129,7 @@ public class MainActivity extends Activity {
             if (diagnosticJournal != null) diagnosticJournal.record("Страница загружена: " + diagnosticPagePath(url), false);
             // Advertise a single local menu command; imported pages receive no Java interface.
             view.evaluateJavascript("window.dispatchEvent(new CustomEvent('gamespaceMenuAvailable',{detail:{host:'apk'}}));", null);
+            updateCanvasFps(view);
             // No native bridge. Never stringify arbitrary rejected objects or collect console.log.
             view.evaluateJavascript("(function(){if(window.__gsDiagnosticPromise)return;window.__gsDiagnosticPromise=true;window.addEventListener('unhandledrejection',function(e){var r=e.reason;console.error('GS-PROMISE: '+(r instanceof Error?String(r.name)+': '+String(r.message):typeof r==='string'?r.slice(0,500):'[объект не записывается]'));});})();", null);
             updateSystemBackCallbackRegistration();

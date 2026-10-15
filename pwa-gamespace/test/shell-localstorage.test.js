@@ -31,6 +31,15 @@ test("intentional shell removal is honoured after a later native clear", t => {
   assert.equal(shell.getItem("gamespace:last-installed:v1"), null);
 });
 
+test("FPS preference belongs to the shell and survives a game clearing localStorage", t => {
+  const { values } = setup(t);
+  const shell = getShellLocalStorage();
+  shell.setItem("gamespace:viewer-fps:v1", "1");
+  values.clear();
+  assert.equal(shell.getItem("gamespace:viewer-fps:v1"), "1");
+  assert.equal(shell.getItem("score"), null);
+});
+
 
 test("per-archive checks are shell-owned and survive native game clearing without entering game profiles", t => {
   const { values } = setup(t);

@@ -49,6 +49,8 @@ final class AppMenuDialog {
     private final boolean busy;
     private final boolean menuTabEnabled;
     private final String menuTabItem;
+    private final boolean fpsEnabled;
+    private final String fpsItem;
     private final String[] items;
     private final SiteState siteState;
     private final AppState appState;
@@ -57,7 +59,7 @@ final class AppMenuDialog {
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, String[] items, SiteState siteState,
+            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String[] items, SiteState siteState,
             AppState appState, DiagnosticsState diagnosticsState, Listener listener) {
         this.activity = activity;
         this.version = version;
@@ -65,6 +67,8 @@ final class AppMenuDialog {
         this.busy = busy;
         this.menuTabEnabled = menuTabEnabled;
         this.menuTabItem = menuTabItem;
+        this.fpsEnabled = fpsEnabled;
+        this.fpsItem = fpsItem;
         this.items = items;
         this.siteState = siteState;
         this.appState = appState;
@@ -215,7 +219,7 @@ final class AppMenuDialog {
 
     @SuppressWarnings("deprecation")
     private View viewerCard() {
-        LinearLayout card = card("ПРОСМОТР САЙТА", "Вкладка быстрого меню");
+        LinearLayout card = card("ПРОСМОТР САЙТА", "Настройки просмотра");
         TextView description = text("После скрытия верхней панели вкладка ••• может оставаться вверху экрана и сразу открывать это меню.", 14, MUTED, false);
         description.setPadding(0, dp(8), 0, dp(8));
         card.addView(description);
@@ -237,6 +241,27 @@ final class AppMenuDialog {
         });
         card.addView(setting, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        Switch fps = new Switch(activity);
+        fps.setText("Показывать FPS отрисовки");
+        fps.setTextColor(TEXT);
+        fps.setTextSize(15);
+        fps.setChecked(fpsEnabled);
+        fps.setShowText(false);
+        fps.setPadding(0, dp(12), 0, 0);
+        if (Build.VERSION.SDK_INT >= 21) {
+            fps.setThumbTintList(toggleColors());
+            fps.setTrackTintList(trackColors());
+        }
+        fps.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                listener.onAction(fpsItem);
+            }
+        });
+        card.addView(fps, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView fpsDescription = text("Оценка для Canvas/WebGL: текущий FPS, минимум, средний и максимум за 5 с. В начале — по доступному времени. Для других способов рисования показатель может быть недоступен. Замер добавляет нагрузку.", 12, MUTED, false);
+        fpsDescription.setPadding(0, dp(6), 0, 0);
+        card.addView(fpsDescription);
         return card;
     }
 

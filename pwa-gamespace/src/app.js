@@ -1,4 +1,5 @@
 import "./styles.css";
+import "./canvas-fps-runtime.js";
 import { readArchiveCatalog, readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import { summarizeStorage, formatStoragePercent } from "./storage-summary.js";
@@ -91,6 +92,12 @@ let backgroundIssueCount = 0;
 let archiveStatistics = null;
 let activeImportController = null;
 const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
+const VIEWER_FPS_KEY = "gamespace:viewer-fps:v1";
+let viewerFps = null;
+let viewerFpsEnabled = false;
+try { viewerFpsEnabled = getShellLocalStorage().getItem(VIEWER_FPS_KEY) === "1"; }
+catch { /* FPS is optional when settings cannot be read. */ }
+elements.viewerFpsSetting.checked = viewerFpsEnabled;
 const viewerLandscapeQuery = window.matchMedia("(orientation: landscape)");
 const archiveStatisticsStore = createArchiveStatisticsStore();
 const runtimeHistoryStore = createRuntimeHistoryStore();
@@ -294,6 +301,7 @@ function saveBackgroundIssue(error, context = {}) {
 }
 
 function beginGameLoad(url) {
+  stopViewerFps();
   compatibilityPageUrl = url;
   clearTimeout(gameLoadTimer);
   diagnosticSession.record("Открытие страницы", diagnosticPagePath(url), true);
@@ -761,6 +769,7 @@ async function openViewer() {
 }
 
 function closeViewer() {
+  stopViewerFps();
   clearTimeout(gameLoadTimer);
   detachGameDiagnostics?.();
   detachGameDiagnostics = null;
@@ -806,7 +815,25 @@ function handleViewerMessage(event) {
   returnViewerToIndex("gameExit");
 }
 
+function stopViewerFps() {
+  viewerFps?.stop();
+  viewerFps = null;
+}
+
+function refreshViewerFps() {
+  stopViewerFps();
+  if (!viewerFpsEnabled || elements.viewer.hidden) return;
+  try {
+    const frameWindow = elements.siteFrame.contentWindow;
+    const url = new URL(frameWindow.location.href);
+    if (url.origin !== location.origin || elements.siteFrame.contentDocument?.contentType !== "text/html"
+      || !url.pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) return;
+    viewerFps = globalThis.GameSpaceCanvasFps.start(frameWindow);
+  } catch { /* Optional instrumentation must never prevent a game from opening. */ }
+}
+
 function attachFrameGuards() {
+  stopViewerFps();
   clearTimeout(gameLoadTimer);
   elements.viewerLoading.hidden = true;
   try {
@@ -823,6 +850,7 @@ function attachFrameGuards() {
     if (frameDocument?.contentType === "text/html"
       && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
       frameWindow.dispatchEvent(new frameWindow.CustomEvent("gamespaceMenuAvailable", { detail: { host: "pwa" } }));
+      refreshViewerFps();
     }
     if (new URL(checkedUrl).origin === location.origin) {
       void withTimeout(fetch(checkedUrl, { method: "HEAD", cache: "no-store" }), 15_000, "Проверка страницы не завершилась за 15 секунд.").then((response) => {
@@ -1544,6 +1572,12 @@ elements.viewerMenuTabSetting.addEventListener("change", () => {
   viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
   writeViewerMenuTabSetting(viewerMenuTabEnabled);
   refreshViewerMenuTab();
+});
+elements.viewerFpsSetting.addEventListener("change", () => {
+  viewerFpsEnabled = elements.viewerFpsSetting.checked;
+  try { getShellLocalStorage().setItem(VIEWER_FPS_KEY, viewerFpsEnabled ? "1" : "0"); }
+  catch { /* The current session still uses the selected value. */ }
+  refreshViewerFps();
 });
 if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", updateViewerLayoutMode);
 else viewerLandscapeQuery.addListener(updateViewerLayoutMode);
