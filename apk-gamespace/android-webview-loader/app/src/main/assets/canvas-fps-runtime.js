@@ -25,8 +25,15 @@
     };
   }
 
-  function start(win) {
-    if (win.__gamespaceCanvasFps && win.__gamespaceCanvasFps.running) return win.__gamespaceCanvasFps;
+  function normalizePosition(value) {
+    return /^(top-left|top-right|bottom-left|bottom-right|middle-left)$/.test(value) ? value : "top-left";
+  }
+
+  function start(win, options) {
+    if (win.__gamespaceCanvasFps && win.__gamespaceCanvasFps.running) {
+      if (options) win.__gamespaceCanvasFps.configure(options);
+      return win.__gamespaceCanvasFps;
+    }
     var doc = win.document;
     var raf = win.requestAnimationFrame.bind(win);
     var cancel = win.cancelAnimationFrame.bind(win);
@@ -43,9 +50,10 @@
     var host = null;
     var headline = null;
     var details = null;
+    var settings = options || {};
 
     function now() { return win.performance.now(); }
-    function connected(node) { return typeof node.isConnected === "boolean" ? node.isConnected : doc.documentElement.contains(node); }
+    function connected(node) { return typeof node.isConnected === "boolean" ? node.isConnected : node.ownerDocument.documentElement.contains(node); }
     function patch(object, name, make) {
       if (!object || typeof object[name] !== "function") return;
       var original = object[name];
@@ -172,21 +180,52 @@
     }
     function overlay() {
       if (host && connected(host)) return;
-      host = doc.createElement("div");
+      var displayDoc = settings.overlayParent ? settings.overlayParent.ownerDocument : doc;
+      host = displayDoc.createElement("div");
       host.setAttribute("data-gamespace-fps", "");
       host.setAttribute("aria-label", "FPS отрисовки: оценка производительности");
-      host.style.cssText = "position:fixed!important;top:max(8px,env(safe-area-inset-top))!important;left:max(8px,env(safe-area-inset-left))!important;z-index:2147483646!important;pointer-events:none!important;opacity:1!important;display:block!important;max-width:calc(100vw - 16px)!important;";
-      // Fallback for WebViews without CSS max()/env().
-      if (!host.style.top) { host.style.top = "8px"; host.style.left = "8px"; }
+      host.style.cssText = "position:fixed!important;z-index:2147483646!important;pointer-events:none!important;opacity:1!important;display:block!important;max-width:calc(100vw - 16px)!important;";
       var container = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
-      var panel = doc.createElement("div");
-      panel.style.cssText = "box-sizing:border-box;padding:6px 8px;border:1px solid rgba(145,216,255,0.25);border-radius:7px;background:rgba(3,16,31,0.8);color:#d6f3ff;font:11px/1.4 monospace;text-align:left;white-space:nowrap;letter-spacing:0;text-transform:none;pointer-events:none;";
+      var panel = displayDoc.createElement("div");
+      panel.style.cssText = "box-sizing:border-box;padding:6px 8px;border:1px solid rgba(145,216,255,0.25);border-radius:7px;background:rgba(3,16,31,0.8);color:#d6f3ff;font:11px/1.4 monospace;text-align:left;white-space:normal;overflow-wrap:break-word;letter-spacing:0;text-transform:none;pointer-events:none;";
       panel.title = "FPS отрисовки (оценка). Мин/сред/макс — за 5 с; минимум и максимум по секундным отрезкам.";
-      headline = doc.createElement("div"); headline.setAttribute("data-fps-current", "");
+      headline = displayDoc.createElement("div"); headline.setAttribute("data-fps-current", "");
       headline.style.cssText = "font-weight:700;color:#9af2c8;";
-      details = doc.createElement("div"); details.setAttribute("data-fps-details", "");
+      details = displayDoc.createElement("div"); details.setAttribute("data-fps-details", "");
       panel.appendChild(headline); panel.appendChild(details); container.appendChild(panel);
-      (doc.body || doc.documentElement).appendChild(host);
+      placeOverlay();
+    }
+    function placeOverlay() {
+      if (!host) return;
+      var position = normalizePosition(settings.position);
+      host.setAttribute("data-fps-position", position);
+      host.setAttribute("data-fps-surface", settings.overlayParent ? "shell" : "content");
+      ["top", "right", "bottom", "left"].forEach(function (side) { host.style.setProperty(side, "auto", "important"); });
+      function edge(side) {
+        host.style.setProperty(side, "8px", "important");
+        host.style.setProperty(side, "max(8px,env(safe-area-inset-" + side + "))", "important");
+      }
+      edge(position.indexOf("right") >= 0 ? "right" : "left");
+      host.style.setProperty("transform", position === "middle-left" ? "translateY(-50%)" : "none", "important");
+      if (position === "middle-left") host.style.setProperty("top", "50%", "important");
+      else edge(position.indexOf("bottom") === 0 ? "bottom" : "top");
+      var width = typeof settings.maxWidth === "number" && isFinite(settings.maxWidth) ? Math.max(1, settings.maxWidth) : 280;
+      host.style.setProperty("max-width", "calc(100vw - 16px)", "important");
+      host.style.setProperty("width", width + "px", "important");
+      var parent = settings.overlayParent || doc.fullscreenElement || doc.webkitFullscreenElement || doc.body || doc.documentElement;
+      if (parent.tagName === "CANVAS") parent = doc.body || doc.documentElement;
+      if (host.parentNode !== parent) parent.appendChild(host);
+    }
+    function configure(value) {
+      settings = value || {};
+      var displayDoc = settings.overlayParent ? settings.overlayParent.ownerDocument : doc;
+      if (host && host.ownerDocument !== displayDoc) {
+        if (host.parentNode) host.parentNode.removeChild(host);
+        host = null;
+      }
+      overlay();
+      placeOverlay();
+      render(now());
     }
     function format(value) { return value.toFixed(1).replace(".", ","); }
     function render(timestamp) {
@@ -226,7 +265,7 @@
       if (request !== null) cancel(request);
       request = null;
       reset();
-      if (host) host.style.display = "none";
+      if (host) host.style.setProperty("display", "none", "important");
     }
     function resume() {
       if (!active || doc.hidden) return;
@@ -237,18 +276,19 @@
     }
     function visibility() { if (doc.hidden) suspend(); else resume(); }
     function fullscreen() {
-      var parent = doc.fullscreenElement || doc.webkitFullscreenElement || doc.body;
-      if (host && parent && parent.tagName !== "CANVAS") parent.appendChild(host);
+      placeOverlay();
     }
     var controller = {
       running: true,
       snapshot: snapshot,
+      configure: configure,
       stop: function () {
         if (!active) return;
         active = false; controller.running = false;
         if (request !== null) cancel(request);
         doc.removeEventListener("visibilitychange", visibility);
         doc.removeEventListener("fullscreenchange", fullscreen);
+        doc.removeEventListener("webkitfullscreenchange", fullscreen);
         win.removeEventListener("pagehide", suspend);
         win.removeEventListener("pageshow", resume);
         for (var i = undos.length - 1; i >= 0; i--) { try { undos[i](); } catch (_) {} }
@@ -260,10 +300,11 @@
     win.__gamespaceCanvasFps = controller;
     doc.addEventListener("visibilitychange", visibility);
     doc.addEventListener("fullscreenchange", fullscreen);
+    doc.addEventListener("webkitfullscreenchange", fullscreen);
     win.addEventListener("pagehide", suspend);
     win.addEventListener("pageshow", resume);
     if (!doc.hidden) request = raf(sample);
     return controller;
   }
-  root.GameSpaceCanvasFps = { start: start, statistics: statistics };
+  root.GameSpaceCanvasFps = { start: start, statistics: statistics, normalizePosition: normalizePosition };
 })(typeof globalThis !== "undefined" ? globalThis : window);

@@ -26,10 +26,13 @@ import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.CompoundButton;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
+import android.widget.Spinner;
 
 /** Native full-screen settings surface. It deliberately contains no WebView or JavaScript bridge. */
 final class AppMenuDialog {
-    interface Listener { void onAction(String item); }
+    interface Listener { void onAction(String item); void onFpsPosition(String position); }
 
     private static final int BACKDROP = Color.rgb(2, 9, 22);
     private static final int SURFACE = Color.rgb(6, 24, 47);
@@ -51,6 +54,7 @@ final class AppMenuDialog {
     private final String menuTabItem;
     private final boolean fpsEnabled;
     private final String fpsItem;
+    private String fpsPosition;
     private final String[] items;
     private final SiteState siteState;
     private final AppState appState;
@@ -59,7 +63,7 @@ final class AppMenuDialog {
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String[] items, SiteState siteState,
+            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String fpsPosition, String[] items, SiteState siteState,
             AppState appState, DiagnosticsState diagnosticsState, Listener listener) {
         this.activity = activity;
         this.version = version;
@@ -69,6 +73,7 @@ final class AppMenuDialog {
         this.menuTabItem = menuTabItem;
         this.fpsEnabled = fpsEnabled;
         this.fpsItem = fpsItem;
+        this.fpsPosition = CanvasFpsPosition.normalize(fpsPosition);
         this.items = items;
         this.siteState = siteState;
         this.appState = appState;
@@ -252,13 +257,50 @@ final class AppMenuDialog {
             fps.setThumbTintList(toggleColors());
             fps.setTrackTintList(trackColors());
         }
+        final LinearLayout placement = new LinearLayout(activity);
+        placement.setOrientation(LinearLayout.VERTICAL);
+        placement.setPadding(0, dp(8), 0, 0);
+        placement.setVisibility(fpsEnabled ? View.VISIBLE : View.GONE);
+        placement.addView(text("Расположение панели", 12, MUTED, false));
+        Spinner positions = new Spinner(activity, Spinner.MODE_DROPDOWN);
+        positions.setContentDescription("Расположение панели FPS");
+        positions.setPopupBackgroundDrawable(round(SURFACE, BORDER, 8));
+        positions.setBackgroundTintList(ColorStateList.valueOf(ACCENT));
+        positions.setAdapter(new ArrayAdapter<String>(activity, android.R.layout.simple_spinner_item, CanvasFpsPosition.LABELS) {
+            @Override public View getView(int index, View convertView, ViewGroup parent) {
+                TextView label = text(getItem(index), 14, TEXT, false);
+                label.setPadding(dp(8), dp(8), dp(28), dp(8));
+                return label;
+            }
+            @Override public View getDropDownView(int index, View convertView, ViewGroup parent) {
+                TextView label = text(getItem(index), 14, TEXT, false);
+                label.setPadding(dp(12), dp(12), dp(12), dp(12));
+                label.setBackgroundColor(index == CanvasFpsPosition.index(fpsPosition) ? CARD : SURFACE);
+                return label;
+            }
+        });
+        positions.setSelection(CanvasFpsPosition.index(fpsPosition));
+        positions.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int index, long id) {
+                String value = CanvasFpsPosition.VALUES[index];
+                if (!value.equals(fpsPosition)) {
+                    fpsPosition = value;
+                    listener.onFpsPosition(value);
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        placement.addView(positions, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         fps.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                placement.setVisibility(checked ? View.VISIBLE : View.GONE);
                 listener.onAction(fpsItem);
             }
         });
         card.addView(fps, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(placement);
         TextView fpsDescription = text("Оценка для Canvas/WebGL: текущий FPS, минимум, средний и максимум за 5 с. В начале — по доступному времени. Для других способов рисования показатель может быть недоступен. Замер добавляет нагрузку.", 12, MUTED, false);
         fpsDescription.setPadding(0, dp(6), 0, 0);
         card.addView(fpsDescription);

@@ -15,6 +15,10 @@ $sourceDirectory = Join-Path $apkRoot "android-webview-loader\app\src\main\java\
 $outputDirectory = Join-Path $apkRoot "android-webview-loader\app\build\diagnostics-tests"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\app\libs\*')"
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "CanvasFpsPosition.java") (Join-Path $PSScriptRoot "CanvasFpsPositionTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Canvas FPS position compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.CanvasFpsPositionTest
+if ($LASTEXITCODE -ne 0) { throw "Canvas FPS position tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "CompatibilityReport.java") (Join-Path $sourceDirectory "UpdateJson.java") (Join-Path $PSScriptRoot "CompatibilityReportTest.java")
 if ($LASTEXITCODE -ne 0) { throw "GS1 compatibility report compilation failed." }
 $gs1Fixtures = Join-Path (Split-Path -Parent $apkRoot) "docs\fixtures\compatibility-report-gs1.json"

@@ -56,6 +56,7 @@ test("old saves belong to the selected archive; different archives restore their
   await select("a");
   storage.setItem("gamespace:compatibility-check:archive:v1:id:a", "observed A");
   storage.setItem("gamespace:viewer-fps:v1", "1");
+  storage.setItem("gamespace:viewer-fps-position:v1", "middle-left");
   storage.setItem("score", "latest A");
   await select("b");
   assert.equal(storage.getItem("score"), null);
@@ -66,6 +67,7 @@ test("old saves belong to the selected archive; different archives restore their
   assert.deepEqual(gameValues(), new Map([["score", "B"], ["__proto__", "safe value"], ["", "empty key"]]));
   assert.equal(values.get("gamespace:viewer-menu-tab:v1"), "1");
   assert.equal(values.get("gamespace:viewer-fps:v1"), "1");
+  assert.equal(values.get("gamespace:viewer-fps-position:v1"), "middle-left");
   assert.equal(values.get("gamespace:activity:v1:owner"), "common");
   assert.equal(values.get("gamespace:compatibility-check:archive:v1:id:a"), "observed A");
 });

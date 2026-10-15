@@ -35,8 +35,10 @@ test("FPS preference belongs to the shell and survives a game clearing localStor
   const { values } = setup(t);
   const shell = getShellLocalStorage();
   shell.setItem("gamespace:viewer-fps:v1", "1");
+  shell.setItem("gamespace:viewer-fps-position:v1", "black-field");
   values.clear();
   assert.equal(shell.getItem("gamespace:viewer-fps:v1"), "1");
+  assert.equal(shell.getItem("gamespace:viewer-fps-position:v1"), "black-field");
   assert.equal(shell.getItem("score"), null);
 });
 

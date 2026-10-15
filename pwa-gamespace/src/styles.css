@@ -2117,6 +2117,11 @@ body.is-viewing-site {
 .menu-disclosure p, .menu-note { margin: 7px 0 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .menu-subsection { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 .menu-subsection h3 { margin: 0; }
+.fps-position-controls { margin-top: 8px; }
+.fps-position-controls > label { display: block; margin-bottom: 5px; font-size: .82rem; color: var(--muted); }
+.fps-position-controls select { color-scheme: dark; width: min(100%, 310px); min-height: 36px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: #0a2647; color: var(--soft); font: inherit; font-size: .86rem; }
+.fps-position-controls select:focus-visible { outline: 2px solid var(--blue-bright); outline-offset: 2px; }
+@media (pointer: coarse) { .fps-position-controls select { min-height: 44px; } }
 .menu-subsection .compact-actions { margin-top: 8px; }
 .app-shell .storage-visual { margin-top: 10px; gap: 14px; grid-template-columns: 94px minmax(0, 1fr); }
 .app-shell .storage-ring { width: 94px; height: 94px; flex-shrink: 0; }

@@ -341,6 +341,18 @@
             <input id="viewerFpsSetting" type="checkbox">
             <span>Показывать FPS отрисовки</span>
           </label>
+          <div id="viewerFpsPositionControls" class="fps-position-controls" hidden>
+            <label for="viewerFpsPosition">Расположение панели</label>
+            <select id="viewerFpsPosition" aria-describedby="viewerFpsPositionHelp">
+              <option value="top-left">Слева сверху</option>
+              <option value="top-right">Справа сверху</option>
+              <option value="bottom-left">Слева снизу</option>
+              <option value="bottom-right">Справа снизу</option>
+              <option value="middle-left">Слева по центру</option>
+              <option value="black-field">На чёрном поле слева</option>
+            </select>
+            <p id="viewerFpsPositionHelp" class="menu-note">Если чёрного поля нет или оно слишком узкое, панель появится слева сверху в игре.</p>
+          </div>
           <p class="menu-note">Оценка для Canvas/WebGL: текущий FPS, минимум, средний и максимум за 5 с. В начале — по доступному времени. Для других способов рисования показатель может быть недоступен. Замер добавляет нагрузку.</p>
         </div>
         <details class="menu-disclosure menu-subsection" aria-labelledby="diagnosticsTitle">

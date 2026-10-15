@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
     private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
     private static final String PREF_SHOW_FPS = "show_canvas_fps";
+    private static final String PREF_FPS_POSITION = "canvas_fps_position";
     private String canvasFpsRuntime;
     private volatile String lastArchiveStatistics;
     private static final String PREF_BASE_PATH = "base_path";
@@ -812,6 +813,10 @@ public class MainActivity extends Activity {
         return getPrefs().getBoolean(PREF_SHOW_FPS, false);
     }
 
+    private String getCanvasFpsPosition() {
+        return CanvasFpsPosition.normalize(getPrefs().getString(PREF_FPS_POSITION, "top-left"));
+    }
+
     private void stopCanvasFps(WebView view) {
         if (view != null) view.evaluateJavascript("if(window.__gamespaceCanvasFps)window.__gamespaceCanvasFps.stop();", null);
     }
@@ -825,7 +830,8 @@ public class MainActivity extends Activity {
         }
         try {
             if (canvasFpsRuntime == null) canvasFpsRuntime = readAssetText("canvas-fps-runtime.js");
-            view.evaluateJavascript(canvasFpsRuntime + "\nif(document.contentType==='text/html')GameSpaceCanvasFps.start(window);", null);
+            view.evaluateJavascript(canvasFpsRuntime + "\nif(document.contentType==='text/html')GameSpaceCanvasFps.start(window,{position:'"
+                + getCanvasFpsPosition() + "'});", null);
         } catch (Exception ignored) {
             // Optional instrumentation cannot block opening an installed game.
         }
@@ -1370,8 +1376,13 @@ public class MainActivity extends Activity {
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
+            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
             buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
+                @Override public void onFpsPosition(String position) {
+                    getPrefs().edit().putString(PREF_FPS_POSITION, CanvasFpsPosition.normalize(position)).apply();
+                    updateCanvasFps(homeWebView);
+                    updateCanvasFps(webView);
+                }
                 @Override
                 public void onAction(String item) {
                     if (diagnosticJournal != null) diagnosticJournal.record("Меню: " + item, true);

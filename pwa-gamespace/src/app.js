@@ -1,5 +1,6 @@
 import "./styles.css";
 import "./canvas-fps-runtime.js";
+import { FPS_POSITION_KEY, normalizeFpsPosition, fpsPlacement } from "./fps-position.js";
 import { readArchiveCatalog, readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import { summarizeStorage, formatStoragePercent } from "./storage-summary.js";
@@ -95,9 +96,14 @@ const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
 const VIEWER_FPS_KEY = "gamespace:viewer-fps:v1";
 let viewerFps = null;
 let viewerFpsEnabled = false;
+let viewerFpsPosition = "top-left";
 try { viewerFpsEnabled = getShellLocalStorage().getItem(VIEWER_FPS_KEY) === "1"; }
 catch { /* FPS is optional when settings cannot be read. */ }
+try { viewerFpsPosition = normalizeFpsPosition(getShellLocalStorage().getItem(FPS_POSITION_KEY)); }
+catch { /* Keep the default position when storage is unavailable. */ }
 elements.viewerFpsSetting.checked = viewerFpsEnabled;
+elements.viewerFpsPosition.value = viewerFpsPosition;
+elements.viewerFpsPositionControls.hidden = !viewerFpsEnabled;
 const viewerLandscapeQuery = window.matchMedia("(orientation: landscape)");
 const archiveStatisticsStore = createArchiveStatisticsStore();
 const runtimeHistoryStore = createRuntimeHistoryStore();
@@ -244,6 +250,7 @@ for (const button of [elements.fullscreenButton, elements.viewerFullscreen]) {
 document.addEventListener("fullscreenchange", () => {
   refreshFullscreenAction();
   if (!elements.viewer.hidden) showViewerToolbar();
+  refreshViewerFps();
 });
 elements.browserInstallLink.addEventListener("click", event => { if (busy) event.preventDefault(); });
 
@@ -684,6 +691,7 @@ function showViewerToolbar() {
 function updateViewerLayoutMode() {
   const enabled = !elements.viewer.hidden && viewerLandscapeQuery.matches;
   elements.viewer.classList.toggle("is-portrait-frame-mode", enabled);
+  refreshViewerFps();
   if (elements.viewer.hidden) {
     refreshViewerMenuTab();
     return;
@@ -821,15 +829,24 @@ function stopViewerFps() {
 }
 
 function refreshViewerFps() {
-  stopViewerFps();
-  if (!viewerFpsEnabled || elements.viewer.hidden) return;
+  if (!viewerFpsEnabled || elements.viewer.hidden) { stopViewerFps(); return; }
   try {
     const frameWindow = elements.siteFrame.contentWindow;
     const url = new URL(frameWindow.location.href);
     if (url.origin !== location.origin || elements.siteFrame.contentDocument?.contentType !== "text/html"
-      || !url.pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) return;
-    viewerFps = globalThis.GameSpaceCanvasFps.start(frameWindow);
-  } catch { /* Optional instrumentation must never prevent a game from opening. */ }
+      || !url.pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) { stopViewerFps(); return; }
+    const placement = fpsPlacement(viewerFpsPosition, {
+      landscape: viewerLandscapeQuery.matches,
+      gutterWidth: elements.siteFrame.getBoundingClientRect().left - elements.viewer.getBoundingClientRect().left,
+      contentFullscreen: Boolean(frameWindow.document.fullscreenElement || frameWindow.document.webkitFullscreenElement
+        || document.fullscreenElement === elements.siteFrame),
+    });
+    viewerFps = globalThis.GameSpaceCanvasFps.start(frameWindow, {
+      position: placement.position,
+      overlayParent: placement.external ? elements.viewer : null,
+      maxWidth: placement.maxWidth,
+    });
+  } catch { stopViewerFps(); /* Optional instrumentation must never prevent a game from opening. */ }
 }
 
 function attachFrameGuards() {
@@ -850,6 +867,8 @@ function attachFrameGuards() {
     if (frameDocument?.contentType === "text/html"
       && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
       frameWindow.dispatchEvent(new frameWindow.CustomEvent("gamespaceMenuAvailable", { detail: { host: "pwa" } }));
+      frameDocument.addEventListener("fullscreenchange", refreshViewerFps);
+      frameDocument.addEventListener("webkitfullscreenchange", refreshViewerFps);
       refreshViewerFps();
     }
     if (new URL(checkedUrl).origin === location.origin) {
@@ -1575,10 +1594,19 @@ elements.viewerMenuTabSetting.addEventListener("change", () => {
 });
 elements.viewerFpsSetting.addEventListener("change", () => {
   viewerFpsEnabled = elements.viewerFpsSetting.checked;
+  elements.viewerFpsPositionControls.hidden = !viewerFpsEnabled;
   try { getShellLocalStorage().setItem(VIEWER_FPS_KEY, viewerFpsEnabled ? "1" : "0"); }
   catch { /* The current session still uses the selected value. */ }
   refreshViewerFps();
 });
+elements.viewerFpsPosition.addEventListener("change", () => {
+  viewerFpsPosition = normalizeFpsPosition(elements.viewerFpsPosition.value);
+  try { getShellLocalStorage().setItem(FPS_POSITION_KEY, viewerFpsPosition); }
+  catch { /* Apply the selection for this session even if saving is unavailable. */ }
+  refreshViewerFps();
+});
+window.addEventListener("resize", refreshViewerFps);
+window.visualViewport?.addEventListener("resize", refreshViewerFps);
 if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", updateViewerLayoutMode);
 else viewerLandscapeQuery.addListener(updateViewerLayoutMode);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
