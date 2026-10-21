@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
     private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
     private static final String PREF_SHOW_FPS = "show_canvas_fps";
+    private String gameDisplay = "auto";
     private static final String PREF_VIEWER_ASPECT_RATIO = "viewer_aspect_ratio";
     private static final String PREF_FPS_POSITION = "canvas_fps_position";
     private String canvasFpsRuntime;
@@ -489,13 +490,20 @@ public class MainActivity extends Activity {
         setContentView(rootFrame);
     }
 
+    private void updateGameDisplay(String url) {
+        gameDisplay = url != null && localSiteRequestHandler != null
+            && localSiteRequestHandler.isInternalUrl(url) && !isCurrentIndexUrl(url)
+            ? ViewerAspectRatio.displayFromUrl(url) : "auto";
+        if (contentFrame != null) updateSiteViewportFrameLayout(contentFrame.getWidth(), contentFrame.getHeight());
+    }
+
     private void updateSiteViewportFrameLayout(int availableWidth, int availableHeight) {
         if (siteViewportFrame == null || availableWidth <= 0 || availableHeight <= 0) {
             return;
         }
 
         int viewportWidth = ViewerAspectRatio.contentWidth(availableWidth, availableHeight,
-            getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"));
+            getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"), gameDisplay);
 
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) siteViewportFrame.getLayoutParams();
         if (params.width == viewportWidth && params.height == availableHeight && params.gravity == Gravity.CENTER) {
@@ -865,6 +873,7 @@ public class MainActivity extends Activity {
     }
 
     private void showHomeWebView() {
+        updateGameDisplay(null);
         boolean contentWasActive = contentLoadPending
             || (webView != null && webView.getVisibility() != View.GONE);
         if (webView != null) {
@@ -929,6 +938,7 @@ public class MainActivity extends Activity {
     }
 
     private void beginPendingContentLoad(String url) {
+        updateGameDisplay(url);
         contentLoadRequestId += 1L;
         contentLoadPending = true;
         contentVisualCallbackPending = false;
@@ -4286,9 +4296,14 @@ public class MainActivity extends Activity {
     }
 
     private class ContentSiteClient extends DiagnosticSiteClient {
+        @Override public void doUpdateVisitedHistory(WebView view, String url, boolean isReload) {
+            super.doUpdateVisitedHistory(view, url, isReload);
+            if (view == getVisibleSiteWebView() || contentLoadPending) updateGameDisplay(url);
+        }
         @Override
         public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
             super.onPageStarted(view, url, favicon);
+            updateGameDisplay(url);
             if (contentLoadPending && url != null && !url.startsWith("about:")) {
                 contentLoadRequestId += 1L;
                 contentVisualCallbackPending = false;

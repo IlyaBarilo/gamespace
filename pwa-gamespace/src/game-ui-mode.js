@@ -10,17 +10,18 @@ export function normalizeViewerAspectRatio(value) {
   return ["auto", "9:16", "10:16", "16:9", "16:10"].includes(value) ? value : "auto";
 }
 
-export function gameContentViewport({ width, height, aspectRatio = "auto" }) {
+export function gameContentViewport({ width, height, aspectRatio = "auto", gameDisplay = "auto" }) {
   const viewportWidth = Math.max(0, Number(width) || 0);
   const viewportHeight = Math.max(0, Number(height) || 0);
   const ratio = normalizeViewerAspectRatio(aspectRatio);
-  if (ratio === "auto") {
+  if (ratio === "auto" && gameDisplay !== "portrait") {
     return { width: viewportWidth, height: viewportHeight };
   }
 
-  const [widthUnits, heightUnits] = ratio.split(":").map(Number);
+  const [widthUnits, heightUnits] = (ratio === "auto" ? "10:16" : ratio).split(":").map(Number);
   return {
-    width: Math.min(viewportWidth, viewportHeight * widthUnits / heightUnits),
+    width: Math.min(viewportWidth, viewportHeight * widthUnits / heightUnits,
+      gameDisplay === "portrait" ? viewportHeight * 10 / 16 : viewportWidth),
     height: viewportHeight,
   };
 }
@@ -38,4 +39,13 @@ export function detectGameUiMode({ width, height, coarsePointer = false, request
   if (!coarsePointer && shortSide >= 1300 && longSide >= 2200) return "tv";
   if (coarsePointer || (shortSide < 700 && longSide < 1000)) return "mobile";
   return "";
+}
+
+export function gameDisplayFromUrl(value, indexUrl) {
+  try {
+    const url = new URL(value);
+    const index = new URL(indexUrl);
+    if (url.origin !== index.origin || url.pathname === index.pathname) return "auto";
+    return url.searchParams.get("gamespaceDisplay") === "portrait" ? "portrait" : "auto";
+  } catch { return "auto"; }
 }

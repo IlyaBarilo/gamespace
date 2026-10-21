@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectGameUiMode, gameContentViewport, normalizeGameUiMode } from "../src/game-ui-mode.js";
+import { detectGameUiMode, gameContentViewport, normalizeGameUiMode, gameDisplayFromUrl } from "../src/game-ui-mode.js";
 
 test("normalizes only supported explicit UI modes", () => {
   assert.equal(normalizeGameUiMode(" MOBILE "), "mobile");
@@ -39,4 +39,17 @@ test("limits width for every ratio without cropping narrow screens", () => {
 
 test("uses the whole screen by default", () => {
   assert.deepEqual(gameContentViewport({ width: 1920, height: 1080 }), { width: 1920, height: 1080 });
+});
+
+test("per-game portrait mode only narrows the catalog viewport", () => {
+  for (const [aspectRatio, width] of [["auto", 675], ["16:9", 675], ["16:10", 675], ["9:16", 607.5]]) {
+    assert.deepEqual(gameContentViewport({ width: 1920, height: 1080, aspectRatio, gameDisplay: "portrait" }), { width, height: 1080 });
+  }
+  assert.deepEqual(gameContentViewport({ width: 390, height: 844, gameDisplay: "portrait" }), { width: 390, height: 844 });
+  const index = "https://example.test/content/index.html";
+  assert.equal(gameDisplayFromUrl(index + "?gamespaceDisplay=portrait", index), "auto");
+  assert.equal(gameDisplayFromUrl("https://other.test/game.html?gamespaceDisplay=portrait", index), "auto");
+  for (const [query, expected] of [["?gamespaceDisplay=portrait", "portrait"], ["?gamespaceDisplay=auto", "auto"], ["?gamespaceDisplay=bad", "auto"], ["", "auto"]]) {
+    assert.equal(gameDisplayFromUrl("https://example.test/content/game.html" + query, index), expected);
+  }
 });

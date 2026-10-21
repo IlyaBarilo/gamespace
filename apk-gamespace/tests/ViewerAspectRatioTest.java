@@ -13,6 +13,15 @@ public final class ViewerAspectRatioTest {
         check(ViewerAspectRatio.contentWidth(1920, 1080, null) == 1920);
         check(ViewerAspectRatio.contentWidth(1920, 1080, "invalid") == 1920);
         check(ViewerAspectRatio.normalize(null).equals("auto"));
+        check(ViewerAspectRatio.contentWidth(1920, 1080, "auto", "portrait") == 675);
+        check(ViewerAspectRatio.contentWidth(1920, 1080, "16:9", "portrait") == 675);
+        check(ViewerAspectRatio.contentWidth(1920, 1080, "9:16", "portrait") == 608);
+        check(ViewerAspectRatio.contentWidth(390, 844, "auto", "portrait") == 390);
+        check(ViewerAspectRatio.contentWidth(1920, 1080, "16:10", "auto") == 1728);
+        check(ViewerAspectRatio.displayFromUrl("https://content.gamespace.local/game.html?diff=2&gamespaceDisplay=portrait").equals("portrait"));
+        check(ViewerAspectRatio.displayFromUrl("https://content.gamespace.local/game.html?gamespaceDisplay=auto").equals("auto"));
+        check(ViewerAspectRatio.displayFromUrl("https://content.gamespace.local/game.html?gamespaceDisplay=unknown").equals("auto"));
+        check(ViewerAspectRatio.displayFromUrl("https://content.gamespace.local/game.html").equals("auto"));
         System.out.println("Viewer aspect ratio tests passed.");
     }
     private static void check(boolean value) {

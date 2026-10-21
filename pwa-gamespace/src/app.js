@@ -52,7 +52,7 @@ import { createCompatibilityCheck, compatibilityContentKey, compatibilityErrorCa
 import { createCompatibilityUI } from "./compatibility-ui.js";
 import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
 import { diagnosticErrorCode } from "./diagnostics.js";
-import { detectGameUiMode, gameContentViewport, normalizeGameUiMode, normalizeViewerAspectRatio, VIEWER_ASPECT_RATIO_KEY } from "./game-ui-mode.js";
+import { detectGameUiMode, gameContentViewport, normalizeGameUiMode, normalizeViewerAspectRatio, VIEWER_ASPECT_RATIO_KEY, gameDisplayFromUrl } from "./game-ui-mode.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -94,6 +94,7 @@ let archiveStatistics = null;
 let activeImportController = null;
 const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
 const VIEWER_FPS_KEY = "gamespace:viewer-fps:v1";
+let viewerGameDisplay = "auto";
 let viewerAspectRatio = "auto";
 try { viewerAspectRatio = normalizeViewerAspectRatio(getShellLocalStorage().getItem(VIEWER_ASPECT_RATIO_KEY)); }
 catch { /* Use the default when storage is unavailable. */ }
@@ -312,6 +313,7 @@ function saveBackgroundIssue(error, context = {}) {
 }
 
 function beginGameLoad(url) {
+  updateViewerGameDisplay(url);
   stopViewerFps();
   compatibilityPageUrl = url;
   clearTimeout(gameLoadTimer);
@@ -692,10 +694,15 @@ function showViewerToolbar() {
   }, 5000);
 }
 
+function updateViewerGameDisplay(url) {
+  viewerGameDisplay = gameDisplayFromUrl(url, viewerIndexUrl);
+  updateViewerLayoutMode();
+}
+
 function updateViewerLayoutMode() {
   const width = elements.viewer.clientWidth;
   const height = elements.viewer.clientHeight;
-  const content = gameContentViewport({ width, height, aspectRatio: viewerAspectRatio });
+  const content = gameContentViewport({ width, height, aspectRatio: viewerAspectRatio, gameDisplay: viewerGameDisplay });
   elements.viewer.style.setProperty("--viewer-content-width", content.width + "px");
   // Keep controls in the side field only when all three buttons fit there.
   const enabled = !elements.viewer.hidden && (width - content.width) / 2 >= 164;
@@ -786,6 +793,7 @@ async function openViewer() {
 }
 
 function closeViewer() {
+  viewerGameDisplay = "auto";
   stopViewerFps();
   clearTimeout(gameLoadTimer);
   detachGameDiagnostics?.();
@@ -868,6 +876,8 @@ function attachFrameGuards() {
     detachGameDiagnostics?.();
     detachGameDiagnostics = null;
     if (frameWindow?.location.href === "about:blank") return;
+    updateViewerGameDisplay(frameWindow.location.href);
+    frameWindow.addEventListener("popstate", () => updateViewerGameDisplay(frameWindow.location.href));
     refreshViewerBackButton();
     diagnosticSession.record("Страница загружена", diagnosticPagePath(frameWindow.location.href));
     detachGameDiagnostics = observeGameWindow(frameWindow, (error, context) => saveBackgroundIssue(error, { operation: "просмотр игры", ...context }));

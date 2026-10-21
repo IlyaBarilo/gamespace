@@ -841,6 +841,10 @@
                 },
     {
         title: "Змейка 3D: Фруктовый сад",
+        // display: "auto" — всё пространство витрины (так же, если поле отсутствует).
+        // display: "portrait" — ограничить ширину игры до 10:16, если область шире.
+        // Режим применяется и к кнопкам сложности; HTML самой игры менять не нужно.
+        display: "auto",
         genre: "3D-аркада",
         description: "Собирай фрукты и комбо в 3D-саду от первого лица!",
         imageUrl: "smallgames/snake_2026_bonus_garden-small.jpg",
@@ -1367,6 +1371,14 @@
                     .filter(section => section.games.length > 0);
             };
 
+            const withGameDisplay = (link, display) => {
+                if (!link) return link;
+                const url = new URL(link, window.location.href);
+                if (url.origin !== window.location.origin) return link;
+                url.searchParams.set('gamespaceDisplay', display === 'portrait' ? 'portrait' : 'auto');
+                return url.href;
+            };
+
             const createGameCard = (game) => {
                 const cardLink = document.createElement('div');
                 cardLink.className = 'game-card';
@@ -1377,14 +1389,14 @@
                     if (e.target.closest('a, button')) return;
                     if (game.link) {
                         saveIndexState();
-                        window.location.href = withGameUiMode(game.link);
+                        window.location.href = withGameUiMode(withGameDisplay(game.link, game.display));
                     }
                 });
                 cardLink.addEventListener('keydown', (e) => {
                     if ((e.key === 'Enter' || e.key === ' ') && game.link) {
                         e.preventDefault();
                         saveIndexState();
-                        window.location.href = withGameUiMode(game.link);
+                        window.location.href = withGameUiMode(withGameDisplay(game.link, game.display));
                     }
                 });
 
@@ -1426,7 +1438,7 @@
                         const difficulty = game.difficulties[level];
                         if (difficulty && difficulty.text && difficulty.link) {
                             const btn = document.createElement('a');
-                            btn.href = withGameUiMode(difficulty.link);
+                            btn.href = withGameUiMode(withGameDisplay(difficulty.link, game.display));
                             btn.className = 'difficulty-btn';
                             btn.textContent = difficulty.text;
                             btn.target = '_self';

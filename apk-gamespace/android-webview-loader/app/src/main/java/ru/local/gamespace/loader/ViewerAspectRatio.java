@@ -17,5 +17,23 @@ final class ViewerAspectRatio {
         int[] heights = {1, 16, 16, 9, 10};
         return (int) Math.min(available, Math.round(Math.max(0, height) * (double) widths[selected] / heights[selected]));
     }
+    static int contentWidth(int width, int height, String value, String display) {
+        int base = contentWidth(width, height, value);
+        return "portrait".equals(display) ? Math.min(base, contentWidth(width, height, "10:16")) : base;
+    }
+    static String displayFromUrl(String value) {
+        try {
+            java.net.URI uri = new java.net.URI(value);
+            String query = uri.getRawQuery();
+            if (query != null) for (String part : query.split("&")) {
+                String[] pair = part.split("=", 2);
+                if ("gamespaceDisplay".equals(java.net.URLDecoder.decode(pair[0], "UTF-8"))) {
+                    return pair.length == 2 && "portrait".equals(java.net.URLDecoder.decode(pair[1], "UTF-8"))
+                        ? "portrait" : "auto";
+                }
+            }
+        } catch (Exception ignored) {}
+        return "auto";
+    }
     private ViewerAspectRatio() {}
 }
