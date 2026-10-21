@@ -1,4 +1,5 @@
 const SHELL_KEYS = new Set([
+  "gamespace:viewer-aspect-ratio:v1",
   "gamespace:viewer-fps:v1",
   "gamespace:viewer-fps-position:v1",
   "gamespace:viewer-menu-tab:v1", "gamespace:last-error:v1", "gamespace:last-installed:v1",

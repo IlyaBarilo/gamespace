@@ -15,6 +15,10 @@ $sourceDirectory = Join-Path $apkRoot "android-webview-loader\app\src\main\java\
 $outputDirectory = Join-Path $apkRoot "android-webview-loader\app\build\diagnostics-tests"
 New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 $testClasspath = "$outputDirectory;$(Join-Path $apkRoot 'android-webview-loader\app\libs\*')"
+& (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "ViewerAspectRatio.java") (Join-Path $PSScriptRoot "ViewerAspectRatioTest.java")
+if ($LASTEXITCODE -ne 0) { throw "Viewer aspect ratio compilation failed." }
+& (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.ViewerAspectRatioTest
+if ($LASTEXITCODE -ne 0) { throw "Viewer aspect ratio tests failed." }
 & (Join-Path $JdkBin "javac.exe") -encoding UTF-8 -source 8 -target 8 -classpath $testClasspath -d $outputDirectory (Join-Path $sourceDirectory "CanvasFpsPosition.java") (Join-Path $PSScriptRoot "CanvasFpsPositionTest.java")
 if ($LASTEXITCODE -ne 0) { throw "Canvas FPS position compilation failed." }
 & (Join-Path $JdkBin "java.exe") -cp $testClasspath ru.local.gamespace.loader.CanvasFpsPositionTest
@@ -126,7 +130,8 @@ $checks = @{
     "toolbar back button follows navigation state" = 'backButton\.setEnabled\(canNavigateBackWithinSite\(\)\)'
     "game UI mode is passed in URL" = 'withGameUiMode\(String url\)[\s\S]*?appendQueryParameter\("ui", mode\)'
     "site viewport is centered in the app shell" = 'siteViewportFrame[\s\S]*?new FrameLayout\.LayoutParams\([\s\S]*?Gravity\.CENTER'
-    "site viewport is limited to 10 by 16 in landscape" = 'availableWidth > availableHeight[\s\S]*?availableHeight \* 10f / 16f'
+    "site viewport uses the saved ratio with auto default" = 'ViewerAspectRatio\.contentWidth\(availableWidth, availableHeight,[\s\S]*?getString\(PREF_VIEWER_ASPECT_RATIO, "auto"\)'
+    "aspect ratio selection is persisted and applied" = 'onAspectRatio\(String ratio\)[\s\S]*?putString\(PREF_VIEWER_ASPECT_RATIO, ViewerAspectRatio\.normalize\(ratio\)\)\.apply\(\)[\s\S]*?updateSiteViewportFrameLayout\(contentFrame\.getWidth\(\), contentFrame\.getHeight\(\)\)'
     "site WebViews belong to the limited viewport" = 'siteViewportFrame\.addView\(homeWebView[\s\S]*?siteViewportFrame\.addView\(webView'
     "shared strict archive entry point" = 'findIndexInExtractedContent\(File extractRoot\)[\s\S]*?ArchiveEntryPoint\.find\(extractRoot\)'
     "operation cancellation" = 'ensureOperationNotCancelled\(\)'

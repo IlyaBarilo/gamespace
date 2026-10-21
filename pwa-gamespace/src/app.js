@@ -52,7 +52,7 @@ import { createCompatibilityCheck, compatibilityContentKey, compatibilityErrorCa
 import { createCompatibilityUI } from "./compatibility-ui.js";
 import { readCompatibilityEnvironment, readCompatibilityStorage, realPwaLaunchMode } from "./compatibility-environment.js";
 import { diagnosticErrorCode } from "./diagnostics.js";
-import { detectGameUiMode, gameContentViewport, normalizeGameUiMode } from "./game-ui-mode.js";
+import { detectGameUiMode, gameContentViewport, normalizeGameUiMode, normalizeViewerAspectRatio, VIEWER_ASPECT_RATIO_KEY } from "./game-ui-mode.js";
 
 const elements = Object.fromEntries(
   [...document.querySelectorAll("[id]")].map((element) => [element.id, element]),
@@ -94,6 +94,10 @@ let archiveStatistics = null;
 let activeImportController = null;
 const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
 const VIEWER_FPS_KEY = "gamespace:viewer-fps:v1";
+let viewerAspectRatio = "auto";
+try { viewerAspectRatio = normalizeViewerAspectRatio(getShellLocalStorage().getItem(VIEWER_ASPECT_RATIO_KEY)); }
+catch { /* Use the default when storage is unavailable. */ }
+elements.viewerAspectRatio.value = viewerAspectRatio;
 let viewerFps = null;
 let viewerFpsEnabled = false;
 let viewerFpsPosition = "top-left";
@@ -651,7 +655,7 @@ function currentGameUiMode() {
   const contentViewport = gameContentViewport({
     width: viewport?.width || window.innerWidth,
     height: viewport?.height || window.innerHeight,
-    portraitFrame: viewerLandscapeQuery.matches,
+    aspectRatio: viewerAspectRatio,
   });
   return detectGameUiMode({
     width: contentViewport.width,
@@ -689,7 +693,12 @@ function showViewerToolbar() {
 }
 
 function updateViewerLayoutMode() {
-  const enabled = !elements.viewer.hidden && viewerLandscapeQuery.matches;
+  const width = elements.viewer.clientWidth;
+  const height = elements.viewer.clientHeight;
+  const content = gameContentViewport({ width, height, aspectRatio: viewerAspectRatio });
+  elements.viewer.style.setProperty("--viewer-content-width", content.width + "px");
+  // Keep controls in the side field only when all three buttons fit there.
+  const enabled = !elements.viewer.hidden && (width - content.width) / 2 >= 164;
   elements.viewer.classList.toggle("is-portrait-frame-mode", enabled);
   refreshViewerFps();
   if (elements.viewer.hidden) {
@@ -1605,8 +1614,14 @@ elements.viewerFpsPosition.addEventListener("change", () => {
   catch { /* Apply the selection for this session even if saving is unavailable. */ }
   refreshViewerFps();
 });
-window.addEventListener("resize", refreshViewerFps);
-window.visualViewport?.addEventListener("resize", refreshViewerFps);
+elements.viewerAspectRatio.addEventListener("change", () => {
+  viewerAspectRatio = normalizeViewerAspectRatio(elements.viewerAspectRatio.value);
+  try { getShellLocalStorage().setItem(VIEWER_ASPECT_RATIO_KEY, viewerAspectRatio); }
+  catch { /* The selected ratio still applies in this session. */ }
+  updateViewerLayoutMode();
+});
+window.addEventListener("resize", updateViewerLayoutMode);
+window.visualViewport?.addEventListener("resize", updateViewerLayoutMode);
 if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", updateViewerLayoutMode);
 else viewerLandscapeQuery.addListener(updateViewerLayoutMode);
 elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });

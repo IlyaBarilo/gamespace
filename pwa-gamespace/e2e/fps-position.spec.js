@@ -73,6 +73,7 @@ test("five content positions preserve the running monitor, pass clicks and survi
 test("black-field placement moves between shell and game on resize/fullscreen and cleans up", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
   await prepare(page);
+  await page.locator("#viewerAspectRatio").selectOption("10:16");
   await page.locator("#viewerFpsPosition").selectOption("black-field");
   await page.locator("#appMenuClose").click();
   const outside = page.locator("#viewer > [data-gamespace-fps]");

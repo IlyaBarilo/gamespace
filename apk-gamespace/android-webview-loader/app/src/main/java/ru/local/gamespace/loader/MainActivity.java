@@ -90,6 +90,7 @@ public class MainActivity extends Activity {
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
     private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
     private static final String PREF_SHOW_FPS = "show_canvas_fps";
+    private static final String PREF_VIEWER_ASPECT_RATIO = "viewer_aspect_ratio";
     private static final String PREF_FPS_POSITION = "canvas_fps_position";
     private String canvasFpsRuntime;
     private volatile String lastArchiveStatistics;
@@ -493,10 +494,8 @@ public class MainActivity extends Activity {
             return;
         }
 
-        int viewportWidth = availableWidth;
-        if (availableWidth > availableHeight) {
-            viewportWidth = Math.min(availableWidth, Math.round(availableHeight * 10f / 16f));
-        }
+        int viewportWidth = ViewerAspectRatio.contentWidth(availableWidth, availableHeight,
+            getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"));
 
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) siteViewportFrame.getLayoutParams();
         if (params.width == viewportWidth && params.height == availableHeight && params.gravity == Gravity.CENTER) {
@@ -1376,8 +1375,12 @@ public class MainActivity extends Activity {
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
+            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
             buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
+                @Override public void onAspectRatio(String ratio) {
+                    getPrefs().edit().putString(PREF_VIEWER_ASPECT_RATIO, ViewerAspectRatio.normalize(ratio)).apply();
+                    updateSiteViewportFrameLayout(contentFrame.getWidth(), contentFrame.getHeight());
+                }
                 @Override public void onFpsPosition(String position) {
                     getPrefs().edit().putString(PREF_FPS_POSITION, CanvasFpsPosition.normalize(position)).apply();
                     updateCanvasFps(homeWebView);

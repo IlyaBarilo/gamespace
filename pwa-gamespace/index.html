@@ -242,6 +242,15 @@
         </div>
         <p id="emptyState" class="archive-catalog-help">Встроенное демо готовится автоматически. Также можно добавить свой архив с устройства.</p>
         <ul id="archiveList" class="archive-list" role="list" aria-label="Загруженные архивы и встроенное демо"></ul>
+        <div class="menu-subsection author-games-download">
+          <h3>Игры автора</h3>
+          <p id="authorGamesHelp" class="archive-catalog-help">Скачайте сборник игр Ильи Барило с GitHub. Затем нажмите «Добавить архив» и выберите файл games-gamespace-latest.7z в загрузках устройства.</p>
+          <div class="compact-actions">
+            <a id="downloadAuthorGamesLink" class="version-secondary-button" href="https://github.com/IlyaBarilo/games/releases/latest/download/games-gamespace-latest.7z" target="_blank" rel="noopener noreferrer" aria-describedby="authorGamesHelp">Скачать архив игр автора</a>
+            <a class="author-link" href="https://github.com/IlyaBarilo/games" target="_blank" rel="noopener noreferrer">О проекте игр</a>
+          </div>
+          <p class="archive-catalog-help">Для скачивания нужен интернет. Файл сохраняет браузер; в «Мои архивы» он появится после добавления.</p>
+        </div>
         <details class="menu-disclosure archive-catalog-help">
           <summary>Как управлять архивами</summary>
           <p>Обновить — добавить и заменить файлы без удаления остальных. Заменить — полностью заменить содержимое архива. У каждого архива свои сохранения localStorage и результаты проверки совместимости.</p>
@@ -335,6 +344,17 @@
             <span>Показывать вкладку меню <strong>•••</strong></span>
           </label>
           <p class="menu-note">После скрытия верхней панели вкладка сразу открывает меню.</p>
+        </div>
+        <div class="menu-subsection fps-position-controls">
+          <label for="viewerAspectRatio">Соотношение сторон экрана</label>
+          <select id="viewerAspectRatio" aria-describedby="viewerAspectRatioHelp">
+            <option value="auto" selected>Авто (во весь экран)</option>
+            <option value="9:16">9:16</option>
+            <option value="10:16">10:16</option>
+            <option value="16:9">16:9</option>
+            <option value="16:10">16:10</option>
+          </select>
+          <p id="viewerAspectRatioHelp" class="menu-note">Если экран шире выбранного соотношения, витрина и игры отображаются по центру с чёрными полями по бокам. На более узком экране используется вся ширина.</p>
         </div>
         <div class="menu-subsection" aria-labelledby="fpsSettingTitle">
           <label id="fpsSettingTitle" class="viewer-tab-setting" for="viewerFpsSetting">

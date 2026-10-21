@@ -5,15 +5,22 @@ export function normalizeGameUiMode(value) {
   return UI_MODES.has(mode) ? mode : "";
 }
 
-export function gameContentViewport({ width, height, portraitFrame = false }) {
+export const VIEWER_ASPECT_RATIO_KEY = "gamespace:viewer-aspect-ratio:v1";
+export function normalizeViewerAspectRatio(value) {
+  return ["auto", "9:16", "10:16", "16:9", "16:10"].includes(value) ? value : "auto";
+}
+
+export function gameContentViewport({ width, height, aspectRatio = "auto" }) {
   const viewportWidth = Math.max(0, Number(width) || 0);
   const viewportHeight = Math.max(0, Number(height) || 0);
-  if (!portraitFrame || viewportWidth <= viewportHeight) {
+  const ratio = normalizeViewerAspectRatio(aspectRatio);
+  if (ratio === "auto") {
     return { width: viewportWidth, height: viewportHeight };
   }
 
+  const [widthUnits, heightUnits] = ratio.split(":").map(Number);
   return {
-    width: Math.min(viewportWidth, viewportHeight * 10 / 16),
+    width: Math.min(viewportWidth, viewportHeight * widthUnits / heightUnits),
     height: viewportHeight,
   };
 }

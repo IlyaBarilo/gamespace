@@ -32,7 +32,7 @@ import android.widget.Spinner;
 
 /** Native full-screen settings surface. It deliberately contains no WebView or JavaScript bridge. */
 final class AppMenuDialog {
-    interface Listener { void onAction(String item); void onFpsPosition(String position); }
+    interface Listener { void onAction(String item); void onFpsPosition(String position); void onAspectRatio(String ratio); }
 
     private static final int BACKDROP = Color.rgb(2, 9, 22);
     private static final int SURFACE = Color.rgb(6, 24, 47);
@@ -55,6 +55,7 @@ final class AppMenuDialog {
     private final boolean fpsEnabled;
     private final String fpsItem;
     private String fpsPosition;
+    private String aspectRatio;
     private final String[] items;
     private final SiteState siteState;
     private final AppState appState;
@@ -63,7 +64,7 @@ final class AppMenuDialog {
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String fpsPosition, String[] items, SiteState siteState,
+            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String fpsPosition, String aspectRatio, String[] items, SiteState siteState,
             AppState appState, DiagnosticsState diagnosticsState, Listener listener) {
         this.activity = activity;
         this.version = version;
@@ -74,6 +75,7 @@ final class AppMenuDialog {
         this.fpsEnabled = fpsEnabled;
         this.fpsItem = fpsItem;
         this.fpsPosition = CanvasFpsPosition.normalize(fpsPosition);
+        this.aspectRatio = ViewerAspectRatio.normalize(aspectRatio);
         this.items = items;
         this.siteState = siteState;
         this.appState = appState;
@@ -246,6 +248,40 @@ final class AppMenuDialog {
         });
         card.addView(setting, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView ratioTitle = text("Соотношение сторон экрана", 15, TEXT, false);
+        ratioTitle.setPadding(0, dp(16), 0, dp(6));
+        card.addView(ratioTitle);
+        Spinner ratios = new Spinner(activity, Spinner.MODE_DROPDOWN);
+        ratios.setContentDescription("Соотношение сторон экрана");
+        ratios.setPopupBackgroundDrawable(round(SURFACE, BORDER, 8));
+        ratios.setBackgroundTintList(ColorStateList.valueOf(ACCENT));
+        ratios.setAdapter(new ArrayAdapter<String>(activity, android.R.layout.simple_spinner_item, ViewerAspectRatio.LABELS) {
+            @Override public View getView(int index, View convertView, ViewGroup parent) {
+                TextView label = text(getItem(index), 14, TEXT, false);
+                label.setPadding(dp(8), dp(8), dp(28), dp(8));
+                return label;
+            }
+            @Override public View getDropDownView(int index, View convertView, ViewGroup parent) {
+                TextView label = text(getItem(index), 14, TEXT, false);
+                label.setPadding(dp(12), dp(12), dp(12), dp(12));
+                label.setBackgroundColor(index == ViewerAspectRatio.index(aspectRatio) ? CARD : SURFACE);
+                return label;
+            }
+        });
+        ratios.setSelection(ViewerAspectRatio.index(aspectRatio));
+        ratios.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> parent, View view, int index, long id) {
+                String value = ViewerAspectRatio.VALUES[index];
+                if (!value.equals(aspectRatio)) {
+                    aspectRatio = value;
+                    listener.onAspectRatio(value);
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+        card.addView(ratios, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        card.addView(text("Если экран шире выбранного соотношения, витрина и игры отображаются по центру с чёрными полями по бокам. На более узком экране используется вся ширина.", 12, MUTED, false));
         Switch fps = new Switch(activity);
         fps.setText("Показывать FPS отрисовки");
         fps.setTextColor(TEXT);

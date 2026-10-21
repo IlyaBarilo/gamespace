@@ -51,6 +51,7 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   }), { timeout: 20_000 }).toContain("update archive applied successfully");
 
   await expect(page.locator("#progressPanel")).toBeHidden();
+  await page.locator("#viewerAspectRatio").selectOption("10:16");
   await context.setOffline(true);
   await page.locator("#openSiteButton").click();
   await expect(page.locator("#viewer")).toBeVisible({ timeout: 30_000 });
