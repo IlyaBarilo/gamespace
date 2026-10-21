@@ -33,6 +33,21 @@ async function install(page, entries) {
   await expect(page.locator(".archive-entry")).toHaveCount(2);
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   await expect(page.locator("#appMenuClose")).toBeEnabled();
+  // Measurements outlast the auto layout toolbar timer. Use the side-field controls.
+  await page.locator("#viewerAspectRatio").selectOption("10:16");
+}
+async function openTestGame(page, file, { canvas = true } = {}) {
+  await page.frameLocator("#siteFrame").locator('a[href="' + file + '"]').click();
+  await expect.poll(() => page.locator("#siteFrame").evaluate((frame, file) => {
+    const win = frame.contentWindow;
+    return new URL(win.location.href).pathname.endsWith("/" + file)
+      && win.__gamespaceCanvasFps?.running === true;
+  }, file)).toBe(true);
+  if (canvas) {
+    await expect(page.frameLocator("#siteFrame").locator("#main")).toBeVisible();
+    await expect.poll(() => page.locator("#siteFrame").evaluate(frame =>
+      Array.isArray(frame.contentWindow.oracle))).toBe(true);
+  }
 }
 async function measure(page) {
   return page.locator("#siteFrame").evaluate(frame => {
@@ -89,7 +104,7 @@ test("late-attached PWA monitor measures Canvas2D, WebGL and WebGL2 at 10/30/60 
   await page.locator("#viewerFpsSetting").check();
   await page.locator("#appMenuClose").click();
   for (const item of cases) {
-    await page.frameLocator("#siteFrame").locator(`a[href="${item.file}"]`).click();
+    await openTestGame(page, item.file);
     await expect(page.frameLocator("#siteFrame").locator("[data-fps-current]")).toContainText("FPS ≈");
     await page.waitForTimeout(5700);
     const result = await measure(page);
@@ -109,7 +124,7 @@ test("the monitor handles pause, hidden documents, unknown large canvas and cach
   await page.locator("#viewerFpsSetting").check();
   await page.locator("#appMenuClose").click();
   await expect(page.frameLocator("#siteFrame").locator("[data-fps-current]")).toHaveText("FPS недоступен");
-  await page.frameLocator("#siteFrame").getByText("aux", { exact: true }).click();
+  await openTestGame(page, "aux.html");
   await expect.poll(async () => (await measure(page)).canvasId).toBe("main");
   await page.waitForTimeout(1400);
   expect((await measure(page)).fps.average).toBeLessThan(35);
@@ -130,10 +145,10 @@ test("the monitor handles pause, hidden documents, unknown large canvas and cach
   });
   await expect.poll(async () => (await measure(page)).fps.windowMs).toBeLessThan(5000);
   await page.locator("#viewerBack").click();
-  await page.frameLocator("#siteFrame").getByText("cached", { exact: true }).click();
+  await openTestGame(page, "cached.html");
   await expect(page.frameLocator("#siteFrame").locator("[data-fps-current]")).toHaveText("FPS недоступен");
   await page.locator("#viewerBack").click();
-  await page.frameLocator("#siteFrame").getByText("dom", { exact: true }).click();
+  await openTestGame(page, "dom.html", { canvas: false });
   await expect(page.frameLocator("#siteFrame").locator("[data-fps-current]")).toHaveText("FPS недоступен");
 });
 

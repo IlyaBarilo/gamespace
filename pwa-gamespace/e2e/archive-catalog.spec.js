@@ -72,6 +72,7 @@ test("archives with equal names switch offline, retain independent files and can
   await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("Version B");
   await page.locator("#viewerClose").click();
   await row(page, second).locator('[data-archive-action="remove"]').click();
+  await expect(row(page, second)).toHaveCount(0);
   await expect(page.locator("#emptyState")).toBeHidden();
   expect((await registry(page)).activeId).toBe("builtin-demo");
   expect((await contents(page)).status).toBe(200);
