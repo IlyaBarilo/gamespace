@@ -58,6 +58,7 @@ test("per-game display restores the catalog and does not leak to the next game",
   await frame.getByText("Auto", { exact: true }).click();
   await expect(frame.getByText("Exit", { exact: true })).toBeVisible();
   await expect.poll(width).toBe(1728);
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await page.locator("#viewerBack").click();
   await expect(frame.getByText("Portrait", { exact: true })).toBeVisible();
   await expect.poll(width).toBe(1728);

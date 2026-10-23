@@ -314,6 +314,7 @@ function saveBackgroundIssue(error, context = {}) {
 }
 
 function beginGameLoad(url) {
+  hideViewerToolbar();
   updateViewerGameDisplay(url);
   stopViewerFps();
   compatibilityPageUrl = url;
@@ -677,6 +678,13 @@ function contentIndexUrl() {
   return url.href;
 }
 
+function hideViewerToolbar() {
+  clearTimeout(toolbarTimer);
+  elements.viewerToolbar.classList.remove("is-counting");
+  elements.viewerToolbar.classList.add("is-hidden");
+  refreshViewerMenuTab();
+}
+
 function showViewerToolbar() {
   elements.viewerMenuTab.hidden = true;
   elements.viewerToolbar.classList.remove("is-hidden");
@@ -706,6 +714,7 @@ function updateViewerLayoutMode() {
   const content = gameContentViewport({ width, height, aspectRatio: viewerAspectRatio, gameDisplay: viewerGameDisplay });
   elements.viewer.style.setProperty("--viewer-content-width", content.width + "px");
   // Keep controls in the side field only when all three buttons fit there.
+  const wasSidePanel = elements.viewer.classList.contains("is-portrait-frame-mode");
   const enabled = !elements.viewer.hidden && (width - content.width) / 2 >= 164;
   elements.viewer.classList.toggle("is-portrait-frame-mode", enabled);
   refreshViewerFps();
@@ -713,7 +722,9 @@ function updateViewerLayoutMode() {
     refreshViewerMenuTab();
     return;
   }
-  showViewerToolbar();
+  if (enabled) showViewerToolbar();
+  else if (wasSidePanel) hideViewerToolbar();
+  else refreshViewerMenuTab();
 }
 
 function setViewerScrollLock(enabled) {
@@ -872,6 +883,8 @@ function attachFrameGuards() {
   try {
     const frameWindow = elements.siteFrame.contentWindow;
     const frameDocument = elements.siteFrame.contentDocument;
+    frameWindow.addEventListener("blur", rememberBrowserBlur);
+    frameWindow.addEventListener("focus", restoreBrowserToolbar);
     detachGameDiagnostics?.();
     detachGameDiagnostics = null;
     if (frameWindow?.location.href === "about:blank") return;
@@ -1589,7 +1602,6 @@ elements.appMenuClose.addEventListener("click", () => { void openViewer(); });
 elements.storageVerifyButton.addEventListener("click", verifyStoredSite);
 elements.viewerBack.addEventListener("click", () => {
   returnViewerToIndex("toolbarBack");
-  showViewerToolbar();
 });
 elements.viewerClose.addEventListener("click", closeViewer);
 elements.viewerMenuTab.addEventListener("click", closeViewer);
@@ -1761,9 +1773,28 @@ window.addEventListener("offline", () => {
   }
   setStatus("Автономный режим", "good");
 });
+let browserWasUnfocused = false;
+let browserBlurTimer = null;
+function rememberBrowserBlur() {
+  clearTimeout(browserBlurTimer);
+  browserBlurTimer = setTimeout(() => {
+    // Moving focus into the content iframe keeps the top document focused.
+    if (!document.hasFocus()) browserWasUnfocused = true;
+  }, 0);
+}
+function restoreBrowserToolbar() {
+  if (document.hidden || !document.hasFocus() || !browserWasUnfocused) return;
+  browserWasUnfocused = false;
+  if (!elements.viewer.hidden) showViewerToolbar();
+}
+window.addEventListener("blur", rememberBrowserBlur);
+window.addEventListener("focus", restoreBrowserToolbar);
 document.addEventListener("visibilitychange", () => {
   diagnosticSession.record(document.hidden ? "Приложение скрыто" : "Приложение открыто", "", true);
-  if (!document.hidden && !elements.viewer.hidden) showViewerToolbar();
+  if (!document.hidden) {
+    browserWasUnfocused = false;
+    if (!elements.viewer.hidden) showViewerToolbar();
+  }
 });
 window.addEventListener("pagehide", () => diagnosticSession.flush(true));
 window.addEventListener("error", (event) => {

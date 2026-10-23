@@ -21,15 +21,39 @@ test("completion returns to catalog but nested mini-games do not close a novel",
   const frame = page.frameLocator("#siteFrame");
   for (const name of ["Legacy", "V2", "V2"]) {
     await frame.getByText(name, { exact: true }).click();
+    await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
     await frame.getByRole("button", { name: "Finish" }).click();
     await expect(frame.getByText("Legacy", { exact: true })).toBeVisible();
+    await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
   }
+  // Resizing and focus movement inside the page must not reveal the strip.
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
+  await page.evaluate(async () => {
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
+    window.dispatchEvent(new Event("blur"));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
+  // Model desktop browser deactivation/restoration, including its focused iframe.
+  await page.evaluate(async () => {
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => false });
+    window.dispatchEvent(new Event("blur"));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    Object.defineProperty(document, "hasFocus", { configurable: true, value: () => true });
+    document.querySelector("#siteFrame").contentWindow.dispatchEvent(new Event("focus"));
+    delete document.hasFocus;
+  });
+  await expect(page.locator("#viewerToolbar")).not.toHaveClass(/is-hidden/);
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/, { timeout: 7000 });
   await frame.getByText("Novel", { exact: true }).click();
   await frame.frameLocator("iframe").getByRole("button", { name: "Finish" }).click();
   // Also target the outer PWA directly: source must still be rejected.
   const child = page.frames().find(f => f.url().endsWith("/legacy.html"));
   await child.evaluate(() => top.postMessage({ type: "gameResult", result: 1 }, "*"));
   await expect(frame.getByRole("heading", { name: "Novel remains open" })).toBeVisible();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await page.locator("#viewerBack").click();
   await expect(frame.getByText("Legacy", { exact: true })).toBeVisible();
 });
