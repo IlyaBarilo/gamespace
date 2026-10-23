@@ -4314,6 +4314,17 @@ public class MainActivity extends Activity {
         @Override
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
+            if (view == webView && url != null && url.equals(view.getUrl())
+                && localSiteRequestHandler.isInternalUrl(url) && !isCurrentIndexUrl(url)
+                && loadedHomeUrl != null && loadedHomeUrl.length() > 0) {
+                try {
+                    view.evaluateJavascript(readAssetText("game-completion-runtime.js")
+                        + "\nif(!window.__gsGameCompletion){window.__gsGameCompletion=GameSpaceGameCompletion.start(window,window,function(){location.replace("
+                        + org.json.JSONObject.quote(loadedHomeUrl) + ");});}", null);
+                } catch (IOException error) {
+                    recordRuntimeIssue("GAME-COMPLETION", error, "Подключение завершения игры", false);
+                }
+            }
             boolean currentPendingPage = contentLoadPending && isCurrentContentPage(view, url);
             if (clearContentHistoryAfterLoad && (!contentLoadPending || currentPendingPage)) {
                 clearContentHistoryAfterLoad = false;

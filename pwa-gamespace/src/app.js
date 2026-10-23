@@ -1,5 +1,6 @@
 import "./styles.css";
 import "./canvas-fps-runtime.js";
+import "./game-completion-runtime.js";
 import { FPS_POSITION_KEY, normalizeFpsPosition, fpsPlacement } from "./fps-position.js";
 import { readArchiveCatalog, readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
@@ -792,7 +793,11 @@ async function openViewer() {
   } finally { viewerOpening = false; }
 }
 
+let detachGameCompletion = null;
+
 function closeViewer() {
+  detachGameCompletion?.();
+  detachGameCompletion = null;
   viewerGameDisplay = "auto";
   stopViewerFps();
   clearTimeout(gameLoadTimer);
@@ -829,15 +834,7 @@ function handleViewerMessage(event) {
     closeViewer();
     return;
   }
-  if (event.data?.type !== "gameExit") return;
 
-  try {
-    if (elements.siteFrame.contentWindow.location.pathname === new URL(viewerIndexUrl).pathname) return;
-  } catch {
-    return;
-  }
-
-  returnViewerToIndex("gameExit");
 }
 
 function stopViewerFps() {
@@ -867,6 +864,8 @@ function refreshViewerFps() {
 }
 
 function attachFrameGuards() {
+  detachGameCompletion?.();
+  detachGameCompletion = null;
   stopViewerFps();
   clearTimeout(gameLoadTimer);
   elements.viewerLoading.hidden = true;
@@ -885,6 +884,11 @@ function attachFrameGuards() {
     compatibilityPageUrl = checkedUrl;
     if (frameDocument?.contentType === "text/html"
       && new URL(checkedUrl).pathname.startsWith(new URL("./__gamespace_content__/", location.href).pathname)) {
+      if (!viewerIsAtIndex()) {
+        detachGameCompletion = globalThis.GameSpaceGameCompletion.start(window, frameWindow, (type) => {
+          if (!elements.viewer.hidden) returnViewerToIndex(type);
+        });
+      }
       frameWindow.dispatchEvent(new frameWindow.CustomEvent("gamespaceMenuAvailable", { detail: { host: "pwa" } }));
       frameDocument.addEventListener("fullscreenchange", refreshViewerFps);
       frameDocument.addEventListener("webkitfullscreenchange", refreshViewerFps);
