@@ -98,8 +98,6 @@ public class MainActivity extends Activity {
     private boolean topBarManual;
     private boolean topBarStartupShown;
     private boolean heldTopBarHidden;
-    private boolean heldTopBarManual;
-    private long heldTopBarRemaining;
     private static final String PREF_SHOW_FPS = "show_canvas_fps";
     private String gameDisplay = "auto";
     private static final String PREF_VIEWER_ASPECT_RATIO = "viewer_aspect_ratio";
@@ -362,7 +360,7 @@ public class MainActivity extends Activity {
 
         topBarContainer = new LinearLayout(this);
         topBarContainer.setOrientation(LinearLayout.VERTICAL);
-        topBarContainer.setBackgroundColor(Color.argb(128, 6, 24, 47));
+        topBarContainer.setBackgroundColor(Color.argb(isTopBarPinned() ? 255 : 128, 6, 21, 41));
 
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
@@ -847,7 +845,7 @@ public class MainActivity extends Activity {
         topBarContainer.setImportantForAccessibility(visible
             ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         topBarContainer.animate().translationY(visible ? 0 : -topBarContainer.getHeight())
-            .setDuration(200).withEndAction(new Runnable() {
+            .setDuration(240).withEndAction(new Runnable() {
                 @Override public void run() {
                     if (topBarHidden) topBarContainer.setVisibility(View.INVISIBLE);
                 }
@@ -858,7 +856,7 @@ public class MainActivity extends Activity {
     private void updateTopBarLayout() {
         if (contentFrame == null || topBarContainer == null) return;
         boolean pinned = isTopBarPinned();
-        topBarContainer.setBackgroundColor(pinned ? Color.rgb(6, 24, 47) : Color.argb(128, 6, 24, 47));
+        topBarContainer.setBackgroundColor(Color.argb(pinned ? 255 : 128, 6, 21, 41));
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) contentFrame.getLayoutParams();
         int margin = pinned ? topBarContainer.getHeight() : 0;
         if (params.topMargin != margin) {
@@ -915,7 +913,7 @@ public class MainActivity extends Activity {
             ? View.VISIBLE
             : View.GONE);
         menuTabButton.setContentDescription(topBarHidden ? "Показать панель" : "Скрыть панель");
-        menuTabButton.animate().translationY(topBarHidden ? 0 : topBarContainer.getHeight()).setDuration(200).start();
+        menuTabButton.animate().translationY(topBarHidden ? 0 : topBarContainer.getHeight()).setDuration(240).start();
     }
 
     private boolean shouldAutoHideTopBar() {
@@ -1117,8 +1115,6 @@ public class MainActivity extends Activity {
     private void beginTopBarHold() {
         if (topBarHoldCount == 0) {
             heldTopBarHidden = topBarHidden;
-            heldTopBarManual = topBarManual;
-            heldTopBarRemaining = Math.max(0L, topBarHideAtMillis - System.currentTimeMillis());
             cancelTopBarCountdown();
         }
         topBarHoldCount += 1;
@@ -1130,13 +1126,9 @@ public class MainActivity extends Activity {
             topBarHoldCount -= 1;
         }
         if (topBarHoldCount == 0 && !busy && getVisibleSiteWebView() != null) {
-            topBarManual = heldTopBarManual;
+            topBarManual = !heldTopBarHidden;
+            cancelTopBarCountdown();
             setTopBarVisible(!heldTopBarHidden);
-            if (!heldTopBarHidden && shouldAutoHideTopBar()) {
-                topBarHideAtMillis = System.currentTimeMillis() + heldTopBarRemaining;
-                topBarCountdown.setVisibility(View.VISIBLE);
-                mainHandler.post(topBarCountdownRunnable);
-            }
         }
     }
 
@@ -1443,8 +1435,8 @@ public class MainActivity extends Activity {
                 if (cancelOperationButton != null) {
                     cancelOperationButton.setVisibility(View.GONE);
                 }
-                if (shouldAutoHideTopBar()) {
-                    startTopBarCountdown();
+                if (getVisibleSiteWebView() != null && !topBarManual && !isTopBarPinned()) {
+                    hideTopBar();
                 }
                 updateSystemBackCallbackRegistration();
                 if (showMenuWhenIdle && currentIndexFile == null) {

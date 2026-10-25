@@ -71,10 +71,10 @@ let pendingMode = "full";
 let installPrompt = null;
 let busy = false;
 let toolbarTimer = null;
-let toolbarHideAt = 0;
 let viewerToolbarVisible = false;
 let viewerToolbarManual = false;
-let viewerToolbarRestoreState = null;
+let viewerToolbarReturnVisible = false;
+let viewerToolbarStartupShown = false;
 const VIEWER_TOOLBAR_PINNED_KEY = "gamespace:viewer-toolbar-pinned:v1";
 let viewerToolbarPinned = false;
 try { viewerToolbarPinned = getShellLocalStorage().getItem(VIEWER_TOOLBAR_PINNED_KEY) === "1"; }
@@ -695,26 +695,22 @@ function contentIndexUrl() {
 
 function hideViewerToolbar() {
   clearTimeout(toolbarTimer);
-  toolbarHideAt = 0;
   viewerToolbarVisible = false;
   viewerToolbarManual = false;
   elements.viewerToolbar.classList.remove("is-counting");
   refreshViewerMenuTab();
 }
 
-function showViewerToolbar({ temporary = false, duration = 5000 } = {}) {
+function showViewerToolbar({ temporary = false } = {}) {
   viewerToolbarVisible = true;
   viewerToolbarManual = !temporary;
   elements.viewerToolbar.classList.remove("is-counting");
   clearTimeout(toolbarTimer);
-  toolbarHideAt = 0;
   refreshViewerMenuTab();
   if (!temporary || viewerToolbarPinned) return;
-  toolbarHideAt = Date.now() + duration;
-  elements.viewerToolbar.style.setProperty("--toolbar-countdown-duration", duration + "ms");
   void elements.viewerToolbar.offsetWidth;
   elements.viewerToolbar.classList.add("is-counting");
-  toolbarTimer = setTimeout(hideViewerToolbar, duration);
+  toolbarTimer = setTimeout(hideViewerToolbar, 5000);
 }
 
 function updateViewerGameDisplay(url) {
@@ -804,13 +800,11 @@ async function openViewer() {
     beginGameLoad(url);
     elements.siteFrame.src = url;
     elements.viewerLoading.hidden = false;
-    if (viewerToolbarRestoreState?.archiveId === state.archiveId) {
-      if (viewerToolbarRestoreState.visible && viewerToolbarRestoreState.manual) showViewerToolbar();
-      else if (viewerToolbarRestoreState.visible && viewerToolbarRestoreState.remaining > 0) {
-        showViewerToolbar({ temporary: true, duration: viewerToolbarRestoreState.remaining });
-      }
-      else hideViewerToolbar();
-    } else showViewerToolbar({ temporary: true });
+    if (!viewerToolbarStartupShown) {
+      viewerToolbarStartupShown = true;
+      showViewerToolbar({ temporary: true });
+    } else if (viewerToolbarReturnVisible) showViewerToolbar();
+    else hideViewerToolbar();
     return true;
   } catch (error) {
     if (error.code !== "GS-VIEWER-BUSY" && state?.archiveId === expectedArchiveId) compatibilityPageFailure("page");
@@ -825,10 +819,7 @@ let detachGameCompletion = null;
 
 function closeViewer() {
   if (!elements.viewer.hidden) {
-    viewerToolbarRestoreState = {
-      archiveId: state?.archiveId, visible: viewerToolbarVisible, manual: viewerToolbarManual,
-      remaining: Math.max(0, toolbarHideAt - Date.now()),
-    };
+    viewerToolbarReturnVisible = viewerToolbarVisible;
   }
   detachGameCompletion?.();
   detachGameCompletion = null;
