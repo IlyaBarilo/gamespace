@@ -42,6 +42,7 @@ test("per-game display restores the catalog and does not leak to the next game",
   await expect(page.locator(".archive-entry")).toHaveCount(2);
   await expect(page.locator("#appMenuClose")).toBeEnabled();
   await page.locator("#viewerAspectRatio").selectOption("16:10");
+  await page.locator("#viewerMenuTabSetting").check();
   await page.locator("#appMenuClose").click();
   const frame = page.frameLocator("#siteFrame");
   const width = () => page.locator(".viewer-content-frame").evaluate(el => el.getBoundingClientRect().width);
@@ -58,7 +59,7 @@ test("per-game display restores the catalog and does not leak to the next game",
   await frame.getByText("Auto", { exact: true }).click();
   await expect(frame.getByText("Exit", { exact: true })).toBeVisible();
   await expect.poll(width).toBe(1728);
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.locator("#viewerMenuTab").click();
   await page.locator("#viewerBack").click();
   await expect(frame.getByText("Portrait", { exact: true })).toBeVisible();
   await expect.poll(width).toBe(1728);

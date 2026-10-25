@@ -31,6 +31,20 @@ test("intentional shell removal is honoured after a later native clear", t => {
   assert.equal(shell.getItem("gamespace:last-installed:v1"), null);
 });
 
+test("pinned toolbar preference survives a game clearing localStorage and is excluded from saves", async t => {
+  const { values } = setup(t);
+  const shell = getShellLocalStorage();
+  const key = "gamespace:viewer-toolbar-pinned:v1";
+  shell.setItem(key, "1");
+  const { isShellStorageKey } = await import("../src/shell-localstorage.js");
+  assert.equal(isShellStorageKey(key), true);
+  values.clear();
+  assert.equal(shell.getItem(key), "1");
+  shell.setItem(key, "0");
+  values.clear();
+  assert.equal(shell.getItem(key), "0");
+});
+
 test("FPS preference belongs to the shell and survives a game clearing localStorage", t => {
   const { values } = setup(t);
   const shell = getShellLocalStorage();

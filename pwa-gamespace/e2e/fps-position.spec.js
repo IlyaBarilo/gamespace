@@ -19,6 +19,7 @@ async function prepare(page) {
   await (await chooser).setFiles({ name: "positions.zip", mimeType: "application/zip", buffer });
   await expect(page.locator(".archive-entry")).toHaveCount(2);
   await expect(page.locator("#appMenuClose")).toBeEnabled();
+  await page.locator("#viewerMenuTabSetting").check();
   await expect(page.locator("#viewerFpsPositionControls")).toBeHidden();
   await page.locator("#viewerFpsSetting").check();
   await expect(page.locator("#viewerFpsPosition")).toBeVisible();
@@ -54,7 +55,7 @@ test("five content positions preserve the running monitor, pass clicks and survi
   }
   expect(await page.locator("#siteFrame").evaluate(frame => frame.contentWindow.clicks)).toBe(5);
   await page.locator("#siteFrame").evaluate(frame => frame.contentWindow.localStorage.clear());
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.locator("#viewerMenuTab").click();
   await page.locator("#viewerClose").click();
   await expect(page.locator("#viewerFpsPosition")).toHaveValue("middle-left");
   await page.locator("#viewerFpsSetting").uncheck();

@@ -3,6 +3,7 @@ const SHELL_KEYS = new Set([
   "gamespace:viewer-fps:v1",
   "gamespace:viewer-fps-position:v1",
   "gamespace:viewer-menu-tab:v1", "gamespace:last-error:v1", "gamespace:last-installed:v1",
+  "gamespace:viewer-toolbar-pinned:v1",
   "gamespace:last-archive-statistics:v1", "gamespace:runtime-history:v1", "gamespace:compatibility-check:v1",
 ]);
 export const isShellStorageKey = key => SHELL_KEYS.has(key) || key.startsWith("gamespace:activity:v1:")

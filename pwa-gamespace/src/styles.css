@@ -1574,6 +1574,15 @@ body.is-viewing-site {
   transform: translateX(-50%);
 }
 
+.viewer.is-toolbar-pinned .viewer-content-frame {
+  top: var(--viewer-toolbar-height);
+  height: calc(100% - var(--viewer-toolbar-height));
+}
+
+.viewer.is-toolbar-pinned .viewer-toolbar {
+  background: var(--card-solid);
+}
+
 .viewer iframe {
   display: block;
   width: 100%;
@@ -1627,18 +1636,19 @@ body.is-viewing-site {
   display: flex;
   align-items: center;
   min-height: calc(57px + env(safe-area-inset-top));
-  padding: calc(6px + env(safe-area-inset-top)) 8px 9px 12px;
-  overflow: hidden;
+  padding: calc(6px + env(safe-area-inset-top)) 8px 6px 12px;
+  overflow: visible;
   color: #fff;
-  background: rgba(31, 38, 45, 0.5);
+  background: rgba(9, 33, 63, 0.5);
   box-shadow: none;
-  transition: opacity 120ms ease, transform 120ms ease;
+  transition: opacity 200ms ease, transform 200ms ease;
 }
 
 .viewer-toolbar::after {
+  display: none;
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: -3px;
   left: 0;
   height: 3px;
   background: #2e7d32;
@@ -1648,7 +1658,8 @@ body.is-viewing-site {
 }
 
 .viewer-toolbar.is-counting::after {
-  animation: toolbar-countdown 5s linear forwards;
+  display: block;
+  animation: toolbar-countdown var(--toolbar-countdown-duration, 5s) linear forwards;
 }
 
 @keyframes toolbar-countdown {
@@ -1656,15 +1667,29 @@ body.is-viewing-site {
 }
 
 .viewer-toolbar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
   padding-right: 12px;
   color: #fff;
   font-family: Arial, sans-serif;
   font-size: 18px;
-  font-weight: 700;
+  font-weight: 400;
   line-height: 1.2;
 }
+
+.viewer-toolbar-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  object-fit: contain;
+}
+
+.viewer-toolbar-caption { min-width: 0; overflow-wrap: anywhere; }
+.viewer-toolbar-caption strong { font-weight: 700; }
+.viewer-toolbar-version { font-size: 80%; font-weight: 400; }
 
 .viewer-toolbar button {
   display: grid;
@@ -1793,7 +1818,19 @@ body.is-viewing-site {
   letter-spacing: 2px;
   opacity: 0.6;
   transform: translateX(-50%);
-  transition: opacity 120ms ease, background-color 120ms ease;
+  transition: top 200ms ease, opacity 120ms ease, background-color 120ms ease;
+}
+
+.viewer.is-toolbar-open .viewer-menu-tab {
+  top: var(--viewer-toolbar-height, calc(57px + env(safe-area-inset-top)));
+}
+
+.viewer.is-toolbar-open .viewer-toolbar.is-counting + .viewer-menu-tab {
+  top: calc(var(--viewer-toolbar-height, 57px) + 3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-toolbar, .viewer-menu-tab { transition: none; }
 }
 
 .viewer-menu-tab::before {

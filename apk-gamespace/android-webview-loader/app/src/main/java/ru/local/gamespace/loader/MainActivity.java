@@ -26,6 +26,10 @@ import android.os.Environment;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.provider.OpenableColumns;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.RelativeSizeSpan;
+import android.text.style.StyleSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -89,6 +93,13 @@ public class MainActivity extends Activity {
     private static final String PREF_LAST_ERROR_REPORT = "last_error_report";
     private static final String PREF_ARCHIVE_STATISTICS = "last_archive_statistics";
     private static final String PREF_SHOW_MENU_TAB = "show_menu_tab";
+    private static final String PREF_PIN_TOP_BAR = "pin_top_bar";
+    private boolean topBarHidden;
+    private boolean topBarManual;
+    private boolean topBarStartupShown;
+    private boolean heldTopBarHidden;
+    private boolean heldTopBarManual;
+    private long heldTopBarRemaining;
     private static final String PREF_SHOW_FPS = "show_canvas_fps";
     private String gameDisplay = "auto";
     private static final String PREF_VIEWER_ASPECT_RATIO = "viewer_aspect_ratio";
@@ -325,9 +336,6 @@ public class MainActivity extends Activity {
         if (contentLoadPending && webView != null) {
             webView.onResume();
         }
-        if (shouldAutoHideTopBar()) {
-            showTopBarWithCountdown();
-        }
     }
 
     @Override
@@ -354,7 +362,7 @@ public class MainActivity extends Activity {
 
         topBarContainer = new LinearLayout(this);
         topBarContainer.setOrientation(LinearLayout.VERTICAL);
-        topBarContainer.setBackgroundColor(Color.argb(128, 31, 38, 45));
+        topBarContainer.setBackgroundColor(Color.argb(128, 6, 24, 47));
 
         LinearLayout toolbar = new LinearLayout(this);
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
@@ -362,11 +370,23 @@ public class MainActivity extends Activity {
         toolbar.setPadding(dp(12), dp(6), dp(8), dp(6));
         toolbar.setBackgroundColor(Color.TRANSPARENT);
 
+        ImageView toolbarIcon = new ImageView(this);
+        toolbarIcon.setImageResource(R.mipmap.ic_launcher);
+        toolbarIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        toolbarIcon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams toolbarIconParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        toolbarIconParams.setMargins(0, 0, dp(8), 0);
+        toolbar.addView(toolbarIcon, toolbarIconParams);
+
+        String toolbarName = "GameSpace APK";
+        SpannableString toolbarTitle = new SpannableString(toolbarName + " " + getAppVersionName());
+        toolbarTitle.setSpan(new StyleSpan(Typeface.BOLD), 0, toolbarName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        toolbarTitle.setSpan(new RelativeSizeSpan(0.8f), toolbarName.length() + 1, toolbarTitle.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         TextView title = new TextView(this);
-        title.setText("GameSpace APK " + getAppVersionName());
+        title.setText(toolbarTitle);
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTypeface(Typeface.DEFAULT);
         toolbar.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
 
         backButton = createToolbarIconButton(R.drawable.ic_toolbar_back, "Назад");
@@ -486,6 +506,12 @@ public class MainActivity extends Activity {
             Gravity.TOP | Gravity.CENTER_HORIZONTAL
         );
         rootFrame.addView(menuTabButton, menuTabParams);
+        topBarContainer.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View view, int left, int top, int right, int bottom,
+                    int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                updateTopBarLayout();
+            }
+        });
 
         setContentView(rootFrame);
     }
@@ -518,7 +544,7 @@ public class MainActivity extends Activity {
     private Button createMenuTabButton() {
         Button button = new Button(this);
         button.setText("•••");
-        button.setContentDescription("Открыть настройки и архивы");
+        button.setContentDescription("Показать панель");
         button.setAllCaps(false);
         button.setTextColor(Color.WHITE);
         button.setTextSize(16);
@@ -537,8 +563,14 @@ public class MainActivity extends Activity {
         button.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                menuTabButton.setVisibility(View.GONE);
-                showAppMenu();
+                if (topBarHidden) {
+                    topBarManual = true;
+                    cancelTopBarCountdown();
+                    setTopBarVisible(true);
+                } else {
+                    topBarManual = false;
+                    hideTopBar();
+                }
             }
         });
         return button;
@@ -745,8 +777,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        topBarContainer.setVisibility(View.VISIBLE);
-        hideMenuTab();
+        setTopBarVisible(true);
 
         if (shouldAutoHideTopBar()) {
             startTopBarCountdown();
@@ -760,8 +791,7 @@ public class MainActivity extends Activity {
             return;
         }
 
-        topBarContainer.setVisibility(View.VISIBLE);
-        hideMenuTab();
+        setTopBarVisible(true);
         cancelTopBarCountdown();
     }
 
@@ -770,16 +800,16 @@ public class MainActivity extends Activity {
             return;
         }
 
-        topBarContainer.setVisibility(View.VISIBLE);
-        hideMenuTab();
-
         if (!shouldAutoHideTopBar()) {
             cancelTopBarCountdown();
+            if (isTopBarPinned()) setTopBarVisible(true);
             return;
         }
 
+        setTopBarVisible(true);
         topBarHideAtMillis = System.currentTimeMillis() + TOP_BAR_AUTO_HIDE_MS;
         resetTopBarCountdown();
+        topBarCountdown.setVisibility(View.VISIBLE);
         mainHandler.removeCallbacks(topBarCountdownRunnable);
         mainHandler.post(topBarCountdownRunnable);
     }
@@ -792,6 +822,7 @@ public class MainActivity extends Activity {
     private void resetTopBarCountdown() {
         if (topBarCountdown != null) {
             topBarCountdown.setProgress(TOP_BAR_AUTO_HIDE_MS);
+            topBarCountdown.setVisibility(View.GONE);
         }
     }
 
@@ -800,8 +831,39 @@ public class MainActivity extends Activity {
         if (topBarCountdown != null) {
             topBarCountdown.setProgress(0);
         }
-        if (topBarContainer != null) {
-            topBarContainer.setVisibility(View.GONE);
+        setTopBarVisible(isTopBarPinned());
+    }
+
+    private boolean isTopBarPinned() {
+        return getPrefs().getBoolean(PREF_PIN_TOP_BAR, false);
+    }
+
+    private void setTopBarVisible(boolean visible) {
+        if (topBarContainer == null) return;
+        visible = visible || isTopBarPinned();
+        topBarHidden = !visible;
+        topBarContainer.animate().cancel();
+        topBarContainer.setVisibility(View.VISIBLE);
+        topBarContainer.setImportantForAccessibility(visible
+            ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        topBarContainer.animate().translationY(visible ? 0 : -topBarContainer.getHeight())
+            .setDuration(200).withEndAction(new Runnable() {
+                @Override public void run() {
+                    if (topBarHidden) topBarContainer.setVisibility(View.INVISIBLE);
+                }
+            }).start();
+        updateTopBarLayout();
+    }
+
+    private void updateTopBarLayout() {
+        if (contentFrame == null || topBarContainer == null) return;
+        boolean pinned = isTopBarPinned();
+        topBarContainer.setBackgroundColor(pinned ? Color.rgb(6, 24, 47) : Color.argb(128, 6, 24, 47));
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) contentFrame.getLayoutParams();
+        int margin = pinned ? topBarContainer.getHeight() : 0;
+        if (params.topMargin != margin) {
+            params.topMargin = margin;
+            contentFrame.setLayoutParams(params);
         }
         updateMenuTabVisibility();
     }
@@ -848,14 +910,18 @@ public class MainActivity extends Activity {
         if (menuTabButton == null) {
             return;
         }
-        boolean topBarHidden = topBarContainer != null && topBarContainer.getVisibility() != View.VISIBLE;
-        menuTabButton.setVisibility(isMenuTabEnabled() && topBarHidden && shouldAutoHideTopBar()
+        menuTabButton.setVisibility(isMenuTabEnabled() && !isTopBarPinned() && !busy
+            && topBarHoldCount == 0 && getVisibleSiteWebView() != null
             ? View.VISIBLE
             : View.GONE);
+        menuTabButton.setContentDescription(topBarHidden ? "Показать панель" : "Скрыть панель");
+        menuTabButton.animate().translationY(topBarHidden ? 0 : topBarContainer.getHeight()).setDuration(200).start();
     }
 
     private boolean shouldAutoHideTopBar() {
         return !busy
+            && !isTopBarPinned()
+            && !topBarManual
             && topBarHoldCount == 0
             && currentIndexFile != null
             && currentIndexFile.isFile()
@@ -891,6 +957,11 @@ public class MainActivity extends Activity {
             resumeHomePageMedia();
             updateCanvasFps(homeWebView);
         }
+        if (!topBarStartupShown) {
+            topBarStartupShown = true;
+            showTopBarWithCountdown();
+        }
+        updateMenuTabVisibility();
         updateSystemBackCallbackRegistration();
     }
 
@@ -1044,16 +1115,28 @@ public class MainActivity extends Activity {
     }
 
     private void beginTopBarHold() {
+        if (topBarHoldCount == 0) {
+            heldTopBarHidden = topBarHidden;
+            heldTopBarManual = topBarManual;
+            heldTopBarRemaining = Math.max(0L, topBarHideAtMillis - System.currentTimeMillis());
+            cancelTopBarCountdown();
+        }
         topBarHoldCount += 1;
-        showTopBarPersistent();
+        hideMenuTab();
     }
 
     private void endTopBarHold() {
         if (topBarHoldCount > 0) {
             topBarHoldCount -= 1;
         }
-        if (topBarHoldCount == 0 && shouldAutoHideTopBar()) {
-            startTopBarCountdown();
+        if (topBarHoldCount == 0 && !busy && getVisibleSiteWebView() != null) {
+            topBarManual = heldTopBarManual;
+            setTopBarVisible(!heldTopBarHidden);
+            if (!heldTopBarHidden && shouldAutoHideTopBar()) {
+                topBarHideAtMillis = System.currentTimeMillis() + heldTopBarRemaining;
+                topBarCountdown.setVisibility(View.VISIBLE);
+                mainHandler.post(topBarCountdownRunnable);
+            }
         }
     }
 
@@ -1385,8 +1468,14 @@ public class MainActivity extends Activity {
         if (!busy && appUpdateDialog == null) appUpdateDialog = new AppUpdateDialog(this);
 
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
-            isMenuTabEnabled(), menuTabItem, isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
+            isMenuTabEnabled(), menuTabItem, isTopBarPinned(), isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
             buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
+                @Override public void onToolbarPinned(boolean pinned) {
+                    getPrefs().edit().putBoolean(PREF_PIN_TOP_BAR, pinned).apply();
+                    cancelTopBarCountdown();
+                    setTopBarVisible(pinned || !heldTopBarHidden);
+                    updateTopBarLayout();
+                }
                 @Override public void onAspectRatio(String ratio) {
                     getPrefs().edit().putString(PREF_VIEWER_ASPECT_RATIO, ViewerAspectRatio.normalize(ratio)).apply();
                     updateSiteViewportFrameLayout(contentFrame.getWidth(), contentFrame.getHeight());
@@ -1427,7 +1516,7 @@ public class MainActivity extends Activity {
                         getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean(PREF_SHOW_MENU_TAB, enabled).apply();
                         updateMenuTabVisibility();
                         Toast.makeText(MainActivity.this,
-                            enabled ? "Вкладка ••• будет показана после скрытия панели" : "Вкладка ••• отключена",
+                            enabled ? "Вкладка ••• открывает и скрывает панель" : "Вкладка ••• отключена",
                             Toast.LENGTH_SHORT).show();
                     } else if (fpsItem.equals(item)) {
                         getPrefs().edit().putBoolean(PREF_SHOW_FPS, !isCanvasFpsEnabled()).apply();

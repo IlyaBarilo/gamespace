@@ -32,7 +32,7 @@ import android.widget.Spinner;
 
 /** Native full-screen settings surface. It deliberately contains no WebView or JavaScript bridge. */
 final class AppMenuDialog {
-    interface Listener { void onAction(String item); void onFpsPosition(String position); void onAspectRatio(String ratio); }
+    interface Listener { void onAction(String item); void onFpsPosition(String position); void onAspectRatio(String ratio); void onToolbarPinned(boolean pinned); }
 
     private static final int BACKDROP = Color.rgb(2, 9, 22);
     private static final int SURFACE = Color.rgb(6, 24, 47);
@@ -52,6 +52,7 @@ final class AppMenuDialog {
     private final boolean busy;
     private final boolean menuTabEnabled;
     private final String menuTabItem;
+    private final boolean toolbarPinned;
     private final boolean fpsEnabled;
     private final String fpsItem;
     private String fpsPosition;
@@ -64,7 +65,7 @@ final class AppMenuDialog {
     private AlertDialog dialog;
 
     AppMenuDialog(Activity activity, String version, boolean installed, boolean busy,
-            boolean menuTabEnabled, String menuTabItem, boolean fpsEnabled, String fpsItem, String fpsPosition, String aspectRatio, String[] items, SiteState siteState,
+            boolean menuTabEnabled, String menuTabItem, boolean toolbarPinned, boolean fpsEnabled, String fpsItem, String fpsPosition, String aspectRatio, String[] items, SiteState siteState,
             AppState appState, DiagnosticsState diagnosticsState, Listener listener) {
         this.activity = activity;
         this.version = version;
@@ -72,6 +73,7 @@ final class AppMenuDialog {
         this.busy = busy;
         this.menuTabEnabled = menuTabEnabled;
         this.menuTabItem = menuTabItem;
+        this.toolbarPinned = toolbarPinned;
         this.fpsEnabled = fpsEnabled;
         this.fpsItem = fpsItem;
         this.fpsPosition = CanvasFpsPosition.normalize(fpsPosition);
@@ -227,7 +229,7 @@ final class AppMenuDialog {
     @SuppressWarnings("deprecation")
     private View viewerCard() {
         LinearLayout card = card("ПРОСМОТР САЙТА", "Настройки просмотра");
-        TextView description = text("После скрытия верхней панели вкладка ••• может оставаться вверху экрана и сразу открывать это меню.", 14, MUTED, false);
+        TextView description = text("Вкладка ••• открывает и скрывает верхнюю панель. Настройки доступны по кнопке на панели.", 14, MUTED, false);
         description.setPadding(0, dp(8), 0, dp(8));
         card.addView(description);
         Switch setting = new Switch(activity);
@@ -248,6 +250,27 @@ final class AppMenuDialog {
         });
         card.addView(setting, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        Switch pinnedSetting = new Switch(activity);
+        pinnedSetting.setText("Показывать панель постоянно");
+        pinnedSetting.setTextColor(TEXT);
+        pinnedSetting.setTextSize(15);
+        pinnedSetting.setChecked(toolbarPinned);
+        pinnedSetting.setShowText(false);
+        pinnedSetting.setPadding(0, dp(12), 0, 0);
+        if (Build.VERSION.SDK_INT >= 21) {
+            pinnedSetting.setThumbTintList(toggleColors());
+            pinnedSetting.setTrackTintList(trackColors());
+        }
+        pinnedSetting.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override public void onCheckedChanged(CompoundButton button, boolean checked) {
+                listener.onToolbarPinned(checked);
+            }
+        });
+        card.addView(pinnedSetting, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        TextView pinnedHelp = text("Панель занимает место над игрой и не перекрывает её. По умолчанию выключено.", 14, MUTED, false);
+        pinnedHelp.setPadding(0, dp(8), 0, 0);
+        card.addView(pinnedHelp);
         TextView ratioTitle = text("Соотношение сторон экрана", 15, TEXT, false);
         ratioTitle.setPadding(0, dp(16), 0, dp(6));
         card.addView(ratioTitle);

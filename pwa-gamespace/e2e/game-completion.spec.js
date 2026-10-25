@@ -17,6 +17,7 @@ test("completion returns to catalog but nested mini-games do not close a novel",
   await (await chooser).setFiles({ name: "completion.zip", mimeType: "application/zip", buffer });
   await expect(page.locator(".archive-entry")).toHaveCount(2);
   await expect(page.locator("#appMenuClose")).toBeEnabled();
+  await page.locator("#viewerMenuTabSetting").check();
   await page.locator("#appMenuClose").click();
   const frame = page.frameLocator("#siteFrame");
   for (const name of ["Legacy", "V2", "V2"]) {
@@ -45,15 +46,14 @@ test("completion returns to catalog but nested mini-games do not close a novel",
     document.querySelector("#siteFrame").contentWindow.dispatchEvent(new Event("focus"));
     delete document.hasFocus;
   });
-  await expect(page.locator("#viewerToolbar")).not.toHaveClass(/is-hidden/);
-  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/, { timeout: 7000 });
+  await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/);
   await frame.getByText("Novel", { exact: true }).click();
   await frame.frameLocator("iframe").getByRole("button", { name: "Finish" }).click();
   // Also target the outer PWA directly: source must still be rejected.
   const child = page.frames().find(f => f.url().endsWith("/legacy.html"));
   await child.evaluate(() => top.postMessage({ type: "gameResult", result: 1 }, "*"));
   await expect(frame.getByRole("heading", { name: "Novel remains open" })).toBeVisible();
-  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await page.locator("#viewerMenuTab").click();
   await page.locator("#viewerBack").click();
   await expect(frame.getByText("Legacy", { exact: true })).toBeVisible();
 });

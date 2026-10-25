@@ -71,6 +71,15 @@ let pendingMode = "full";
 let installPrompt = null;
 let busy = false;
 let toolbarTimer = null;
+let toolbarHideAt = 0;
+let viewerToolbarVisible = false;
+let viewerToolbarManual = false;
+let viewerToolbarRestoreState = null;
+const VIEWER_TOOLBAR_PINNED_KEY = "gamespace:viewer-toolbar-pinned:v1";
+let viewerToolbarPinned = false;
+try { viewerToolbarPinned = getShellLocalStorage().getItem(VIEWER_TOOLBAR_PINNED_KEY) === "1"; }
+catch { /* Keep the default overlay mode when storage is unavailable. */ }
+elements.viewerToolbarPinnedSetting.checked = viewerToolbarPinned;
 let bootWatchdog = null;
 let serviceWorkerRegistration = null;
 let runtimeState = null;
@@ -129,10 +138,17 @@ let viewerMenuTabEnabled = readViewerMenuTabSetting();
 elements.viewerMenuTabSetting.checked = viewerMenuTabEnabled;
 
 function refreshViewerMenuTab() {
+  const sidePanel = elements.viewer.classList.contains("is-portrait-frame-mode");
+  const visible = viewerToolbarPinned || sidePanel || viewerToolbarVisible;
+  elements.viewerToolbar.classList.toggle("is-hidden", !visible);
+  elements.viewerToolbar.inert = !visible;
+  elements.viewerToolbar.setAttribute("aria-hidden", String(!visible));
+  elements.viewerMenuTab.setAttribute("aria-expanded", String(visible));
+  elements.viewerMenuTab.setAttribute("aria-label", visible ? "Скрыть панель" : "Показать панель");
+  elements.viewer.classList.toggle("is-toolbar-open", visible);
   elements.viewerMenuTab.hidden = !viewerMenuTabEnabled
     || elements.viewer.hidden
-    || elements.viewer.classList.contains("is-portrait-frame-mode")
-    || !elements.viewerToolbar.classList.contains("is-hidden");
+    || sidePanel || viewerToolbarPinned;
 }
 
 function refreshArchiveStatistics() {
@@ -201,7 +217,7 @@ function renderRuntimeEnvironment() {
 }
 
 elements.appHeaderVersion.textContent = APP_VERSION;
-elements.viewerToolbarTitle.textContent = `GameSpace PWA ${APP_VERSION}`;
+elements.viewerToolbarVersion.textContent = APP_VERSION;
 renderRuntimeEnvironment();
 void readBrowserEnvironment().then((environment) => {
   browserEnvironment = environment;
@@ -255,7 +271,6 @@ for (const button of [elements.fullscreenButton, elements.viewerFullscreen]) {
 }
 document.addEventListener("fullscreenchange", () => {
   refreshFullscreenAction();
-  if (!elements.viewer.hidden) showViewerToolbar();
   refreshViewerFps();
 });
 elements.browserInstallLink.addEventListener("click", event => { if (busy) event.preventDefault(); });
@@ -310,11 +325,10 @@ function saveBackgroundIssue(error, context = {}) {
   backgroundIssueCount += 1;
   diagnosticSession.record("Сбой / предупреждение", `${context.stage || "runtime"}: ${errorMessage(error)}`, true);
   diagnosticUI.capture(error, { operation: "работа приложения", severity: "предупреждение", ...context }, { reveal: false });
-  if (!elements.viewer.hidden) showViewerToolbar();
 }
 
 function beginGameLoad(url) {
-  hideViewerToolbar();
+  if (!viewerToolbarManual && !viewerToolbarPinned) hideViewerToolbar();
   updateViewerGameDisplay(url);
   stopViewerFps();
   compatibilityPageUrl = url;
@@ -658,7 +672,8 @@ function currentGameUiMode() {
   const viewport = window.visualViewport;
   const contentViewport = gameContentViewport({
     width: viewport?.width || window.innerWidth,
-    height: viewport?.height || window.innerHeight,
+    height: Math.max(0, (viewport?.height || window.innerHeight)
+      - (viewerToolbarPinned ? elements.viewerToolbar.offsetHeight : 0)),
     aspectRatio: viewerAspectRatio,
   });
   return detectGameUiMode({
@@ -680,27 +695,26 @@ function contentIndexUrl() {
 
 function hideViewerToolbar() {
   clearTimeout(toolbarTimer);
+  toolbarHideAt = 0;
+  viewerToolbarVisible = false;
+  viewerToolbarManual = false;
   elements.viewerToolbar.classList.remove("is-counting");
-  elements.viewerToolbar.classList.add("is-hidden");
   refreshViewerMenuTab();
 }
 
-function showViewerToolbar() {
-  elements.viewerMenuTab.hidden = true;
-  elements.viewerToolbar.classList.remove("is-hidden");
+function showViewerToolbar({ temporary = false, duration = 5000 } = {}) {
+  viewerToolbarVisible = true;
+  viewerToolbarManual = !temporary;
   elements.viewerToolbar.classList.remove("is-counting");
   clearTimeout(toolbarTimer);
-  if (elements.viewer.classList.contains("is-portrait-frame-mode")) {
-    refreshViewerMenuTab();
-    return;
-  }
+  toolbarHideAt = 0;
+  refreshViewerMenuTab();
+  if (!temporary || viewerToolbarPinned) return;
+  toolbarHideAt = Date.now() + duration;
+  elements.viewerToolbar.style.setProperty("--toolbar-countdown-duration", duration + "ms");
   void elements.viewerToolbar.offsetWidth;
   elements.viewerToolbar.classList.add("is-counting");
-  toolbarTimer = setTimeout(() => {
-    elements.viewerToolbar.classList.remove("is-counting");
-    elements.viewerToolbar.classList.add("is-hidden");
-    refreshViewerMenuTab();
-  }, 5000);
+  toolbarTimer = setTimeout(hideViewerToolbar, duration);
 }
 
 function updateViewerGameDisplay(url) {
@@ -709,22 +723,19 @@ function updateViewerGameDisplay(url) {
 }
 
 function updateViewerLayoutMode() {
+  elements.viewer.classList.toggle("is-toolbar-pinned", viewerToolbarPinned);
+  if (viewerToolbarPinned) elements.viewer.classList.remove("is-portrait-frame-mode");
+  const toolbarHeight = elements.viewerToolbar.offsetHeight;
+  elements.viewer.style.setProperty("--viewer-toolbar-height", toolbarHeight + "px");
   const width = elements.viewer.clientWidth;
-  const height = elements.viewer.clientHeight;
+  const height = Math.max(0, elements.viewer.clientHeight - (viewerToolbarPinned ? toolbarHeight : 0));
   const content = gameContentViewport({ width, height, aspectRatio: viewerAspectRatio, gameDisplay: viewerGameDisplay });
   elements.viewer.style.setProperty("--viewer-content-width", content.width + "px");
   // Keep controls in the side field only when all three buttons fit there.
-  const wasSidePanel = elements.viewer.classList.contains("is-portrait-frame-mode");
-  const enabled = !elements.viewer.hidden && (width - content.width) / 2 >= 164;
+  const enabled = !viewerToolbarPinned && !elements.viewer.hidden && (width - content.width) / 2 >= 164;
   elements.viewer.classList.toggle("is-portrait-frame-mode", enabled);
   refreshViewerFps();
-  if (elements.viewer.hidden) {
-    refreshViewerMenuTab();
-    return;
-  }
-  if (enabled) showViewerToolbar();
-  else if (wasSidePanel) hideViewerToolbar();
-  else refreshViewerMenuTab();
+  refreshViewerMenuTab();
 }
 
 function setViewerScrollLock(enabled) {
@@ -793,7 +804,13 @@ async function openViewer() {
     beginGameLoad(url);
     elements.siteFrame.src = url;
     elements.viewerLoading.hidden = false;
-    showViewerToolbar();
+    if (viewerToolbarRestoreState?.archiveId === state.archiveId) {
+      if (viewerToolbarRestoreState.visible && viewerToolbarRestoreState.manual) showViewerToolbar();
+      else if (viewerToolbarRestoreState.visible && viewerToolbarRestoreState.remaining > 0) {
+        showViewerToolbar({ temporary: true, duration: viewerToolbarRestoreState.remaining });
+      }
+      else hideViewerToolbar();
+    } else showViewerToolbar({ temporary: true });
     return true;
   } catch (error) {
     if (error.code !== "GS-VIEWER-BUSY" && state?.archiveId === expectedArchiveId) compatibilityPageFailure("page");
@@ -807,6 +824,12 @@ async function openViewer() {
 let detachGameCompletion = null;
 
 function closeViewer() {
+  if (!elements.viewer.hidden) {
+    viewerToolbarRestoreState = {
+      archiveId: state?.archiveId, visible: viewerToolbarVisible, manual: viewerToolbarManual,
+      remaining: Math.max(0, toolbarHideAt - Date.now()),
+    };
+  }
   detachGameCompletion?.();
   detachGameCompletion = null;
   viewerGameDisplay = "auto";
@@ -883,8 +906,6 @@ function attachFrameGuards() {
   try {
     const frameWindow = elements.siteFrame.contentWindow;
     const frameDocument = elements.siteFrame.contentDocument;
-    frameWindow.addEventListener("blur", rememberBrowserBlur);
-    frameWindow.addEventListener("focus", restoreBrowserToolbar);
     detachGameDiagnostics?.();
     detachGameDiagnostics = null;
     if (frameWindow?.location.href === "about:blank") return;
@@ -1604,7 +1625,10 @@ elements.viewerBack.addEventListener("click", () => {
   returnViewerToIndex("toolbarBack");
 });
 elements.viewerClose.addEventListener("click", closeViewer);
-elements.viewerMenuTab.addEventListener("click", closeViewer);
+elements.viewerMenuTab.addEventListener("click", () => {
+  if (viewerToolbarVisible) hideViewerToolbar();
+  else showViewerToolbar();
+});
 elements.sharedLocalStorageSetting.addEventListener("change", async () => {
   const shared = elements.sharedLocalStorageSetting.checked;
   if (busy) { elements.sharedLocalStorageSetting.checked = pendingGameLocalStorageMode ?? gameLocalStorageMode.shared; return; }
@@ -1626,6 +1650,14 @@ elements.viewerMenuTabSetting.addEventListener("change", () => {
   viewerMenuTabEnabled = elements.viewerMenuTabSetting.checked;
   writeViewerMenuTabSetting(viewerMenuTabEnabled);
   refreshViewerMenuTab();
+});
+elements.viewerToolbarPinnedSetting.addEventListener("change", () => {
+  viewerToolbarPinned = elements.viewerToolbarPinnedSetting.checked;
+  try { getShellLocalStorage().setItem(VIEWER_TOOLBAR_PINNED_KEY, viewerToolbarPinned ? "1" : "0"); }
+  catch { /* Apply the setting even when persistence is unavailable. */ }
+  clearTimeout(toolbarTimer);
+  elements.viewerToolbar.classList.remove("is-counting");
+  updateViewerLayoutMode();
 });
 elements.viewerFpsSetting.addEventListener("change", () => {
   viewerFpsEnabled = elements.viewerFpsSetting.checked;
@@ -1650,7 +1682,7 @@ window.addEventListener("resize", updateViewerLayoutMode);
 window.visualViewport?.addEventListener("resize", updateViewerLayoutMode);
 if (viewerLandscapeQuery.addEventListener) viewerLandscapeQuery.addEventListener("change", updateViewerLayoutMode);
 else viewerLandscapeQuery.addListener(updateViewerLayoutMode);
-elements.diagnosticDialog.addEventListener("close", () => { if (!elements.viewer.hidden) showViewerToolbar(); });
+if (window.ResizeObserver) new ResizeObserver(updateViewerLayoutMode).observe(elements.viewerToolbar);
 elements.progressCancelButton.addEventListener("click", () => {
   if (!activeImportController || activeImportController.signal.aborted) return;
   elements.progressCancelButton.disabled = true;
@@ -1773,28 +1805,8 @@ window.addEventListener("offline", () => {
   }
   setStatus("Автономный режим", "good");
 });
-let browserWasUnfocused = false;
-let browserBlurTimer = null;
-function rememberBrowserBlur() {
-  clearTimeout(browserBlurTimer);
-  browserBlurTimer = setTimeout(() => {
-    // Moving focus into the content iframe keeps the top document focused.
-    if (!document.hasFocus()) browserWasUnfocused = true;
-  }, 0);
-}
-function restoreBrowserToolbar() {
-  if (document.hidden || !document.hasFocus() || !browserWasUnfocused) return;
-  browserWasUnfocused = false;
-  if (!elements.viewer.hidden) showViewerToolbar();
-}
-window.addEventListener("blur", rememberBrowserBlur);
-window.addEventListener("focus", restoreBrowserToolbar);
 document.addEventListener("visibilitychange", () => {
   diagnosticSession.record(document.hidden ? "Приложение скрыто" : "Приложение открыто", "", true);
-  if (!document.hidden) {
-    browserWasUnfocused = false;
-    if (!elements.viewer.hidden) showViewerToolbar();
-  }
 });
 window.addEventListener("pagehide", () => diagnosticSession.flush(true));
 window.addEventListener("error", (event) => {
