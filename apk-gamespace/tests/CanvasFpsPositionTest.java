@@ -8,7 +8,7 @@ public final class CanvasFpsPositionTest {
                 || CanvasFpsPosition.LABELS[i].isEmpty()) throw new AssertionError(value);
         }
         for (String value : new String[] {null, "", "black-field", "top-left';alert(1)"}) {
-            if (!"top-left".equals(CanvasFpsPosition.normalize(value))) throw new AssertionError(value);
+            if (!"toolbar".equals(CanvasFpsPosition.normalize(value))) throw new AssertionError(value);
         }
         System.out.println("Canvas FPS position tests passed.");
     }

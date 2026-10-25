@@ -43,6 +43,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.ValueCallback;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -103,6 +104,37 @@ public class MainActivity extends Activity {
     private static final String PREF_VIEWER_ASPECT_RATIO = "viewer_aspect_ratio";
     private static final String PREF_FPS_POSITION = "canvas_fps_position";
     private String canvasFpsRuntime;
+    private LinearLayout toolbarButtons;
+    private TextView toolbarTitleView;
+    private TextView toolbarFpsReadout;
+    private boolean fpsActivityResumed;
+    private long fpsReadoutGeneration;
+    private final Runnable toolbarFpsReadoutRunnable = new Runnable() {
+        @Override public void run() {
+            final WebView view = getVisibleSiteWebView();
+            if (!fpsActivityResumed || topBarHidden || view == null || !isCanvasFpsEnabled()
+                    || !"toolbar".equals(getCanvasFpsPosition()) || toolbarFpsReadout.getVisibility() != View.VISIBLE) return;
+            final long generation = ++fpsReadoutGeneration;
+            view.evaluateJavascript("(function(){var p=window.__gamespaceCanvasFps;return p&&p.running?p.readout():null;})()",
+                new ValueCallback<String>() {
+                    @Override public void onReceiveValue(String value) {
+                        if (generation != fpsReadoutGeneration || view != getVisibleSiteWebView()
+                                || toolbarFpsReadout == null || !fpsActivityResumed) return;
+                        try {
+                            if (value == null || value.length() > 4096) return;
+                            org.json.JSONObject result = new org.json.JSONObject(value);
+                            String headline = result.optString("headline", "FPS недоступен");
+                            String details = result.optString("details", "Canvas не определяется");
+                            toolbarFpsReadout.setText(headline.substring(0, Math.min(120, headline.length()))
+                                + "\n" + details.substring(0, Math.min(250, details.length())));
+                        } catch (org.json.JSONException ignored) {
+                            toolbarFpsReadout.setText("FPS недоступен\nCanvas не определяется");
+                        }
+                    }
+                });
+            mainHandler.postDelayed(this, 500);
+        }
+    };
     private volatile String lastArchiveStatistics;
     private static final String PREF_BASE_PATH = "base_path";
     private static final String PREF_INDEX_PATH = "index_path";
@@ -321,6 +353,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        fpsActivityResumed = true;
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение открыто", false);
         if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
@@ -338,6 +371,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        fpsActivityResumed = false;
         if (diagnosticJournal != null) diagnosticJournal.record("Приложение скрыто", true);
         if (runtimeEnvironmentHistory != null) runtimeEnvironmentHistory.observe(getWebViewEnvironmentText(false));
         WebView visibleWebView = getVisibleSiteWebView();
@@ -363,6 +397,7 @@ public class MainActivity extends Activity {
         topBarContainer.setBackgroundColor(Color.argb(isTopBarPinned() ? 255 : 128, 6, 21, 41));
 
         LinearLayout toolbar = new LinearLayout(this);
+        toolbarButtons = toolbar;
         toolbar.setOrientation(LinearLayout.HORIZONTAL);
         toolbar.setGravity(Gravity.CENTER_VERTICAL);
         toolbar.setPadding(dp(12), dp(6), dp(8), dp(6));
@@ -381,6 +416,7 @@ public class MainActivity extends Activity {
         toolbarTitle.setSpan(new StyleSpan(Typeface.BOLD), 0, toolbarName.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         toolbarTitle.setSpan(new RelativeSizeSpan(0.8f), toolbarName.length() + 1, toolbarTitle.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         TextView title = new TextView(this);
+        toolbarTitleView = title;
         title.setText(toolbarTitle);
         title.setTextColor(Color.WHITE);
         title.setTextSize(18);
@@ -408,7 +444,7 @@ public class MainActivity extends Activity {
             }
         });
         LinearLayout.LayoutParams menuButtonParams = new LinearLayout.LayoutParams(dp(42), dp(42));
-        menuButtonParams.setMargins(dp(7), 0, 0, 0);
+        menuButtonParams.setMargins(dp(15), 0, 0, 0);
         toolbar.addView(menuButton, menuButtonParams);
 
         topBarCountdown = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
@@ -420,6 +456,19 @@ public class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ));
+        toolbarFpsReadout = new TextView(this);
+        toolbarFpsReadout.setText("FPS недоступен\nCanvas не определяется");
+        toolbarFpsReadout.setTextColor(Color.rgb(185, 216, 244));
+        toolbarFpsReadout.setTextSize(10);
+        toolbarFpsReadout.setTypeface(Typeface.MONOSPACE);
+        toolbarFpsReadout.setIncludeFontPadding(false);
+        toolbarFpsReadout.setMaxLines(2);
+        toolbarFpsReadout.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        toolbarFpsReadout.setGravity(Gravity.CENTER_VERTICAL);
+        toolbarFpsReadout.setVisibility(View.GONE);
+        LinearLayout.LayoutParams fpsParams = new LinearLayout.LayoutParams(0, dp(32));
+        fpsParams.setMargins(dp(12), 0, dp(8), 0);
+        toolbar.addView(toolbarFpsReadout, 2, fpsParams);
         topBarContainer.addView(topBarCountdown, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             dp(3)
@@ -855,6 +904,7 @@ public class MainActivity extends Activity {
 
     private void updateTopBarLayout() {
         if (contentFrame == null || topBarContainer == null) return;
+        refreshToolbarFpsReadout();
         boolean pinned = isTopBarPinned();
         topBarContainer.setBackgroundColor(Color.argb(pinned ? 255 : 128, 6, 21, 41));
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) contentFrame.getLayoutParams();
@@ -881,11 +931,44 @@ public class MainActivity extends Activity {
     }
 
     private String getCanvasFpsPosition() {
-        return CanvasFpsPosition.normalize(getPrefs().getString(PREF_FPS_POSITION, "top-left"));
+        return CanvasFpsPosition.normalize(getPrefs().getString(PREF_FPS_POSITION, "toolbar"));
+    }
+
+    private int getToolbarFpsWidth() {
+        if (toolbarButtons == null || toolbarTitleView == null || backButton == null || menuButton == null) return 0;
+        int width = toolbarButtons.getWidth() > 0 ? toolbarButtons.getWidth() : getResources().getDisplayMetrics().widthPixels;
+        int titleWidth = (int) Math.ceil(android.text.Layout.getDesiredWidth(toolbarTitleView.getText(), toolbarTitleView.getPaint())) + dp(36);
+        LinearLayout.LayoutParams back = (LinearLayout.LayoutParams) backButton.getLayoutParams();
+        LinearLayout.LayoutParams menu = (LinearLayout.LayoutParams) menuButton.getLayoutParams();
+        int controlsWidth = back.width + back.leftMargin + back.rightMargin + menu.width + menu.leftMargin + menu.rightMargin;
+        int available = width - toolbarButtons.getPaddingLeft() - toolbarButtons.getPaddingRight() - titleWidth - controlsWidth - dp(20);
+        int minimum = Math.max(dp(80), (int) Math.ceil(toolbarFpsReadout.getPaint().measureText("FPS ≈ 999,9")));
+        return available >= minimum ? Math.min(dp(260), available) : 0;
+    }
+
+    private void refreshToolbarFpsReadout() {
+        mainHandler.removeCallbacks(toolbarFpsReadoutRunnable);
+        fpsReadoutGeneration++;
+        if (toolbarFpsReadout == null) return;
+        int width = getToolbarFpsWidth();
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) toolbarFpsReadout.getLayoutParams();
+        if (params.width != width) {
+            params.width = width;
+            toolbarFpsReadout.setLayoutParams(params);
+        }
+        boolean enabled = isCanvasFpsEnabled() && "toolbar".equals(getCanvasFpsPosition())
+            && getVisibleSiteWebView() != null && width > 0;
+        toolbarFpsReadout.setVisibility(enabled ? View.VISIBLE : View.GONE);
+        if (enabled && fpsActivityResumed && !topBarHidden) mainHandler.post(toolbarFpsReadoutRunnable);
     }
 
     private void stopCanvasFps(WebView view) {
         if (view != null) view.evaluateJavascript("if(window.__gamespaceCanvasFps)window.__gamespaceCanvasFps.stop();", null);
+        if (view == getVisibleSiteWebView() || getVisibleSiteWebView() == null) {
+            mainHandler.removeCallbacks(toolbarFpsReadoutRunnable);
+            fpsReadoutGeneration++;
+            if (toolbarFpsReadout != null && fpsActivityResumed) toolbarFpsReadout.setVisibility(View.GONE);
+        }
     }
 
     private void updateCanvasFps(WebView view) {
@@ -897,8 +980,11 @@ public class MainActivity extends Activity {
         }
         try {
             if (canvasFpsRuntime == null) canvasFpsRuntime = readAssetText("canvas-fps-runtime.js");
-            view.evaluateJavascript(canvasFpsRuntime + "\nif(document.contentType==='text/html')GameSpaceCanvasFps.start(window,{position:'"
-                + getCanvasFpsPosition() + "'});", null);
+            String position = getCanvasFpsPosition();
+            String options = "toolbar".equals(position) ? "position:'top-left',renderOverlay:false" : "position:'" + position + "'";
+            view.evaluateJavascript(canvasFpsRuntime + "\nif(document.contentType==='text/html')GameSpaceCanvasFps.start(window,{"
+                + options + "});", null);
+            refreshToolbarFpsReadout();
         } catch (Exception ignored) {
             // Optional instrumentation cannot block opening an installed game.
         }
@@ -1462,6 +1548,7 @@ public class MainActivity extends Activity {
         AlertDialog dialog = new AppMenuDialog(this, getAppVersionName(), installed, busy,
             isMenuTabEnabled(), menuTabItem, isTopBarPinned(), isCanvasFpsEnabled(), fpsItem, getCanvasFpsPosition(), getPrefs().getString(PREF_VIEWER_ASPECT_RATIO, "auto"), items, buildAppMenuSiteState(installed), buildAppMenuAppState(),
             buildAppMenuDiagnosticsState(), new AppMenuDialog.Listener() {
+                @Override public boolean isToolbarFpsUnavailable() { return getToolbarFpsWidth() == 0; }
                 @Override public void onToolbarPinned(boolean pinned) {
                     getPrefs().edit().putBoolean(PREF_PIN_TOP_BAR, pinned).apply();
                     cancelTopBarCountdown();
@@ -4072,6 +4159,9 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        fpsActivityResumed = false;
+        fpsReadoutGeneration++;
+        mainHandler.removeCallbacks(toolbarFpsReadoutRunnable);
         if (appUpdateDialog != null) appUpdateDialog.destroy();
         if (externalLinkDialog != null) externalLinkDialog.dismiss();
         mainHandler.removeCallbacks(topBarCountdownRunnable);

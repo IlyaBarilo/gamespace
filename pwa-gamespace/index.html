@@ -369,6 +369,7 @@
           <div id="viewerFpsPositionControls" class="fps-position-controls" hidden>
             <label for="viewerFpsPosition">Расположение панели</label>
             <select id="viewerFpsPosition" aria-describedby="viewerFpsPositionHelp">
+              <option value="toolbar">В панели управления</option>
               <option value="top-left">Слева сверху</option>
               <option value="top-right">Справа сверху</option>
               <option value="bottom-left">Слева снизу</option>
@@ -376,7 +377,8 @@
               <option value="middle-left">Слева по центру</option>
               <option value="black-field">На чёрном поле слева</option>
             </select>
-            <p id="viewerFpsPositionHelp" class="menu-note">Если чёрного поля нет или оно слишком узкое, панель появится слева сверху в игре.</p>
+            <p id="viewerFpsPositionHelp" class="menu-note">По умолчанию — текстом в панели управления; он скрывается вместе с ней. Если содержимое отдельно открыто на весь экран, FPS временно появится слева сверху в игре. Для варианта «На чёрном поле слева» при отсутствии подходящего поля используется левый верхний угол игры.</p>
+            <p id="viewerFpsToolbarNotice" class="menu-note" role="status" hidden></p>
           </div>
           <p class="menu-note">Оценка для Canvas/WebGL: текущий FPS, минимум, средний и максимум за 5 с. В начале — по доступному времени. Для других способов рисования показатель может быть недоступен. Замер добавляет нагрузку.</p>
         </div>
@@ -473,15 +475,16 @@
           <img class="viewer-toolbar-icon" src="./icons/gamespace-safe-192.png" alt="" width="28" height="28">
           <span class="viewer-toolbar-caption"><strong>GameSpace PWA</strong> <span id="viewerToolbarVersion" class="viewer-toolbar-version"></span></span>
         </div>
-        <button id="viewerFullscreen" type="button" aria-label="На весь экран" title="На весь экран" aria-pressed="false">
-          <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"></path>
-          </svg>
-        </button>
+        <div id="viewerToolbarFps" class="viewer-toolbar-fps" aria-label="FPS отрисовки" hidden></div>
         <button id="viewerBack" type="button" aria-label="Назад" disabled>
           <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
             <path d="M10 5 3 12l7 7"></path>
             <path d="M4 12h17"></path>
+          </svg>
+        </button>
+        <button id="viewerFullscreen" type="button" aria-label="На весь экран" title="На весь экран" aria-pressed="false">
+          <svg class="viewer-control-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"></path>
           </svg>
         </button>
         <button id="viewerClose" type="button" aria-label="Настройки и архивы">

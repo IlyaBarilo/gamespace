@@ -50,6 +50,7 @@
     var host = null;
     var headline = null;
     var details = null;
+    var inlineHost = false;
     var settings = options || {};
 
     function now() { return win.performance.now(); }
@@ -179,19 +180,32 @@
         fps: available && !suspended && !doc.hidden ? statistics(record.times, timestamp, record.since) : null };
     }
     function overlay() {
+      if (settings.renderOverlay === false) {
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+        host = null; headline = null; details = null;
+        return;
+      }
       if (host && connected(host)) return;
       var displayDoc = settings.overlayParent ? settings.overlayParent.ownerDocument : doc;
       host = displayDoc.createElement("div");
       host.setAttribute("data-gamespace-fps", "");
       host.setAttribute("aria-label", "FPS отрисовки: оценка производительности");
-      host.style.cssText = "position:fixed!important;z-index:2147483646!important;pointer-events:none!important;opacity:1!important;display:block!important;max-width:calc(100vw - 16px)!important;";
+      inlineHost = Boolean(settings.inline);
+      host.style.cssText = inlineHost
+        ? "position:static!important;pointer-events:none!important;opacity:1!important;display:block!important;width:100%!important;max-width:100%!important;"
+        : "position:fixed!important;z-index:2147483646!important;pointer-events:none!important;opacity:1!important;display:block!important;max-width:calc(100vw - 16px)!important;";
       var container = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
       var panel = displayDoc.createElement("div");
       panel.style.cssText = "box-sizing:border-box;padding:6px 8px;border:1px solid rgba(145,216,255,0.25);border-radius:7px;background:rgba(3,16,31,0.8);color:#d6f3ff;font:11px/1.4 monospace;text-align:left;white-space:normal;overflow-wrap:break-word;letter-spacing:0;text-transform:none;pointer-events:none;";
+      if (inlineHost) panel.style.cssText += "padding:0;border:0;border-radius:0;background:transparent;font-size:10px;line-height:1.35;";
       panel.title = "FPS отрисовки (оценка). Мин/сред/макс — за 5 с; минимум и максимум по секундным отрезкам.";
       headline = displayDoc.createElement("div"); headline.setAttribute("data-fps-current", "");
       headline.style.cssText = "font-weight:700;color:#9af2c8;";
       details = displayDoc.createElement("div"); details.setAttribute("data-fps-details", "");
+      if (inlineHost) {
+        headline.style.cssText += "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+        details.style.cssText = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis;";
+      }
       panel.appendChild(headline); panel.appendChild(details); container.appendChild(panel);
       placeOverlay();
     }
@@ -199,7 +213,11 @@
       if (!host) return;
       var position = normalizePosition(settings.position);
       host.setAttribute("data-fps-position", position);
-      host.setAttribute("data-fps-surface", settings.overlayParent ? "shell" : "content");
+      host.setAttribute("data-fps-surface", settings.inline ? "toolbar" : settings.overlayParent ? "shell" : "content");
+      if (settings.inline && settings.overlayParent) {
+        if (host.parentNode !== settings.overlayParent) settings.overlayParent.appendChild(host);
+        return;
+      }
       ["top", "right", "bottom", "left"].forEach(function (side) { host.style.setProperty(side, "auto", "important"); });
       function edge(side) {
         host.style.setProperty(side, "8px", "important");
@@ -219,7 +237,7 @@
     function configure(value) {
       settings = value || {};
       var displayDoc = settings.overlayParent ? settings.overlayParent.ownerDocument : doc;
-      if (host && host.ownerDocument !== displayDoc) {
+      if (host && (host.ownerDocument !== displayDoc || inlineHost !== Boolean(settings.inline))) {
         if (host.parentNode) host.parentNode.removeChild(host);
         host = null;
       }
@@ -228,12 +246,20 @@
       render(now());
     }
     function format(value) { return value.toFixed(1).replace(".", ","); }
+    function readout(timestamp) {
+      var result = snapshot(timestamp);
+      return {
+        headline: result.fps ? "FPS ≈ " + format(result.fps.current) : "FPS недоступен",
+        details: result.fps ? "5 с: мин " + format(result.fps.min) + " · ср " + format(result.fps.average) + " · макс " + format(result.fps.max)
+          : "Canvas не определяется"
+      };
+    }
     function render(timestamp) {
       overlay();
-      var result = snapshot(timestamp);
-      headline.textContent = result.fps ? "FPS ≈ " + format(result.fps.current) : "FPS недоступен";
-      details.textContent = result.fps ? "5 с: мин " + format(result.fps.min) + " · ср " + format(result.fps.average) + " · макс " + format(result.fps.max)
-        : "Canvas не определяется";
+      if (!host) return;
+      var result = readout(timestamp);
+      headline.textContent = result.headline;
+      details.textContent = result.details;
     }
     function sample(timestamp) {
       request = null;
@@ -281,6 +307,7 @@
     var controller = {
       running: true,
       snapshot: snapshot,
+      readout: readout,
       configure: configure,
       stop: function () {
         if (!active) return;

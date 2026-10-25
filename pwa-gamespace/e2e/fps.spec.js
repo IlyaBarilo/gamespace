@@ -21,7 +21,11 @@ function game(kind, fps, mode = "normal") {
 }
 async function install(page, entries) {
   page.on("dialog", dialog => dialog.accept());
-  await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "standalone", { get: () => true });
+    // These measurement fixtures intentionally exercise the floating content display.
+    localStorage.setItem("gamespace:viewer-fps-position:v1", "top-left");
+  });
   await page.goto("./");
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
   const zip = new ZipWriter(new BlobWriter("application/zip"));

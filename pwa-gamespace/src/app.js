@@ -1,7 +1,7 @@
 import "./styles.css";
 import "./canvas-fps-runtime.js";
 import "./game-completion-runtime.js";
-import { FPS_POSITION_KEY, normalizeFpsPosition, fpsPlacement } from "./fps-position.js";
+import { FPS_POSITION_KEY, normalizeFpsPosition, fpsPlacement, toolbarFpsWidth } from "./fps-position.js";
 import { readArchiveCatalog, readOperationJournal, readState } from "./db.js";
 import { formatBytes, formatDate, formatDuration, errorMessage } from "./format.js";
 import { summarizeStorage, formatStoragePercent } from "./storage-summary.js";
@@ -105,13 +105,14 @@ let activeImportController = null;
 const VIEWER_MENU_TAB_KEY = "gamespace:viewer-menu-tab:v1";
 const VIEWER_FPS_KEY = "gamespace:viewer-fps:v1";
 let viewerGameDisplay = "auto";
+let viewerFpsLastGameDisplay = "auto";
 let viewerAspectRatio = "auto";
 try { viewerAspectRatio = normalizeViewerAspectRatio(getShellLocalStorage().getItem(VIEWER_ASPECT_RATIO_KEY)); }
 catch { /* Use the default when storage is unavailable. */ }
 elements.viewerAspectRatio.value = viewerAspectRatio;
 let viewerFps = null;
 let viewerFpsEnabled = false;
-let viewerFpsPosition = "top-left";
+let viewerFpsPosition = "toolbar";
 try { viewerFpsEnabled = getShellLocalStorage().getItem(VIEWER_FPS_KEY) === "1"; }
 catch { /* FPS is optional when settings cannot be read. */ }
 try { viewerFpsPosition = normalizeFpsPosition(getShellLocalStorage().getItem(FPS_POSITION_KEY)); }
@@ -715,6 +716,7 @@ function showViewerToolbar({ temporary = false } = {}) {
 
 function updateViewerGameDisplay(url) {
   viewerGameDisplay = gameDisplayFromUrl(url, viewerIndexUrl);
+  viewerFpsLastGameDisplay = viewerGameDisplay;
   updateViewerLayoutMode();
 }
 
@@ -865,9 +867,44 @@ function handleViewerMessage(event) {
 function stopViewerFps() {
   viewerFps?.stop();
   viewerFps = null;
+  elements.viewerToolbarFps.hidden = true;
+  elements.viewer.classList.remove("has-toolbar-fps");
+}
+
+const toolbarFpsMeasure = document.createElement("canvas").getContext("2d");
+function availableToolbarFpsWidth() {
+  const width = elements.viewer.clientWidth || window.visualViewport?.width || window.innerWidth;
+  const height = elements.viewer.clientHeight || window.visualViewport?.height || window.innerHeight;
+  const barStyle = getComputedStyle(elements.viewerToolbar);
+  const titleStyle = getComputedStyle(elements.viewerToolbarTitle.querySelector("strong"));
+  let titleWidth = 260;
+  if (toolbarFpsMeasure) {
+    toolbarFpsMeasure.font = titleStyle.font;
+    titleWidth = toolbarFpsMeasure.measureText("GameSpace PWA ").width + 48;
+    toolbarFpsMeasure.font = getComputedStyle(elements.viewerToolbarVersion).font;
+    titleWidth += toolbarFpsMeasure.measureText(elements.viewerToolbarVersion.textContent).width;
+  }
+  const controlsWidth = [elements.viewerBack, elements.viewerFullscreen, elements.viewerClose].reduce((sum, button) => {
+    const style = getComputedStyle(button);
+    return sum + parseFloat(style.width) + parseFloat(style.marginLeft) + parseFloat(style.marginRight);
+  }, 0);
+  const content = gameContentViewport({ width, height: Math.max(0, height - (viewerToolbarPinned ? elements.viewerToolbar.offsetHeight : 0)),
+    aspectRatio: viewerAspectRatio, gameDisplay: elements.viewer.hidden ? viewerFpsLastGameDisplay : viewerGameDisplay });
+  return toolbarFpsWidth({ width, titleWidth, controlsWidth,
+    padding: parseFloat(barStyle.paddingLeft) + parseFloat(barStyle.paddingRight),
+    sidePanel: !viewerToolbarPinned && (width - content.width) / 2 >= 164 });
+}
+
+function refreshViewerFpsNotice(width = availableToolbarFpsWidth()) {
+  elements.viewerFpsToolbarNotice.hidden = viewerFpsPosition !== "toolbar";
+  elements.viewerFpsToolbarNotice.textContent = width > 0
+    ? "При нехватке места часть показателей скрывается. Для полного отображения выберите другое расположение FPS."
+    : "FPS не помещается в панели управления на этом экране и скрыт. Выберите другое расположение FPS.";
 }
 
 function refreshViewerFps() {
+  const width = availableToolbarFpsWidth();
+  refreshViewerFpsNotice(width);
   if (!viewerFpsEnabled || elements.viewer.hidden) { stopViewerFps(); return; }
   try {
     const frameWindow = elements.siteFrame.contentWindow;
@@ -880,11 +917,17 @@ function refreshViewerFps() {
       contentFullscreen: Boolean(frameWindow.document.fullscreenElement || frameWindow.document.webkitFullscreenElement
         || document.fullscreenElement === elements.siteFrame),
     });
+    const inline = Boolean(placement.inline && width > 0);
+    elements.viewer.style.setProperty("--viewer-fps-width", width + "px");
     viewerFps = globalThis.GameSpaceCanvasFps.start(frameWindow, {
       position: placement.position,
-      overlayParent: placement.external ? elements.viewer : null,
+      overlayParent: inline ? elements.viewerToolbarFps : !placement.inline && placement.external ? elements.viewer : null,
+      inline,
+      renderOverlay: !placement.inline || inline,
       maxWidth: placement.maxWidth,
     });
+    elements.viewerToolbarFps.hidden = !inline;
+    elements.viewer.classList.toggle("has-toolbar-fps", inline);
   } catch { stopViewerFps(); /* Optional instrumentation must never prevent a game from opening. */ }
 }
 

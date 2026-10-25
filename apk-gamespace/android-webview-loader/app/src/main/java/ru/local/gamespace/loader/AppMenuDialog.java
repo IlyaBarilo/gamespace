@@ -32,7 +32,7 @@ import android.widget.Spinner;
 
 /** Native full-screen settings surface. It deliberately contains no WebView or JavaScript bridge. */
 final class AppMenuDialog {
-    interface Listener { void onAction(String item); void onFpsPosition(String position); void onAspectRatio(String ratio); void onToolbarPinned(boolean pinned); }
+    interface Listener { void onAction(String item); void onFpsPosition(String position); void onAspectRatio(String ratio); void onToolbarPinned(boolean pinned); boolean isToolbarFpsUnavailable(); }
 
     private static final int BACKDROP = Color.rgb(2, 9, 22);
     private static final int SURFACE = Color.rgb(6, 24, 47);
@@ -320,6 +320,8 @@ final class AppMenuDialog {
         placement.setOrientation(LinearLayout.VERTICAL);
         placement.setPadding(0, dp(8), 0, 0);
         placement.setVisibility(fpsEnabled ? View.VISIBLE : View.GONE);
+        final TextView fpsPlacementHelp = text("", 12, MUTED, false);
+        fpsPlacementHelp.setPadding(0, dp(8), 0, 0);
         placement.addView(text("Расположение панели", 12, MUTED, false));
         Spinner positions = new Spinner(activity, Spinner.MODE_DROPDOWN);
         positions.setContentDescription("Расположение панели FPS");
@@ -345,6 +347,7 @@ final class AppMenuDialog {
                 if (!value.equals(fpsPosition)) {
                     fpsPosition = value;
                     listener.onFpsPosition(value);
+                    refreshFpsPlacementHelp(fpsPlacementHelp);
                 }
             }
             @Override public void onNothingSelected(AdapterView<?> parent) {}
@@ -360,10 +363,28 @@ final class AppMenuDialog {
         card.addView(fps, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         card.addView(placement);
+        placement.addView(fpsPlacementHelp);
+        refreshFpsPlacementHelp(fpsPlacementHelp);
+        placement.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override public void onLayoutChange(View view, int left, int top, int right, int bottom,
+                    int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (right - left != oldRight - oldLeft) fpsPlacementHelp.post(new Runnable() {
+                    @Override public void run() { refreshFpsPlacementHelp(fpsPlacementHelp); }
+                });
+            }
+        });
         TextView fpsDescription = text("Оценка для Canvas/WebGL: текущий FPS, минимум, средний и максимум за 5 с. В начале — по доступному времени. Для других способов рисования показатель может быть недоступен. Замер добавляет нагрузку.", 12, MUTED, false);
         fpsDescription.setPadding(0, dp(6), 0, 0);
         card.addView(fpsDescription);
         return card;
+    }
+
+    private void refreshFpsPlacementHelp(TextView help) {
+        help.setVisibility("toolbar".equals(fpsPosition) ? View.VISIBLE : View.GONE);
+        String message = listener.isToolbarFpsUnavailable()
+            ? "FPS не помещается в панели управления на этом экране и скрыт. Выберите другое расположение FPS."
+            : "При нехватке места часть показателей скрывается. Для полного отображения выберите другое расположение FPS.";
+        if (!message.contentEquals(help.getText())) help.setText(message);
     }
 
     private View compatibilityCard() {

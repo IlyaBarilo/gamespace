@@ -34,6 +34,136 @@ async function anchor(host, position) {
   expect(Math.abs(position === "middle-left" ? r.middle : r[position.startsWith("bottom") ? "bottom" : "top"] - 8)).toBeLessThan(2);
 }
 
+for (const width of [1280, 600]) {
+  test(`toolbar is the default FPS position, uses plain text and follows the controls at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page);
+    await expect(page.locator("#viewerFpsPosition")).toHaveValue("toolbar");
+    await page.locator("#viewerFpsSetting").uncheck();
+    await page.locator("#appMenuClose").click();
+    await expect(page.locator("#viewer")).toBeVisible();
+    const baseline = await page.locator("#viewerToolbar").evaluate(bar => ({ height: bar.getBoundingClientRect().height,
+      buttons: [...bar.querySelectorAll("button")].map(b => b.getBoundingClientRect().left) }));
+    await page.locator("#viewerFpsSetting").evaluate(input => { input.checked = true; input.dispatchEvent(new Event("change")); });
+    const host = page.locator("#viewerToolbarFps [data-gamespace-fps]");
+    const inside = page.frameLocator("#siteFrame").locator("[data-gamespace-fps]");
+    await expect(host.locator("[data-fps-current]")).toContainText("FPS ≈");
+    await expect(inside).toHaveCount(0);
+    const style = await host.evaluate(node => {
+      const panel = node.shadowRoot.firstElementChild;
+      return { position: getComputedStyle(node).position, border: getComputedStyle(panel).borderWidth,
+        background: getComputedStyle(panel).backgroundColor, pointerEvents: getComputedStyle(node).pointerEvents };
+    });
+    expect(style).toEqual({ position: "static", border: "0px", background: "rgba(0, 0, 0, 0)", pointerEvents: "none" });
+    const boxes = await page.locator("#viewerToolbar").evaluate(bar => {
+      const fps = bar.querySelector("#viewerToolbarFps").getBoundingClientRect();
+      const controls = [...bar.querySelectorAll("button")].map(b => { const r = b.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; });
+      return { fps: { top: fps.top, bottom: fps.bottom, right: fps.right }, controls, width: innerWidth };
+    });
+    expect(boxes.controls.every(b => b.left >= 0 && b.right <= boxes.width)).toBe(true);
+    expect(Math.max(...boxes.controls.map(b => b.top)) - Math.min(...boxes.controls.map(b => b.top))).toBeLessThan(1);
+    expect(boxes.fps.right).toBeLessThanOrEqual(boxes.controls[0].left);
+    expect(await page.locator("#viewerToolbar").evaluate(bar => bar.getBoundingClientRect().height)).toBe(baseline.height);
+    expect(boxes.controls.map(b => b.left)).toEqual(baseline.buttons);
+    const text = await host.locator("[data-fps-details]").evaluate(node => ({ overflow: getComputedStyle(node).textOverflow,
+      wrap: getComputedStyle(node).whiteSpace, clipped: node.scrollWidth > node.clientWidth }));
+    expect(text.overflow).toBe("ellipsis");
+    expect(text.wrap).toBe("nowrap");
+    if (width === 600) expect(text.clipped).toBe(true);
+    await page.locator("#siteFrame").evaluate(frame => { frame.contentWindow.firstMonitor = frame.contentWindow.__gamespaceCanvasFps; });
+    await expect(page.locator("#viewerToolbar")).toHaveClass(/is-hidden/, { timeout: 8000 });
+    await expect(host).not.toBeInViewport();
+    await expect(inside).toHaveCount(0);
+    await page.locator("#viewerMenuTab").click();
+    await expect(host).toBeInViewport();
+    for (const position of ["top-right", "toolbar"]) {
+      await page.locator("#viewerFpsPosition").evaluate((select, value) => {
+        select.value = value; select.dispatchEvent(new Event("change"));
+      }, position);
+      if (position === "toolbar") { await expect(host).toBeInViewport(); await expect(inside).toHaveCount(0); }
+      else { await anchor(inside, "top-right"); await expect(host).toHaveCount(0); }
+      expect(await page.locator("#siteFrame").evaluate(frame => frame.contentWindow.firstMonitor === frame.contentWindow.__gamespaceCanvasFps)).toBe(true);
+    }
+    if (width === 1280) {
+      await page.locator("#viewerAspectRatio").evaluate(select => { select.value = "10:16"; select.dispatchEvent(new Event("change")); });
+      await expect(page.locator("#viewer")).toHaveClass(/is-portrait-frame-mode/);
+      await expect(host).toHaveCount(0);
+      await expect(inside).toHaveCount(0);
+      await expect(page.locator("#viewerFpsToolbarNotice")).toContainText("не помещается");
+      await page.locator("#siteFrame").evaluate(frame => frame.contentDocument.body.requestFullscreen());
+      await anchor(inside, "top-left");
+      await expect(host).toHaveCount(0);
+      await page.locator("#siteFrame").evaluate(frame => frame.contentDocument.exitFullscreen());
+      await expect(inside).toHaveCount(0);
+      await expect(host).toHaveCount(0);
+      await page.locator("#viewerAspectRatio").evaluate(select => { select.value = "auto"; select.dispatchEvent(new Event("change")); });
+      await expect(host).toBeInViewport();
+    }
+    await page.locator("#viewerFpsSetting").evaluate(input => { input.checked = false; input.dispatchEvent(new Event("change")); });
+    await expect(host).toHaveCount(0);
+    await expect(inside).toHaveCount(0);
+    expect(await page.locator("#siteFrame").evaluate(frame => frame.contentWindow.firstMonitor.running)).toBe(false);
+  });
+}
+
+for (const width of [390, 320]) {
+  test(`FPS hides without resizing the toolbar and explains insufficient space in settings at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await prepare(page);
+    const notice = page.locator("#viewerFpsToolbarNotice");
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("не помещается");
+    await page.locator("#viewerToolbarPinnedSetting").check();
+    await page.locator("#appMenuClose").click();
+    await expect(page.locator("#viewer")).toBeVisible();
+    const host = page.locator("#viewerToolbarFps [data-gamespace-fps]");
+    const inside = page.frameLocator("#siteFrame").locator("[data-gamespace-fps]");
+    await expect(host).toHaveCount(0);
+    await expect(inside).toHaveCount(0);
+    const enabled = await page.locator("#viewerToolbar").evaluate(bar => ({ height: bar.getBoundingClientRect().height,
+      buttons: [...bar.querySelectorAll("button")].map(b => b.getBoundingClientRect().left) }));
+    await page.locator("#viewerFpsSetting").evaluate(input => { input.checked = false; input.dispatchEvent(new Event("change")); });
+    expect(await page.locator("#viewerToolbar").evaluate(bar => ({ height: bar.getBoundingClientRect().height,
+      buttons: [...bar.querySelectorAll("button")].map(b => b.getBoundingClientRect().left) }))).toEqual(enabled);
+    await page.locator("#viewerFpsSetting").evaluate(input => { input.checked = true; input.dispatchEvent(new Event("change")); });
+    await page.locator("#siteFrame").evaluate(frame => { frame.contentWindow.firstMonitor = frame.contentWindow.__gamespaceCanvasFps; });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(host.locator("[data-fps-current]")).toContainText("FPS ≈");
+    await expect(notice).not.toContainText("не помещается");
+    expect(await page.locator("#siteFrame").evaluate(frame => frame.contentWindow.firstMonitor === frame.contentWindow.__gamespaceCanvasFps)).toBe(true);
+    await page.setViewportSize({ width, height: 900 });
+    await expect(host).toHaveCount(0);
+    await expect(inside).toHaveCount(0);
+    await page.locator("#viewerClose").click();
+    await expect(notice).toBeVisible();
+    await expect(notice).toContainText("не помещается");
+    await expect(page.locator("#viewerFpsPosition")).toHaveValue("toolbar");
+    await page.locator("#viewerFpsPosition").selectOption("top-left");
+    await expect(notice).toBeHidden();
+    await page.locator("#appMenuClose").click();
+    await anchor(inside, "top-left");
+  });
+}
+
+test("APK native output can read the monitor without a floating overlay or measurement reset", async ({ page }) => {
+  const script = await readFile(new URL("../../apk-gamespace/android-webview-loader/app/src/main/assets/canvas-fps-runtime.js", import.meta.url), "utf8");
+  await page.setContent(source);
+  await page.addScriptTag({ content: script });
+  await page.evaluate(() => { window.firstMonitor = GameSpaceCanvasFps.start(window, { renderOverlay: false }); });
+  await expect.poll(() => page.evaluate(() => firstMonitor.readout().headline)).toContain("FPS ≈");
+  await expect(page.locator("[data-gamespace-fps]")).toHaveCount(0);
+  const before = await page.evaluate(() => firstMonitor.snapshot().fps.windowMs);
+  expect(await page.evaluate(() => GameSpaceCanvasFps.start(window, { position: "top-left" }) === firstMonitor)).toBe(true);
+  await expect(page.locator("[data-gamespace-fps]")).toBeVisible();
+  await page.evaluate(() => GameSpaceCanvasFps.start(window, { renderOverlay: false }));
+  await expect(page.locator("[data-gamespace-fps]")).toHaveCount(0);
+  const result = await page.evaluate(() => ({ time: firstMonitor.snapshot().fps.windowMs, text: firstMonitor.readout() }));
+  expect(result.time).toBeGreaterThanOrEqual(before);
+  expect(result.text.details).toContain("5 с: мин");
+  await page.evaluate(() => firstMonitor.stop());
+  expect(await page.evaluate(() => window.__gamespaceCanvasFps)).toBeUndefined();
+});
+
 test("five content positions preserve the running monitor, pass clicks and survive reload and archive storage", async ({ page, context }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await prepare(page);
