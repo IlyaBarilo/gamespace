@@ -71,6 +71,9 @@ test("first app launch prepares demo without a prompt and records its import, si
   const split = text.lastIndexOf("Целостность текста: ");
   expect(text.slice(split + "Целостность текста: ".length)).toBe(await compatibilityCode(text.slice(0, split).trimEnd()));
   await page.locator("#compatibilityClose").click();
+  await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
+  await page.locator("#viewerMenuTabSetting").focus(); await page.keyboard.press("Space");
+  await expect(page.locator("#viewerMenuTabSetting")).not.toBeChecked();
   await page.locator("#viewerMenuTabSetting").focus(); await page.keyboard.press("Space");
   await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
   await expect(page.locator("#viewerMenuTabSetting")).toHaveCSS("appearance", "none");

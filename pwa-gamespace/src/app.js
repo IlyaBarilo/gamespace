@@ -126,8 +126,8 @@ const runtimeHistoryStore = createRuntimeHistoryStore();
 let runtimeHistoryState = runtimeHistoryStore.load();
 
 function readViewerMenuTabSetting() {
-  try { return getShellLocalStorage().getItem(VIEWER_MENU_TAB_KEY) === "1"; }
-  catch { return false; }
+  try { return getShellLocalStorage().getItem(VIEWER_MENU_TAB_KEY) !== "0"; }
+  catch { return true; }
 }
 
 function writeViewerMenuTabSetting(enabled) {

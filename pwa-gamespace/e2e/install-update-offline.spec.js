@@ -31,6 +31,8 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
   await expect(page.locator("#statusText")).toHaveText(/^(?:Сайт готов к автономной работе|Приложение готово к импорту)$/);
+  await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
+  await page.locator("#viewerMenuTabSetting").uncheck();
 
   const demoBuffer = await page.evaluate(async () => [...new Uint8Array(await (await fetch("./demo.7z")).arrayBuffer())]);
   const importChooser = page.waitForEvent("filechooser");

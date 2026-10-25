@@ -5,7 +5,7 @@ async function openSettings(page) {
   await page.addInitScript(() => Object.defineProperty(navigator, "standalone", { get: () => true }));
   await page.goto("./");
   await expect(page.locator("#statusText")).toHaveText("Сайт готов к автономной работе");
-  await page.locator("#viewerMenuTabSetting").check();
+  await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
 }
 
 async function geometry(page) {

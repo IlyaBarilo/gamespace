@@ -923,7 +923,7 @@ public class MainActivity extends Activity {
     }
 
     private boolean isMenuTabEnabled() {
-        return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SHOW_MENU_TAB, false);
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(PREF_SHOW_MENU_TAB, true);
     }
 
     private boolean isCanvasFpsEnabled() {

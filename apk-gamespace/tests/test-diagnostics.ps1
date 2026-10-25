@@ -118,7 +118,7 @@ $checks = @{
     "recovery failure blocks installation menu" = 'Требуется восстановление сайта[\s\S]*?emptyMenuButton\.setVisibility\(View\.GONE\)|emptyMenuButton\.setVisibility\(View\.GONE\)[\s\S]*?Требуется восстановление сайта'
     "busy settings use visible operation progress" = 'viewText\(progressTitle, "Локальная операция"\)[\s\S]*?viewText\(progressDetails, "Операция продолжается…"\)'
     "internet purpose is accurate" = 'Интернет используется только при ручной проверке обновлений приложения\.'
-    "menu tab disabled by default" = 'getBoolean\(PREF_SHOW_MENU_TAB, false\)'
+    "menu tab enabled by default" = 'getBoolean\(PREF_SHOW_MENU_TAB, true\)'
     "menu tab opens app menu directly" = 'createMenuTabButton\(\)[\s\S]*?showAppMenu\(\);'
     "local page advertises app menu without a native interface" = 'onPageFinished\(WebView view, String url\)[\s\S]*?!localSiteRequestHandler\.isInternalUrl\(url\)[\s\S]*?evaluateJavascript\("window\.dispatchEvent\(new CustomEvent\(''gamespaceMenuAvailable'',\{detail:\{host:''apk''\}'
     "page menu command requires the visible local WebView" = 'handleAppMenuUrl\(WebView view, String url\)[\s\S]*?view == getVisibleSiteWebView\(\) && LocalWebPolicy\.canOpenAppMenu\(url, view\.getUrl\(\)\)[\s\S]*?showAppMenu\(\)'
