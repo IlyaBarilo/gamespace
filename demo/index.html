@@ -75,6 +75,12 @@
             --image-ratio: 78%; /* 66.66%; */ /* 3:2 — пропорция области картинки (можно 75% для 4:3) */
         }
 
+        @media (orientation: landscape) {
+            :root {
+                --columns: 5;
+            }
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -568,10 +574,9 @@
 
         }
 
-        /* Phone landscape: keep three columns, with denser spacing. */
+        /* Phone landscape: use denser spacing with the landscape column limit. */
         @media (max-width: 1024px) and (max-height: 520px) and (orientation: landscape) {
             :root {
-                --columns: 3;
                 --grid-gap: 1.8vw;
                 --page-padding-y: 2vw;
                 --header-title-size: clamp(18px, 3.2vw, 28px);
@@ -1616,7 +1621,7 @@
 
     <!--
         КОММЕНТАРИИ:
-        - Количество колонок задается переменной --columns в блоке :root
+        - Количество колонок задается переменной --columns: 5 в горизонтальной ориентации, 3 в вертикальной и 2 на узких вертикальных экранах
         - Боковые поля равны отступу между колонками
         - Элементы внутри карточки масштабируются от ширины карточки через cqw, чтобы сохранялись одинаковые пропорции при любом числе колонок
         - Расстояние между карточками управляется --grid-gap
