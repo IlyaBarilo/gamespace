@@ -1,4 +1,5 @@
 import { test, expect, chromium } from "@playwright/test";
+import { openViewerSettings } from "./helpers/viewer.js";
 import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -31,8 +32,8 @@ test("browser launch imports 7z, records a successful check and keeps its mode i
   await expect(page.locator("#viewerFullscreen")).toHaveAttribute("aria-pressed", "true");
   await page.frameLocator("#siteFrame").locator('a[href*="tictac"]').first().click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("gamespace:compatibility-check:v1")).data.steps.game)).toBe("recorded");
-  // Reveal the toolbar through the app's settings entry before its countdown expires.
-  await page.locator("#viewerClose").click();
+  // Open settings through the tab even when game navigation has hidden the toolbar.
+  await openViewerSettings(page);
   await page.locator("#compatibilityButton").click();
   await expect(page.locator("#compatibilityText")).toHaveValue(/ИТОГ: базовая проверка пройдена/);
   const report = await page.locator("#compatibilityText").inputValue();
@@ -73,7 +74,7 @@ test("installed display and browser display share imported content and game save
   await page.goto("./");
   await expect(page.locator("#viewer")).toBeVisible();
   await expect(page.frameLocator("#siteFrame").locator("#saved")).toHaveText("saved in browser");
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   await expect(page.locator("#browserLaunchHint")).toBeHidden();
   await expect(page.locator("#installedState")).toBeVisible();
   expect(revision).not.toBe("");

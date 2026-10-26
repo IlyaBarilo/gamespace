@@ -137,6 +137,8 @@ for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 
       await page.locator("#viewerAspectRatio").selectOption("10:16");
       await page.locator("#appMenuClose").click();
       const assertPinned = async () => {
+        await expect(page.locator("#viewer")).toBeVisible();
+        await expect(page.locator(".viewer-content-frame")).toBeVisible();
         await expect(page.locator("#viewer")).toHaveClass(/is-toolbar-pinned/);
         await expect(page.locator("#viewer")).not.toHaveClass(/is-portrait-frame-mode/);
         await expect(page.locator("#viewerMenuTab")).toBeHidden();

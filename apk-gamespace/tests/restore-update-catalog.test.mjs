@@ -110,9 +110,9 @@ test("incomplete older releases are skipped, while an incomplete current release
 test("missing legacy APK assets do not enter the catalog and unsupported tags are not requested", async (t) => {
   const f = await fixture(t);
   f.state.releases["v0.3.13"].assets = [f.state.releases["v0.3.13"].assets[2]];
-  f.state.tags.push("v0.3.0", "../../bad", "nightly");
+  f.state.tags.push("v0.3.0", "v0.3.25.1", "../../bad", "nightly");
   assert.equal((await f.restore()).releases.length, 1);
-  assert.ok(!f.calls.some((call) => call[1] === "api" && /bad|nightly|v0\.3\.0$/.test(call[2])));
+  assert.ok(!f.calls.some((call) => call[1] === "api" && /bad|nightly|v0\.3\.0$|v0\.3\.25\.1$/.test(call[2])));
 });
 
 test("list, metadata and download failures never become an empty or shortened catalog", async (t) => {

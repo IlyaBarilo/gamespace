@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openViewerSettings } from "./helpers/viewer.js";
 import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 
 const controlKey = "archive-localstorage-v1";
@@ -27,7 +28,7 @@ async function open(page, id, initialValue) {
 async function setSave(page, value) {
   await page.locator("#siteFrame").evaluate((frame, value) => frame.contentWindow.localStorage.setItem("same-key", value), value);
 }
-async function close(page) { await page.locator("#viewerClose").click(); await expect(page.locator("#viewer")).toBeHidden(); }
+async function close(page) { await openViewerSettings(page); await expect(page.locator("#viewer")).toBeHidden(); }
 async function mode(page, shared) {
   await toggle(page).setChecked(shared);
   await expect(page.locator("#statusText")).toHaveText(shared ? "Включён единый localStorage" : "Включён раздельный localStorage");
@@ -43,7 +44,9 @@ async function record(page) {
 test("restores archive saves before inline JS, keeps settings, honours game clear and persists live changes", async ({ page, context }) => {
   await app(page);
   await expect(toggle(page)).not.toBeChecked();
+  await page.locator("#viewerMenuTabSetting").uncheck();
   await page.locator("#viewerMenuTabSetting").check();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("gamespace:viewer-menu-tab:v1"))).toBe("1");
   const a = await add(page, "A");
   await open(page, a, "EMPTY"); await setSave(page, "A save"); await close(page);
   const b = await add(page, "B");

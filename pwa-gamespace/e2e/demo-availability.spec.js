@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openViewerSettings } from "./helpers/viewer.js";
 import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 import { formatBytes } from "../src/format.js";
 import { compatibilityCode } from "../src/compatibility-report.js";
@@ -72,9 +73,10 @@ test("first app launch prepares demo without a prompt and records its import, si
   expect(text.slice(split + "Целостность текста: ".length)).toBe(await compatibilityCode(text.slice(0, split).trimEnd()));
   await page.locator("#compatibilityClose").click();
   await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
-  await page.locator("#viewerMenuTabSetting").focus(); await page.keyboard.press("Space");
+  await expect(page.locator("#compatibilityDialog")).toBeHidden();
+  await page.locator("#viewerMenuTabSetting").press("Space");
   await expect(page.locator("#viewerMenuTabSetting")).not.toBeChecked();
-  await page.locator("#viewerMenuTabSetting").focus(); await page.keyboard.press("Space");
+  await page.locator("#viewerMenuTabSetting").press("Space");
   await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
   await expect(page.locator("#viewerMenuTabSetting")).toHaveCSS("appearance", "none");
   await expect(page.locator("#progressPanel")).toBeHidden();
@@ -88,10 +90,10 @@ test("bundled demo remains a protected offline entry after importing and deletin
   await expect(page.locator("#storageManaged")).toHaveText(`Все архивы: ${formatBytes(bytes)}`);
   await context.setOffline(true); await page.reload();
   await expect(page.frameLocator("#siteFrame").locator("h1")).toHaveText("custom-site-marker");
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   await demoRow(page).locator('[data-archive-action="open"]').click();
   await expect(page.frameLocator("#siteFrame").locator(".game-card").first()).toBeVisible();
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   await page.locator(`[data-archive-id="${id}"] [data-archive-action="remove"]`).click();
   await expect(page.locator(".archive-entry")).toHaveCount(1);
   await expect(demoRow(page)).toHaveAttribute("aria-current", "true");
@@ -105,7 +107,7 @@ for (const removeFiles of [false, true]) {
     await page.locator("#openSiteButton").click();
     await expect(page.locator("#viewer")).toBeVisible();
     await page.frameLocator("#siteFrame").locator("h1").evaluate(() => localStorage.setItem("demo-test-save", "LEVEL 17"));
-    await page.locator("#viewerClose").click();
+    await openViewerSettings(page);
     const before = await catalog(page); const demoRevision = before.entries[0].state.activeRevision;
     const checkBefore = await page.evaluate(id => JSON.parse(localStorage.getItem(`gamespace:compatibility-check:archive:v1:id:${id}`)), id);
     await markDemoStale(page, { removeFiles });
@@ -135,6 +137,6 @@ test("a failed automatic demo refresh retains its files and user content and sav
   const after = await catalog(page);
   expect(after).toEqual(before); expect(after.activeId).toBe(id);
   if (await page.locator("#diagnosticDialog").isVisible()) await page.locator("#diagnosticClose").click();
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   await expect(page.locator("#errorPanel")).toBeVisible();
 });

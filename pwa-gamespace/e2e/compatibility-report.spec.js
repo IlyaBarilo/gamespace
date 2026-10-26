@@ -1,4 +1,5 @@
 import { test, expect, devices } from "@playwright/test";
+import { openViewerSettings } from "./helpers/viewer.js";
 import { compatibilityCode, COMPATIBILITY_FORM_URL } from "../src/compatibility-report.js";
 
 async function openReport(page) {
@@ -102,7 +103,7 @@ test("full demo and game transition pass; a recorded game error downgrades a ref
   const frame = page.frameLocator("#siteFrame");
   await frame.locator('a[href*="tictac"]').first().click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("gamespace:compatibility-check:v1")).data.steps.game)).toBe("recorded");
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   const success = await openReport(page);
   expect(success).toContain("ИТОГ: базовая проверка пройдена");
   await expect(page.locator("#compatibilityStep_game")).toHaveText("выполнено");
@@ -118,14 +119,14 @@ test("full demo and game transition pass; a recorded game error downgrades a ref
   await game.waitForLoadState("load");
   await expect(page.locator("#viewerLoading")).toBeHidden();
   await game.evaluate(() => window.dispatchEvent(new ErrorEvent("error", { message: "private /device/path", error: new Error("private /device/path") })));
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   const failed = await openReport(page);
   expect(failed).not.toBe(success);
   expect(failed).toContain("этап: переход в игру; код: GS-SCRIPT;");
   expect(failed).not.toContain("private /device/path");
   await page.reload();
   await expect(page.locator("#viewer")).toBeVisible();
-  await page.locator("#viewerClose").click();
+  await openViewerSettings(page);
   expect(await openReport(page)).toContain("код: GS-SCRIPT;");
   await page.locator("#compatibilityReset").click();
   await expect(page.locator("#compatibilityText")).toHaveValue(/импорт: не выполнено/);

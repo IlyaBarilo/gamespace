@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openViewerSettings } from "./helpers/viewer.js";
 import { BlobWriter, TextReader, ZipWriter } from "@zip.js/zip.js";
 import { compatibilityCode } from "../src/compatibility-report.js";
 
@@ -28,7 +29,7 @@ async function open(page, id) {
   await expect(page.frameLocator("#siteFrame").locator("h1")).toBeVisible();
   await expect(page.locator("#viewerLoading")).toBeHidden();
 }
-async function close(page) { if (await page.locator("#diagnosticDialog").isVisible()) await page.locator("#diagnosticClose").click(); await page.locator("#viewerClose").click(); await expect(page.locator("#viewer")).toBeHidden(); }
+async function close(page) { if (await page.locator("#diagnosticDialog").isVisible()) await page.locator("#diagnosticClose").click(); await openViewerSettings(page); await expect(page.locator("#viewer")).toBeHidden(); }
 async function record(page, id) { return page.evaluate(key => JSON.parse(localStorage.getItem(key)), recordKey(id)); }
 async function report(page) {
   if (await page.locator("#diagnosticDialog").isVisible()) await page.locator("#diagnosticClose").click();
