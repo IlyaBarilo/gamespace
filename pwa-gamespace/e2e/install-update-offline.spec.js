@@ -128,7 +128,15 @@ test("installs demo, applies update and opens the site offline", async ({ page, 
   const mobileFrame = await getSiteFrame(page);
   const mobileCatalogPath = new URL(mobileFrame.url()).pathname;
   expect(new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
-  await mobileFrame.locator(".game-card").first().click();
+  // Both the catalog and game have ui=mobile. Wait for the parent's load handler,
+  // which installs gameExit handling, rather than treating that parameter as readiness.
+  await Promise.all([
+    page.locator("#siteFrame").evaluate(frame => new Promise(resolve => {
+      frame.addEventListener("load", () => resolve(), { once: true });
+    })),
+    mobileFrame.locator(".game-card").first().click(),
+  ]);
+  await expect.poll(() => new URL(mobileFrame.url()).pathname).not.toBe(mobileCatalogPath);
   await expect.poll(() => new URL(mobileFrame.url()).searchParams.get("ui")).toBe("mobile");
   await mobileFrame.evaluate(() => window.parent.postMessage({ type: "gameExit" }, "*"));
   await expect.poll(() => new URL(mobileFrame.url()).pathname).toBe(mobileCatalogPath);

@@ -1,0 +1,131 @@
+name: Deploy published GameSpace release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Already published release with ready APK and PWA files, for example v0.3.26
+        required: true
+        type: string
+
+concurrency:
+  group: gamespace-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GH_REPO: ${{ github.repository }}
+  RELEASE_TAG: ${{ inputs.tag }}
+
+jobs:
+  prepare:
+    name: Verify published packages and prepare Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.catalog.outputs.latest_version }}
+    steps:
+      - name: Check out deployment tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Validate deployment source and trusted certificate
+        env:
+          APK_SIGNER_SHA256: ${{ vars.APK_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          test "$GH_REPO" = 'IlyaBarilo/gamespace'
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            echo '::error::Select a release tag under Run workflow > Use workflow from > Tags. The github-pages environment permits tags only.'
+            exit 1
+          fi
+          node pwa-gamespace/scripts/read-release-version.mjs "$GITHUB_REF_NAME"
+          node pwa-gamespace/scripts/read-release-version.mjs "$RELEASE_TAG"
+          if [[ ! "$APK_SIGNER_SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo '::error::Set the repository variable APK_SIGNER_SHA256 to the trusted release certificate fingerprint (64 hexadecimal characters, without colons).'
+            exit 1
+          fi
+
+      - name: Set up Java for APK signature verification
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Locate Android verification tools
+        run: |
+          set -euo pipefail
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          test -n "$sdk_root"
+          if [[ ! -f "$sdk_root/build-tools/36.0.0/aapt2" || ! -f "$sdk_root/build-tools/36.0.0/lib/apksigner.jar" ]]; then
+            "$sdk_root/cmdline-tools/latest/bin/sdkmanager" "--sdk_root=$sdk_root" "build-tools;36.0.0"
+          fi
+          echo "APK_AAPT2=$sdk_root/build-tools/36.0.0/aapt2" >> "$GITHUB_ENV"
+          echo "APK_APKSIGNER_JAR=$sdk_root/build-tools/36.0.0/lib/apksigner.jar" >> "$GITHUB_ENV"
+
+      - name: Verify published APKs and restore the complete catalog
+        id: catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_SIGNER_SHA256: ${{ vars.APK_SIGNER_SHA256 }}
+        run: |
+          set -euo pipefail
+          node apk-gamespace/scripts/restore-update-catalog.mjs \
+            --repository "$GH_REPO" --current-tag "$RELEASE_TAG" \
+            --expected-signer-sha256 "$APK_SIGNER_SHA256" \
+            --aapt2 "$APK_AAPT2" --apksigner-jar "$APK_APKSIGNER_JAR" \
+            --work-directory "$RUNNER_TEMP/fast-apk-work" \
+            --output "$RUNNER_TEMP/fast-catalog/updates.json" --use-published-cache --github-output
+
+      - name: Verify published PWA archives and restore packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node pwa-gamespace/scripts/restore-published-pwa.mjs \
+            --repository "$GH_REPO" --current-tag "$RELEASE_TAG" \
+            --catalog "$RUNNER_TEMP/fast-catalog/updates.json" \
+            --packages-directory "$RUNNER_TEMP/fast-pwa-packages" \
+            --work-directory "$RUNNER_TEMP/fast-pwa-work"
+
+      - name: Assemble Pages from verified immutable packages
+        env:
+          GAMESPACE_RELEASES_DIRECTORY: ${{ runner.temp }}/fast-pwa-packages
+          GAMESPACE_PAGES_OUTPUT_DIRECTORY: ${{ runner.temp }}/fast-pages
+          PAGES_VERSION: ${{ steps.catalog.outputs.latest_version }}
+        run: |
+          set -euo pipefail
+          node pwa-gamespace/scripts/verify-runtime.mjs
+          node pwa-gamespace/scripts/verify-releases.mjs
+          node pwa-gamespace/scripts/assemble-pages.mjs "$PAGES_VERSION" --apk-catalog "$RUNNER_TEMP/fast-catalog/updates.json"
+          test -s "$RUNNER_TEMP/fast-pages/$PAGES_VERSION/apk/updates.json"
+          node pwa-gamespace/scripts/verify-pages-size.mjs "$RUNNER_TEMP/fast-pages/$PAGES_VERSION"
+
+      - name: Upload verified Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/fast-pages/${{ steps.catalog.outputs.latest_version }}
+
+  deploy:
+    name: Deploy verified published release
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

@@ -61,6 +61,15 @@ jobs:
         id: release_date
         run: echo "date=$(git show -s --format=%cs HEAD)" >> "$GITHUB_OUTPUT"
 
+  browser:
+    name: Verify release in browsers
+    needs: validate
+    uses: ./.github/workflows/browser-tests.yml
+    with:
+      ref: ${{ github.event.release.tag_name || inputs.tag }}
+      version: ${{ needs.validate.outputs.version }}
+      release_date: ${{ needs.validate.outputs.release_date }}
+
   pwa:
     name: Verify and package PWA
     needs: validate
@@ -92,12 +101,6 @@ jobs:
 
       - name: Run unit tests
         run: npm test
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run browser tests
-        run: npm run test:e2e
 
       - name: Build current source
         run: npm run build
@@ -255,6 +258,7 @@ jobs:
           $certificates = @($signature | Select-String 'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]{64})' | ForEach-Object { $_.Matches[0].Groups[1].Value })
           if ($certificates.Count -ne 1) { throw "Expected exactly one APK signing certificate." }
           "sha256=$($certificates[0])" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "Trusted APK certificate SHA-256: $($certificates[0])" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       - name: Verify and reuse APKs already attached to this release
         shell: pwsh
@@ -312,7 +316,7 @@ jobs:
 
   publish:
     name: Attach verified assets to the published release
-    needs: [validate, pwa, apk]
+    needs: [validate, pwa, apk, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write

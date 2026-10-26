@@ -15,6 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  browser:
+    name: Браузерные проверки PWA
+    uses: ./.github/workflows/browser-tests.yml
+    with:
+      ref: ${{ github.sha }}
+
   pwa:
     name: PWA и пакет выпуска — Linux
     runs-on: ubuntu-latest
@@ -42,12 +48,6 @@ jobs:
 
       - name: Выполнить автоматические тесты
         run: npm test
-
-      - name: Установить Chromium для браузерных тестов релиза
-        run: npx playwright install --with-deps chromium
-
-      - name: Проверить готовый релиз, обновления, откат и холодный автономный запуск
-        run: npm run test:e2e
 
       - name: Собрать PWA и неизменяемый пакет
         run: npm run release:prepare

@@ -71,7 +71,13 @@ test("first app launch prepares demo without a prompt and records its import, si
   const text = await page.locator("#compatibilityText").inputValue();
   const split = text.lastIndexOf("Целостность текста: ");
   expect(text.slice(split + "Целостность текста: ".length)).toBe(await compatibilityCode(text.slice(0, split).trimEnd()));
-  await page.locator("#compatibilityClose").click();
+  // The close event restores focus after the dialog has already become hidden.
+  await Promise.all([
+    page.locator("#compatibilityDialog").evaluate(dialog => new Promise(resolve => {
+      dialog.addEventListener("close", () => resolve(), { once: true });
+    })),
+    page.locator("#compatibilityClose").click(),
+  ]);
   await expect(page.locator("#viewerMenuTabSetting")).toBeChecked();
   await expect(page.locator("#compatibilityDialog")).toBeHidden();
   await page.locator("#viewerMenuTabSetting").press("Space");

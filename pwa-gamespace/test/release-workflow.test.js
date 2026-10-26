@@ -69,11 +69,11 @@ test("release publication starts both verified builds and gates assets and Pages
   assert.match(workflow, /on:\n  release:\n    types: \[published\]/);
   assert.match(workflow, /env:\n  GH_REPO: \$\{\{ github.repository \}\}/);
   assert.match(workflow, /RELEASE_TAG: \$\{\{ github.event.release.tag_name \|\| inputs.tag \}\}/);
-  assert.match(workflow, /publish:\n[^]*?needs: \[validate, pwa, apk\]/);
+  assert.match(workflow, /publish:\n[^]*?needs: \[validate, pwa, apk, browser\]/);
   assert.match(workflow, /pages:\n[^]*?needs: \[validate, pwa, apk, publish\]/);
   assert.match(workflow, /deploy:\n[^]*?needs: pages/);
   assert.match(workflow, /run: npm test/);
-  assert.match(workflow, /run: npm run test:e2e/);
+  assert.match(workflow, /browser:\n[^]*?uses: \.\/\.github\/workflows\/browser-tests.yml/);
   assert.match(workflow, /test-diagnostics.ps1/);
   assert.match(workflow, /-RequireExistingKeystore/);
   assert.doesNotMatch(workflow, /--clobber|gh release edit|--draft=false/);

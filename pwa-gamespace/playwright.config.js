@@ -7,6 +7,14 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   workers: 1,
+  projects: [
+    {
+      name: "interface",
+      testIgnore: ["**/fps.spec.js", "**/fps-position.spec.js", "**/release-runtime.spec.js"],
+    },
+    { name: "runtime", testMatch: "**/release-runtime.spec.js" },
+    { name: "fps", testMatch: ["**/fps.spec.js", "**/fps-position.spec.js"] },
+  ],
   reporter: process.env.CI ? "github" : "line",
   timeout: 120_000,
   expect: { timeout: 20_000 },
